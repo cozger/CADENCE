@@ -120,58 +120,74 @@ def _direction_worker(gpu_id, direction, session_data, config_path, device,
     print(f"[GPU {gpu_id}] {role_label}: {n_sig}/{total} significant in {dt:.1f}s", flush=True)
 
     for key, is_sig in sorted(result.pathway_significant.items()):
-        dr2_mean = np.nanmean(result.pathway_dr2[key])
+        if key in result.pathway_dr2:
+            dr2_mean = np.nanmean(result.pathway_dr2[key])
+        else:
+            dr2_mean = 0.0
         src_short = MOD_SHORT.get(key[0], key[0])
         tgt_short = MOD_SHORT.get(key[1], key[1])
         sig_str = '***' if is_sig else '   '
         print(f"[GPU {gpu_id}]   {src_short:>4s} -> {tgt_short:<4s}: dR2={dr2_mean:+.4f} {sig_str}", flush=True)
 
-    # Generate visualizations
-    prefix = direction.replace('_to_', '-')
-    plot_coupling_timecourse(
-        result, save_path=os.path.join(output_dir, f'{prefix}_timecourse.png'))
-    plot_coupling_matrix(
-        result, save_path=os.path.join(output_dir, f'{prefix}_matrix.png'))
-    plot_coupling_kernels(
-        result, save_path=os.path.join(output_dir, f'{prefix}_kernels.png'))
-    plot_sparsity_summary(
-        result, save_path=os.path.join(output_dir, f'{prefix}_sparsity.png'))
-    plot_block_detail(
-        result, save_path=os.path.join(output_dir, f'{prefix}_blocks.png'))
+    # Save results first (before visualizations which can fail on headless nodes)
+    try:
+        prefix = direction.replace('_to_', '-')
 
-    # Detection summary
-    det = detection_summary(result, config)
-    det_json = {f"{k[0]}->{k[1]}": v for k, v in det.items()}
+        # Save full result NPZ (most important — enables offline re-plotting)
+        npz_path = os.path.join(output_dir, f'{prefix}_full.npz')
+        save_result(result, npz_path, session_name=session_name,
+                    runtime_s=dt, peak_gpu_mb=peak_gpu, peak_cpu_mb=peak_cpu)
+        print(f"[GPU {gpu_id}] Saved NPZ: {npz_path}", flush=True)
 
-    # Save results as JSON
-    result_data = {
-        'direction': role_label,
-        'session': session_name,
-        'n_significant': n_sig,
-        'duration_s': session.get('duration', 0),
-        'analysis_time_s': dt,
-        'gpu': gpu_id,
-        'pathway_summary': {},
-        'detection': det_json,
-    }
-    for key in result.pathway_dr2:
-        src_short = MOD_SHORT.get(key[0], key[0])
-        tgt_short = MOD_SHORT.get(key[1], key[1])
-        pkey = f'{src_short}->{tgt_short}'
-        result_data['pathway_summary'][pkey] = {
-            'mean_dr2': float(np.nanmean(result.pathway_dr2[key])),
-            'significant': result.pathway_significant.get(key, False),
+        # Detection summary
+        det = detection_summary(result, config)
+        det_json = {f"{k[0]}->{k[1]}": v for k, v in det.items()}
+
+        # Save results as JSON
+        result_data = {
+            'direction': role_label,
+            'session': session_name,
+            'n_significant': n_sig,
+            'duration_s': session.get('duration', 0),
+            'analysis_time_s': dt,
+            'gpu': gpu_id,
+            'pathway_summary': {},
+            'detection': det_json,
         }
+        for key in result.pathway_dr2:
+            src_short = MOD_SHORT.get(key[0], key[0])
+            tgt_short = MOD_SHORT.get(key[1], key[1])
+            pkey = f'{src_short}->{tgt_short}'
+            result_data['pathway_summary'][pkey] = {
+                'mean_dr2': float(np.nanmean(result.pathway_dr2[key])),
+                'significant': result.pathway_significant.get(key, False),
+            }
 
-    json_path = os.path.join(output_dir, f'{prefix}_results.json')
-    with open(json_path, 'w') as f:
-        json.dump(result_data, f, indent=2, cls=NumpyEncoder)
+        json_path = os.path.join(output_dir, f'{prefix}_results.json')
+        with open(json_path, 'w') as f:
+            json.dump(result_data, f, indent=2, cls=NumpyEncoder)
+        print(f"[GPU {gpu_id}] Saved JSON: {json_path}", flush=True)
 
-    # Save full result for offline re-plotting
-    npz_path = os.path.join(output_dir, f'{prefix}_full.npz')
-    save_result(result, npz_path, session_name=session_name,
-                runtime_s=dt, peak_gpu_mb=peak_gpu, peak_cpu_mb=peak_cpu)
-    print(f"[GPU {gpu_id}] Saved: {json_path}, {npz_path}", flush=True)
+    except Exception as save_err:
+        import traceback
+        print(f"[GPU {gpu_id}] SAVE ERROR: {save_err}", flush=True)
+        traceback.print_exc()
+
+    # Generate visualizations (non-critical — can re-plot offline from NPZ)
+    try:
+        plot_coupling_timecourse(
+            result, save_path=os.path.join(output_dir, f'{prefix}_timecourse.png'))
+        plot_coupling_matrix(
+            result, save_path=os.path.join(output_dir, f'{prefix}_matrix.png'))
+        plot_coupling_kernels(
+            result, save_path=os.path.join(output_dir, f'{prefix}_kernels.png'))
+        plot_sparsity_summary(
+            result, save_path=os.path.join(output_dir, f'{prefix}_sparsity.png'))
+        plot_block_detail(
+            result, save_path=os.path.join(output_dir, f'{prefix}_blocks.png'))
+        print(f"[GPU {gpu_id}] Visualizations saved.", flush=True)
+    except Exception as viz_err:
+        print(f"[GPU {gpu_id}] Visualization error (non-fatal): {viz_err}", flush=True)
 
 
 def run_session(args):

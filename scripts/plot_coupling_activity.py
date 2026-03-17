@@ -74,9 +74,13 @@ def load_direction(npz_path, json_path):
     for k, is_sig in zip(sig_keys, sig_vals):
         src, tgt = k.split('||')
         dr2 = d[f'pathway_dr2/{k}']
+        # Load per-timepoint p-values if available
+        pval_key = f'pathway_pvalues/{k}'
+        pvalues = d[pval_key] if pval_key in d else None
         pathways.append({
             'key': k, 'src': src, 'tgt': tgt,
-            'dr2': dr2, 'significant': bool(is_sig),
+            'dr2': dr2, 'pvalues': pvalues,
+            'significant': bool(is_sig),
             'mean_dr2': float(np.nanmean(dr2)),
         })
 
@@ -134,7 +138,14 @@ def plot_activity_heatmap(data, save_path, smooth_sec=30, trim_sec=60):
     labels = []
     for i, pw in enumerate(sig_pw):
         dr2_s = smooth(pw['dr2'], smooth_sec, dt)[t_sl]
-        heatmap[i] = dr2_s
+        # Use per-timepoint p-values if available, else fall back to dR2 > 0
+        if pw.get('pvalues') is not None:
+            pval_s = smooth(pw['pvalues'], smooth_sec, dt)[t_sl]
+            # Mask: significant (p < 0.05) AND positive dR2
+            active = (pval_s < 0.05) & (dr2_s > 0)
+        else:
+            active = dr2_s > 0
+        heatmap[i] = np.where(active, dr2_s, 0.0)
         src_s = MOD_SHORT.get(pw['src'], pw['src'])
         tgt_s = MOD_SHORT.get(pw['tgt'], pw['tgt'])
         labels.append(f"{src_s}\u2192{tgt_s}")
@@ -144,7 +155,7 @@ def plot_activity_heatmap(data, save_path, smooth_sec=30, trim_sec=60):
         (0.3, '#64b5f6'), (0.6, '#1976d2'), (1.0, '#0d47a1'),
     ])
 
-    heatmap_masked = np.where(heatmap > 0, heatmap, 0.0)
+    heatmap_masked = heatmap  # already masked above
     pos_vals = heatmap_masked[heatmap_masked > 0]
     vmax = np.percentile(pos_vals, 95) if len(pos_vals) > 0 else 0.3
 
@@ -157,9 +168,11 @@ def plot_activity_heatmap(data, save_path, smooth_sec=30, trim_sec=60):
     ax.set_yticks(range(n_pw))
     ax.set_yticklabels(labels, fontsize=9)
     ax.set_xlabel('Time (min)', fontsize=11)
+    has_pvals = any(pw.get('pvalues') is not None for pw in sig_pw)
+    mask_label = 'p < 0.05 & dR\u00b2 > 0' if has_pvals else 'dR\u00b2 > 0'
     ax.set_title(
         f'Coupling Activity  \u2014  {data["direction_display"]}  ({data["session"]})\n'
-        f'dR\u00b2 > 0 = coupling active  |  {smooth_sec}s smoothing  |  '
+        f'{mask_label} = coupling active  |  {smooth_sec}s smoothing  |  '
         f'{n_pw} significant pathways', fontsize=12)
 
     for i, pw in enumerate(sig_pw):
@@ -198,16 +211,23 @@ def plot_timecourses(data, save_path, smooth_sec=30, trim_sec=60):
         src_s = MOD_SHORT.get(pw['src'], pw['src'])
         tgt_s = MOD_SHORT.get(pw['tgt'], pw['tgt'])
 
+        # Determine per-timepoint significance mask
+        if pw.get('pvalues') is not None:
+            pval_s = smooth(pw['pvalues'], smooth_sec, dt)[t_sl]
+            active_mask = (pval_s < 0.05) & (dr2_s > 0)
+        else:
+            active_mask = dr2_s > 0
+
         ax.plot(times_plot, dr2_raw, color=color, linewidth=0.3, alpha=0.15)
         ax.plot(times_plot, dr2_s, color=color, linewidth=1.2, alpha=0.9)
         ax.fill_between(times_plot, 0, dr2_s,
-                         where=dr2_s > 0, color=color, alpha=0.3)
+                         where=active_mask, color=color, alpha=0.3)
         ax.fill_between(times_plot, 0, dr2_s,
-                         where=dr2_s <= 0, color='#cccccc', alpha=0.2)
+                         where=~active_mask, color='#cccccc', alpha=0.2)
         ax.axhline(0, color='#888', linewidth=0.5, linestyle='--', alpha=0.5)
 
-        active_frac = np.mean(dr2_s > 0)
-        mean_active = np.nanmean(dr2_s[dr2_s > 0]) if np.any(dr2_s > 0) else 0
+        active_frac = np.mean(active_mask)
+        mean_active = np.nanmean(dr2_s[active_mask]) if np.any(active_mask) else 0
 
         ax.set_ylabel('dR\u00b2', fontsize=9)
         ax.set_title(
@@ -221,9 +241,11 @@ def plot_timecourses(data, save_path, smooth_sec=30, trim_sec=60):
         ax.set_ylim(-ylim, ylim)
 
     axes[-1].set_xlabel('Time (min)', fontsize=11)
+    has_pvals = any(pw.get('pvalues') is not None for pw in sig_pw)
+    fill_label = 'p < 0.05 & dR\u00b2 > 0' if has_pvals else 'dR\u00b2 > 0'
     fig.suptitle(
         f'dR\u00b2 Timecourses  \u2014  {data["direction_display"]}  ({data["session"]})\n'
-        f'Colored fill = coupling active (dR\u00b2 > 0)  |  {smooth_sec}s smoothing',
+        f'Colored fill = coupling active ({fill_label})  |  {smooth_sec}s smoothing',
         fontsize=12, y=1.01)
     fig.tight_layout()
     fig.savefig(save_path, dpi=150, bbox_inches='tight')

@@ -108,6 +108,13 @@ significance:
     binomial_alpha: 0.01
     ttest_alpha: 0.01
     min_dr2: 0.001
+  # Per-timepoint significance (Stage 2 surrogate threshold)
+  timepoint:
+    enabled: true
+    n_surrogates: 20
+    quantile: 0.95
+    smooth_sec: 30
+    seed: 42
 
 # Layer 3 modulation (deferred until L1+L2 validated)
 modulation:

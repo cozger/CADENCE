@@ -3191,6 +3191,13 @@ class CouplingEstimator:
         lam_ridge = self.config['ewls']['lambda_ridge']
         tau = self.config['ewls']['tau_seconds']
 
+        # Per-timepoint significance config
+        tp_cfg = self.config['significance'].get('timepoint', {})
+        tp_enabled = tp_cfg.get('enabled', True)
+        tp_n_surr = tp_cfg.get('n_surrogates', 20)
+        tp_smooth_sec = tp_cfg.get('smooth_sec', 30)
+        tp_seed = tp_cfg.get('seed', 42)
+
         eval_times = np.arange(0, duration, 1.0 / eval_rate)
 
         for key, selected in discovery.selected_features.items():
@@ -3341,6 +3348,31 @@ class CouplingEstimator:
                             feat_dr2_dict[feat_idx] = dr2_np * feat_frac
 
                         result.pathway_feature_dr2[key] = feat_dr2_dict
+
+                # --- Per-timepoint significance via surrogate threshold ---
+                if tp_enabled and n_source_cols > 0:
+                    from cadence.significance.surrogate import (
+                        surrogate_pvalues_from_design,
+                    )
+                    smooth_samples = max(1, int(tp_smooth_sec * eval_rate))
+                    _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
+                         f"computing per-timepoint p-values "
+                         f"({tp_n_surr} surrogates)...")
+                    try:
+                        tp_pvalues, tp_dr2_null = \
+                            surrogate_pvalues_from_design(
+                                solver, X_augmented, X_restricted,
+                                y, valid, n_source_cols, dr2_np,
+                                n_surrogates=tp_n_surr,
+                                min_shift_frac=0.1,
+                                seed=tp_seed,
+                                smooth_samples=smooth_samples)
+                        result.pathway_pvalues[key] = tp_pvalues
+                    except Exception as tp_e:
+                        _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
+                             f"timepoint p-values failed ({tp_e})")
+                        # Fall back to session-level p-value broadcast
+                        pass
 
             except Exception as e:
                 _log(f"  Stage 2 {src_mod}->{tgt_mod}: FAILED ({e}), retrying chunked")

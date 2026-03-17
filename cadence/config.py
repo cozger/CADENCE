@@ -78,6 +78,13 @@ DEFAULTS = {
             'ttest_alpha': 0.01,
             'min_dr2': 0.001,
         },
+        'timepoint': {
+            'enabled': True,
+            'n_surrogates': 20,
+            'quantile': 0.95,
+            'smooth_sec': 30,
+            'seed': 42,
+        },
     },
 
     # Layer 3 modulation (deferred)

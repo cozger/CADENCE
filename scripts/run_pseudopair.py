@@ -186,70 +186,101 @@ def main():
         result = estimator.analyze_session(pseudo, 'p1_to_p2')
         dt = time.time() - t0
 
-        # Report interbrain pathways only
+        # Report discovery details
+        if result.discovery and hasattr(result.discovery, 'selected_features'):
+            for dkey, sel in result.discovery.selected_features.items():
+                if sel:
+                    src_s = MOD_SHORT_V2.get(dkey[0], dkey[0])
+                    tgt_s = MOD_SHORT_V2.get(dkey[1], dkey[1])
+                    pw_p = result.discovery.block_pathway_pvalue.get(dkey, 1.0)
+                    print(f"  Discovery {src_s}->{tgt_s}: "
+                          f"{len(sel)} features, pathway_p={pw_p:.4f}")
+
+        # Report ALL pathways (everything is a false positive on pseudo-pairs)
         pair_result = {
             'pair': f'P1({name_a})_x_P2({name_b})',
             'duration': pseudo['duration'],
             'runtime_s': dt,
-            'interbrain_pathways': {},
+            'pathways': {},
         }
 
+        n_sig = 0
         n_ib_sig = 0
         for key, is_sig in result.pathway_significant.items():
             src_mod, tgt_mod = key
-            if src_mod != INTERBRAIN_MODALITY:
-                continue
             dr2 = result.pathway_dr2.get(key)
             mean_dr2 = float(np.nanmean(dr2)) if dr2 is not None else 0.0
-            sig_str = '*** FALSE POSITIVE' if is_sig else ''
+            src_s = MOD_SHORT_V2.get(src_mod, src_mod)
             tgt_s = MOD_SHORT_V2.get(tgt_mod, tgt_mod)
-            print(f"  EEGib->{tgt_s}: dR2={mean_dr2:+.4f} {sig_str}")
+            is_ib = src_mod == INTERBRAIN_MODALITY
 
-            pair_result['interbrain_pathways'][f'EEGib->{tgt_s}'] = {
+            if is_sig or mean_dr2 != 0:
+                sig_str = '*** FALSE POSITIVE' if is_sig else ''
+                print(f"  {src_s}->{tgt_s}: dR2={mean_dr2:+.4f} {sig_str}")
+
+            pair_result['pathways'][f'{src_s}->{tgt_s}'] = {
                 'significant': is_sig,
                 'mean_dr2': mean_dr2,
+                'interbrain': is_ib,
             }
             if is_sig:
-                n_ib_sig += 1
+                n_sig += 1
+                if is_ib:
+                    n_ib_sig += 1
 
+        pair_result['n_significant'] = n_sig
         pair_result['n_interbrain_significant'] = n_ib_sig
         results.append(pair_result)
-        print(f"  -> {n_ib_sig} interbrain false positives in {dt:.1f}s")
+        print(f"  -> {n_sig} total false positives ({n_ib_sig} interbrain) "
+              f"in {dt:.1f}s")
 
     # Summary
     print(f"\n{'='*60}")
     print("PSEUDO-PAIR NULL TEST SUMMARY")
     print(f"{'='*60}")
 
-    total_tests = 0
+    total_pathways = 0
     total_fp = 0
+    total_ib_pathways = 0
+    total_ib_fp = 0
     for r in results:
-        n_tested = len(r['interbrain_pathways'])
-        n_fp = r['n_interbrain_significant']
-        total_tests += n_tested
-        total_fp += n_fp
-        status = 'CLEAN' if n_fp == 0 else f'{n_fp} FALSE POSITIVES'
+        for pkey, pdata in r['pathways'].items():
+            total_pathways += 1
+            if pdata['significant']:
+                total_fp += 1
+            if pdata.get('interbrain', False):
+                total_ib_pathways += 1
+                if pdata['significant']:
+                    total_ib_fp += 1
+        n_fp = r['n_significant']
+        n_ib = r['n_interbrain_significant']
+        status = 'CLEAN' if n_fp == 0 else f'{n_fp} FP ({n_ib} interbrain)'
         print(f"  {r['pair']}: {status}")
 
-    fpr = total_fp / total_tests if total_tests > 0 else 0
-    print(f"\nFalse positive rate: {total_fp}/{total_tests} = {fpr:.1%}")
-    print(f"Expected under null (alpha=0.05): {0.05:.1%}")
+    fpr = total_fp / total_pathways if total_pathways > 0 else 0
+    ib_fpr = total_ib_fp / total_ib_pathways if total_ib_pathways > 0 else 0
+    print(f"\nOverall FPR: {total_fp}/{total_pathways} = {fpr:.1%}")
+    print(f"Interbrain FPR: {total_ib_fp}/{total_ib_pathways} = {ib_fpr:.1%}")
+    print(f"Expected under null (alpha=0.05): 5.0%")
 
     if fpr > 0.10:
-        print("\n*** WARNING: FPR > 10% — interbrain delta coupling is likely ARTIFACTUAL ***")
+        print("\n*** WARNING: FPR > 10% — systematic false positive problem ***")
     elif fpr > 0.05:
         print("\n** CAUTION: FPR elevated above nominal 5% **")
     else:
-        print("\nFPR within expected range — interbrain coupling may be genuine.")
+        print("\nFPR within expected range.")
 
     # Save
     json_path = os.path.join(args.output, 'pseudopair_results.json')
     with open(json_path, 'w') as f:
         json.dump({
             'pairs': results,
-            'total_tests': total_tests,
+            'total_pathways': total_pathways,
             'total_false_positives': total_fp,
             'false_positive_rate': fpr,
+            'interbrain_pathways': total_ib_pathways,
+            'interbrain_false_positives': total_ib_fp,
+            'interbrain_fpr': ib_fpr,
         }, f, indent=2)
     print(f"\nResults saved: {json_path}")
 

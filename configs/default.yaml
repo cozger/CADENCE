@@ -157,7 +157,7 @@ v2_discovery:
 # Stage 2 (EWLS on selected features)
 stage2:
   moderation:
-    enabled: true
+    enabled: false                # Disabled: coefficients not extracted/visualized yet, 2x p cost
     moderators: ["ecg_hr", "ecg_rmssd"]
   nonlinear:
     enabled: true

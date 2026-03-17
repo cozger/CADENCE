@@ -93,11 +93,28 @@ def load_direction(npz_path, json_path):
         feat_name, tgt = fk.split('||')
         features[(feat_name, tgt)] = d[f'feature_dr2/{fk}']
 
+    # Load source x target feature decomposition
+    src_tgt_dr2 = {}
+    if 'pathway_src_tgt_dr2/_pw_keys' in d:
+        for pks in d['pathway_src_tgt_dr2/_pw_keys']:
+            pks = str(pks)
+            src_mod, tgt_mod = pks.split('||')
+            pair_keys = d[f'pathway_src_tgt_dr2/{pks}/_pair_keys']
+            for pk in pair_keys:
+                pk = str(pk)
+                parts = pk.split('_')
+                src_idx = int(parts[0][1:])
+                tgt_idx = int(parts[1][1:])
+                arr = d[f'pathway_src_tgt_dr2/{pks}/{pk}']
+                src_tgt_dr2.setdefault(pks, {})[
+                    (src_idx, tgt_idx)] = arr
+
     direction = meta['direction']
     return {
         'times': times,
         'pathways': pathways,
         'features': features,
+        'src_tgt_dr2': src_tgt_dr2,
         'direction': direction,
         'direction_display': _direction_display(direction),
         'file_prefix': _direction_to_prefix(direction),
@@ -470,6 +487,78 @@ def plot_feature_heatmaps(data, save_dir, smooth_sec=30, trim_sec=60):
         print(f"  Saved: {save_path}")
 
 
+def plot_src_tgt_heatmaps(data, save_dir, smooth_sec=30, trim_sec=60):
+    """Source x Target feature heatmap for significant pathways with decomposition data."""
+    times_plot, t_sl, dt = _trim_times(data['times'], trim_sec)
+    src_tgt = data.get('src_tgt_dr2', {})
+    if not src_tgt:
+        return
+
+    sig_pw = [p for p in data['pathways'] if p['significant']]
+    if not sig_pw:
+        return
+
+    cmap = LinearSegmentedColormap.from_list('src_tgt', [
+        (0.0, '#f5f5f5'), (0.001, '#fff3e0'),
+        (0.3, '#ffb74d'), (0.6, '#e65100'), (1.0, '#bf360c'),
+    ])
+
+    for pw in sig_pw:
+        pw_key = pw['key']
+        if pw_key not in src_tgt:
+            continue
+
+        pairs = src_tgt[pw_key]
+        if not pairs:
+            continue
+
+        # Sort by mean |dr2| descending
+        ranked = sorted(
+            pairs.items(),
+            key=lambda kv: np.nanmean(np.abs(kv[1])),
+            reverse=True)
+
+        n_pairs = len(ranked)
+        src_s = MOD_SHORT.get(pw['src'], pw['src'])
+        tgt_s = MOD_SHORT.get(pw['tgt'], pw['tgt'])
+
+        heatmap = np.full((n_pairs, len(times_plot)), np.nan)
+        labels = []
+        for i, ((si, ti), dr2_arr) in enumerate(ranked):
+            dr2_s = smooth(dr2_arr, smooth_sec, dt)[t_sl]
+            heatmap[i] = np.where(dr2_s > 0, dr2_s, 0.0)
+            labels.append(f'src[{si}]\u2192tgt[{ti}]')
+
+        pos_vals = heatmap[heatmap > 0]
+        vmax = np.percentile(pos_vals, 95) if len(pos_vals) > 0 else 0.1
+
+        fig, ax = plt.subplots(figsize=(18, 0.4 * n_pairs + 2.0), dpi=150)
+        im = ax.imshow(heatmap, cmap=cmap, vmin=0, vmax=vmax,
+                       aspect='auto', interpolation='nearest',
+                       extent=[times_plot[0], times_plot[-1],
+                               n_pairs - 0.5, -0.5],
+                       rasterized=True)
+
+        ax.set_yticks(range(n_pairs))
+        ax.set_yticklabels(labels, fontsize=7)
+        ax.set_xlabel('Time (min)', fontsize=10)
+        ax.set_title(
+            f'{src_s} \u2192 {tgt_s} Source\u00d7Target Decomposition  \u2014  '
+            f'{data["direction_display"]}  ({data["session"]})\n'
+            f'{n_pairs} feature pairs  |  {smooth_sec}s smoothing',
+            fontsize=10)
+
+        cbar = fig.colorbar(im, ax=ax, label='dR\u00b2', shrink=0.8, pad=0.02)
+        cbar.ax.tick_params(labelsize=7)
+        fig.tight_layout()
+
+        fname = f'{data["file_prefix"]}_{src_s}-{tgt_s}_src_tgt.png'
+        save_path = os.path.join(save_dir, fname)
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  Saved: {save_path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--results', required=True, help='Results directory')
@@ -515,6 +604,9 @@ def main():
                                   smooth_sec=args.smooth, trim_sec=args.trim)
 
         plot_feature_heatmaps(data, out_dir,
+                               smooth_sec=args.smooth, trim_sec=args.trim)
+
+        plot_src_tgt_heatmaps(data, out_dir,
                                smooth_sec=args.smooth, trim_sec=args.trim)
 
     # Coupling matrix (both directions side by side)

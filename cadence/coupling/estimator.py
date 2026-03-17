@@ -85,6 +85,10 @@ class CouplingResult:
     # Per-feature dr2 decomposition: pathway -> {feat_idx: dr2_timecourse}
     pathway_feature_dr2: Dict[Tuple[str, str], Dict[int, np.ndarray]] = field(default_factory=dict)
 
+    # Source x Target feature decomposition: pathway -> {(src_feat_idx, tgt_ch_idx): (T,) dr2}
+    # Only top-N pairs stored to keep NPZ manageable.
+    pathway_src_tgt_dr2: Dict[Tuple[str, str], Dict[Tuple[int, int], np.ndarray]] = field(default_factory=dict)
+
     # Summary statistics
     overall_dr2: Optional[np.ndarray] = None  # average across pathways
     n_significant_pathways: int = 0
@@ -3348,6 +3352,32 @@ class CouplingEstimator:
                             feat_dr2_dict[feat_idx] = dr2_np * feat_frac
 
                         result.pathway_feature_dr2[key] = feat_dr2_dict
+
+                    # --- Source x Target feature decomposition ---
+                    # Beta energy per (source_feat, target_channel) pair,
+                    # apportioned from total dr2. Keep top-N pairs by
+                    # mean contribution to avoid storage bloat.
+                    max_src_tgt_pairs = 20
+                    src_tgt_dict = {}
+                    for i, feat_idx in enumerate(selected):
+                        col_start = i * n_basis
+                        col_end = (i + 1) * n_basis
+                        for c in range(C_tgt):
+                            pair_beta = beta_src[:, col_start:col_end, c]
+                            pair_energy = (pair_beta ** 2).sum(dim=1)
+                            pair_frac = pair_energy.cpu().numpy() / (total_np + 1e-20)
+                            pair_dr2 = dr2_np * pair_frac
+                            src_tgt_dict[(feat_idx, c)] = pair_dr2
+
+                    # Prune to top-N by mean absolute dr2
+                    if len(src_tgt_dict) > max_src_tgt_pairs:
+                        ranked = sorted(
+                            src_tgt_dict.items(),
+                            key=lambda kv: np.nanmean(np.abs(kv[1])),
+                            reverse=True)
+                        src_tgt_dict = dict(ranked[:max_src_tgt_pairs])
+
+                    result.pathway_src_tgt_dr2[key] = src_tgt_dict
 
                 # --- Per-timepoint significance via surrogate threshold ---
                 if tp_enabled and n_source_cols > 0:

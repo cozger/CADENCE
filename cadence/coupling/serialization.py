@@ -94,6 +94,21 @@ def save_result(result, path, session_name='', runtime_s=0.0,
                 feat_indices, dtype=int)
         data['pathway_feature_dr2/_pw_keys'] = np.array(pw_keys, dtype=object)
 
+    # pathway_src_tgt_dr2: Dict[Tuple, Dict[Tuple[int,int], ndarray]]
+    if hasattr(result, 'pathway_src_tgt_dr2') and result.pathway_src_tgt_dr2:
+        pw_keys = []
+        for pw_key, pair_dict in result.pathway_src_tgt_dr2.items():
+            pks = _key_str(pw_key)
+            pw_keys.append(pks)
+            pair_keys = []
+            for (src_idx, tgt_idx), arr in pair_dict.items():
+                pair_str = f's{src_idx}_t{tgt_idx}'
+                pair_keys.append(pair_str)
+                data[f'pathway_src_tgt_dr2/{pks}/{pair_str}'] = arr
+            data[f'pathway_src_tgt_dr2/{pks}/_pair_keys'] = np.array(
+                pair_keys, dtype=object)
+        data['pathway_src_tgt_dr2/_pw_keys'] = np.array(pw_keys, dtype=object)
+
     # Discovery result (if V2 pipeline)
     discovery = getattr(result, 'discovery', None)
     if discovery is not None:
@@ -242,6 +257,25 @@ def load_result(path):
                 if arr_key in raw:
                     feat_dict[int(fi)] = raw[arr_key]
             result.pathway_feature_dr2[pw_key] = feat_dict
+
+    # pathway_src_tgt_dr2
+    if 'pathway_src_tgt_dr2/_pw_keys' in raw:
+        result.pathway_src_tgt_dr2 = {}
+        for pks in raw['pathway_src_tgt_dr2/_pw_keys']:
+            pks = str(pks)
+            pw_key = _str_key(pks)
+            pair_keys = raw[f'pathway_src_tgt_dr2/{pks}/_pair_keys']
+            pair_dict = {}
+            for pk in pair_keys:
+                pk = str(pk)
+                arr_key = f'pathway_src_tgt_dr2/{pks}/{pk}'
+                if arr_key in raw:
+                    # Parse 's3_t5' -> (3, 5)
+                    parts = pk.split('_')
+                    src_idx = int(parts[0][1:])
+                    tgt_idx = int(parts[1][1:])
+                    pair_dict[(src_idx, tgt_idx)] = raw[arr_key]
+            result.pathway_src_tgt_dr2[pw_key] = pair_dict
 
     # Discovery
     if 'disc/_session_name' in raw:

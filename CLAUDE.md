@@ -8,14 +8,14 @@
 
 ## Architecture
 
-**V2 Pipeline (default)**: Two-stage doubly-sparse discovery + time-varying estimation.
+**V2 Pipeline**: Two-stage doubly-sparse discovery + time-varying estimation.
 
 1. **Stage 1 — Discovery**: Group lasso with stability selection discovers which source features couple to each target modality. Doubly-sparse: feature sparsity (group lasso) + temporal sparsity (block selection).
-2. **Stage 2 — Estimation**: EWLS forward-backward solve on selected features, with optional moderation (ECG HR/RMSSD moderators) and nonlinear (squared) terms. Streaming backward pass for memory efficiency.
+2. **Stage 1.5 — Surrogate Screening**: Static ridge surrogates for session-level significance, with BH-FDR correction.
+3. **Stage 2 — Estimation**: EWLS forward-backward solve on selected features, with optional moderation (ECG HR/RMSSD moderators) and nonlinear (squared) terms. Produces per-timepoint dR2 timecourse, per-feature dR2 decomposition, and source×target feature-level coupling breakdown.
+4. **Stage 2 — Per-Timepoint Significance**: Circular-shift surrogates (K=20) through the same EWLS solver produce per-timepoint p-values. Both real and null dR2 are smoothed identically (30s) before p-value computation.
 
-**V2 Full Pipeline**: Source signals -> wavelet/PCA features -> group lasso discovery -> EWLS streaming solve (selected features + moderation + nonlinear) -> dR2 timecourse -> surrogate/block significance -> session-level detection.
-
-**V1 Pipeline (legacy)**: Direct modality-level screening without discovery step. Use `--pipeline v1` to select.
+**Full Pipeline**: Source signals -> wavelet/PCA features -> group lasso discovery -> surrogate screening -> EWLS streaming solve (selected features + moderation + nonlinear) -> dR2 timecourse + per-timepoint p-values -> session-level detection.
 
 ## Environment
 
@@ -28,11 +28,8 @@ conda activate MCCT
 ## Key Commands
 
 ```bash
-# Single session analysis (V2 pipeline is default)
+# Single session analysis
 python scripts/run_session.py --session y_06
-
-# Explicit V1 for comparison
-python scripts/run_session.py --session y_06 --pipeline v1
 
 # All sessions
 python scripts/run_all_sessions.py
@@ -45,6 +42,9 @@ python scripts/compare_mcct.py --session y_06
 
 # Generate synthetic corpus
 python scripts/generate_synthetic.py --n-coupled 50 --n-null 20
+
+# Plot coupling activity (per-timepoint significance)
+python scripts/plot_coupling_activity.py --results results/cluster_session/y_06
 ```
 
 ## Project Structure
@@ -55,12 +55,12 @@ CADENCE/
     __init__.py, config.py, constants.py, synthetic.py, surrogates.py
     data/          # Copied from MCCT: xdf_loader, preprocessors, eeg_features, alignment
     basis/         # raised_cosine.py, design_matrix.py
-    regression/    # ewls.py (core), ridge.py, ftest.py
-    coupling/      # pathways.py, estimator.py (CouplingEstimator orchestrator)
-    significance/  # surrogate.py, analytical.py (BH-FDR), detection.py
-    visualization/ # kernels.py, timecourse.py, heatmaps.py, comparison.py
+    regression/    # ewls.py (core), ridge.py, ftest.py, group_lasso.py
+    coupling/      # pathways.py, estimator.py (CouplingEstimator), discovery.py, serialization.py
+    significance/  # surrogate.py (per-timepoint + session-level), detection.py
+    visualization/ # kernels.py, timecourse.py, heatmaps.py, comparison.py, sparsity.py
   configs/default.yaml
-  scripts/         # run_session, run_all_sessions, run_synthetic, generate_synthetic, compare_mcct
+  scripts/         # run_session, run_all_sessions, run_synthetic, generate_synthetic, compare_mcct, plot_coupling_activity
   results/
 ```
 
@@ -72,18 +72,21 @@ All parameters in `configs/default.yaml`. Key settings:
 - `basis.layer1.n_basis`: 8 raised cosine basis functions
 - `basis.layer1.max_lag_seconds`: 5.0s maximum lag
 - `autoregressive.order`: 3 AR lags
-- `significance.surrogate.n_surrogates`: 200 circular shifts
+- `significance.surrogate.n_surrogates`: 100 circular shifts (session-level)
+- `significance.timepoint.n_surrogates`: 20 (per-timepoint, cheaper)
+- `significance.timepoint.smooth_sec`: 30 (smoothing before p-value computation)
 - `significance.fdr_correction`: Benjamini-Hochberg
 
 ## Session Cache
 
 Shares MCCT's `session_cache/` directory. Reads cached `.npz` + `.json` session files.
 
-## Modalities
+## Modalities (V2)
 
-- EEG features: 8ch @ 2Hz (7 features + activity)
-- ECG features: 6ch @ 2Hz (HRV)
-- Blendshapes: 53ch @ 30Hz (52 AUs + activity)
+- EEG wavelet: 160ch @ 5Hz (2 components × 20 freqs × 4 ROIs)
+- EEG interbrain: 160ch @ 5Hz (cross-brain PLV features)
+- ECG features: 7ch @ 2Hz (HRV)
+- Blendshapes v2: 31ch @ 30Hz (15 PCA + 15 derivatives + activity)
 - Pose features: 41ch @ 12Hz (40 joint groups + activity)
 
 ## Key Design Decisions
@@ -91,12 +94,14 @@ Shares MCCT's `session_cache/` directory. Reads cached `.npz` + `.json` session 
 - EWLS forward-backward with streaming backward pass (1.05x memory vs 3x previously)
 - Raised cosine basis with log-spacing (denser at short lags)
 - Circular shift surrogates (vectorized gather, preserves all signal statistics)
-- V2: doubly-sparse discovery (group lasso + stability selection + block selection)
-- V2: moderation terms (ECG HR/RMSSD) and nonlinear terms (squared) in Stage 2
-- BH-FDR correction across timepoints
+- Doubly-sparse discovery (group lasso + stability selection + block selection)
+- Moderation terms (ECG HR/RMSSD) and nonlinear terms (squared) in Stage 2
+- Per-timepoint significance via K=20 EWLS surrogates with matched smoothing
+- Source×target feature decomposition: beta energy per (src_feat, tgt_channel) pair
+- BH-FDR correction across pathways
 - Session-level detection: binomial test + t-test (matches MCCT for comparison)
-- Per-modality PCA channels: EEG(8), ECG(6) keep all; BL(4), Pose(6) reduced
-- Surrogate-based screening with static ridge (not F-test) for significance
+- Per-modality PCA channels and pathway-specific temporal parameters
+- Surrogate-based screening with static ridge for significance
 - min_dr2 threshold gates significance (prevents tiny but spurious dR2)
 
 ## Validation Status

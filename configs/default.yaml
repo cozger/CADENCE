@@ -1,7 +1,7 @@
 # CADENCE default configuration
 # All parameters are configurable -- no magic numbers in code.
 
-# Pipeline version: "v1" = original, "v2" = doubly-sparse discovery + moderation + nonlinear
+# Pipeline version
 pipeline: "v2"
 
 # Data pipeline

@@ -6,7 +6,7 @@ import yaml
 
 DEFAULTS = {
     # Pipeline version
-    'pipeline': 'v1',
+    'pipeline': 'v2',
 
     # Data pipeline
     'session_cache': 'C:/Users/optilab/desktop/MCCT/session_cache',

@@ -44,18 +44,15 @@ from cadence.visualization.grand_average import (
 )
 from cadence.coupling.serialization import save_result, load_result
 from cadence.constants import (
-    MOD_SHORT, MODALITY_ORDER,
     MOD_SHORT_V2, MODALITY_ORDER_V2, INTERBRAIN_MODALITY,
 )
 
 
 def _parallel_direction_worker(gpu_id, direction, session_data, config_path,
-                               device, result_path, pipeline_override=None):
+                               device, result_path):
     """Worker process: run one direction on a specific GPU, save result to file."""
     config = load_config(config_path)
     config['device'] = device
-    if pipeline_override:
-        config['pipeline'] = pipeline_override
 
     # Warm up Triton JIT before real work (avoids cache race between processes)
     try:
@@ -112,8 +109,6 @@ def main():
     parser.add_argument('--sessions', nargs='+', default=None,
                         help='Specific sessions to run (partial name match)')
     parser.add_argument('--device', default=None)
-    parser.add_argument('--pipeline', default=None, choices=['v1', 'v2'],
-                        help='Pipeline version (default: from config)')
     parser.add_argument('--parallel-directions', action='store_true',
                         help='Run p1->p2 and p2->p1 on separate GPUs (requires 2+ GPUs)')
     args = parser.parse_args()
@@ -127,16 +122,8 @@ def main():
     config = load_config(args.config)
     if args.device:
         config['device'] = args.device
-    if args.pipeline:
-        config['pipeline'] = args.pipeline
-
-    pipeline = config.get('pipeline', 'v1')
-    if pipeline == 'v2':
-        mod_short = MOD_SHORT_V2
-        modality_order = MODALITY_ORDER_V2
-    else:
-        mod_short = MOD_SHORT
-        modality_order = MODALITY_ORDER
+    mod_short = MOD_SHORT_V2
+    modality_order = MODALITY_ORDER_V2
 
     # Discover sessions
     all_sessions = discover_cached_sessions(config['session_cache'])
@@ -194,7 +181,7 @@ def main():
                 p = mp.Process(
                     target=_parallel_direction_worker,
                     args=(gpu_id, p_direction, session, args.config,
-                          devices[gpu_id], tmp_path, args.pipeline),
+                          devices[gpu_id], tmp_path),
                 )
                 p.start()
                 procs.append(p)
@@ -276,7 +263,7 @@ def main():
                 result, save_path=os.path.join(sess_dir, f'{prefix}_timecourse.png'))
             plt.close(fig)
             fig = plot_coupling_matrix(
-                result, pipeline=pipeline,
+                result,
                 save_path=os.path.join(sess_dir, f'{prefix}_matrix.png'))
             plt.close(fig)
 

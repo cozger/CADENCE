@@ -7,8 +7,7 @@ Tests on synthetic Lorenz sessions with known ground-truth coupling:
   - Null: < 5% false positive rate
 
 Usage:
-    python scripts/run_synthetic.py                 # V2 pipeline (default)
-    python scripts/run_synthetic.py --pipeline v1   # V1 pipeline (legacy)
+    python scripts/run_synthetic.py
     python scripts/run_synthetic.py --device cpu
 """
 
@@ -25,12 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 from cadence.config import load_config
-from cadence.synthetic import build_synthetic_session_permod, build_synthetic_session_v2
+from cadence.synthetic import build_synthetic_session_v2
 from cadence.coupling.estimator import CouplingEstimator
-from cadence.constants import (
-    MOD_SHORT, MODALITY_ORDER,
-    MOD_SHORT_V2, MODALITY_ORDER_V2,
-)
+from cadence.constants import MOD_SHORT_V2, MODALITY_ORDER_V2
 
 
 # ---------------------------------------------------------------------------
@@ -68,51 +64,13 @@ SYNTHETIC_TESTS_V2 = [
      None, []),
 ]
 
-# ---------------------------------------------------------------------------
-# V1 test matrix (legacy): uses V1 modality keys
-# ---------------------------------------------------------------------------
-SYNTHETIC_TESTS_V1 = [
-    ('A_eeg_only',
-     {'eeg_features': 0.7, 'ecg_features': 0.0,
-      'blendshapes': 0.0, 'pose_features': 0.0},
-     None, ['eeg_features']),
-
-    ('B_bl_only',
-     {'eeg_features': 0.0, 'ecg_features': 0.0,
-      'blendshapes': 0.7, 'pose_features': 0.0},
-     0.3, ['blendshapes']),
-
-    ('C_ecg_only',
-     {'eeg_features': 0.0, 'ecg_features': 0.7,
-      'blendshapes': 0.0, 'pose_features': 0.0},
-     None, ['ecg_features']),
-
-    ('D_pose_only',
-     {'eeg_features': 0.0, 'ecg_features': 0.0,
-      'blendshapes': 0.0, 'pose_features': 0.7},
-     0.3, ['pose_features']),
-
-    ('E_eeg_bl',
-     {'eeg_features': 0.7, 'ecg_features': 0.0,
-      'blendshapes': 0.7, 'pose_features': 0.0},
-     0.3, ['eeg_features', 'blendshapes']),
-
-    ('F_null',
-     {'eeg_features': 0.0, 'ecg_features': 0.0,
-      'blendshapes': 0.0, 'pose_features': 0.0},
-     None, []),
-]
-
-
 def main():
     parser = argparse.ArgumentParser(description='CADENCE synthetic validation')
     parser.add_argument('--config', default=None)
     parser.add_argument('--device', default=None)
     parser.add_argument('--duration', type=int, default=600, help='Session duration (seconds)')
-    parser.add_argument('--output', default=None,
-                        help='Output directory (default: results/cadence_synthetic[_v2])')
-    parser.add_argument('--pipeline', default='v2', choices=['v1', 'v2'],
-                        help='Pipeline version (default: v2)')
+    parser.add_argument('--output', default='results/cadence_synthetic_v2',
+                        help='Output directory')
     args = parser.parse_args()
 
     if args.config is None:
@@ -125,28 +83,14 @@ def main():
     if args.device:
         config['device'] = args.device
 
-    # Set pipeline version
-    pipeline = args.pipeline
-    config['pipeline'] = pipeline
+    tests = SYNTHETIC_TESTS_V2
+    build_fn = build_synthetic_session_v2
+    mod_order = MODALITY_ORDER_V2
+    mod_short = MOD_SHORT_V2
 
-    # Select test matrix, builder, and modality constants based on pipeline
-    if pipeline == 'v2':
-        tests = SYNTHETIC_TESTS_V2
-        build_fn = build_synthetic_session_v2
-        mod_order = MODALITY_ORDER_V2
-        mod_short = MOD_SHORT_V2
-        default_output = 'results/cadence_synthetic_v2'
-    else:
-        tests = SYNTHETIC_TESTS_V1
-        build_fn = build_synthetic_session_permod
-        mod_order = MODALITY_ORDER
-        mod_short = MOD_SHORT
-        default_output = 'results/cadence_synthetic'
-
-    output_dir = args.output if args.output else default_output
+    output_dir = args.output
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Pipeline: {pipeline.upper()}", flush=True)
     print(f"Duration: {args.duration}s", flush=True)
     print(f"Output:   {output_dir}", flush=True)
     print(f"Modalities: {mod_order}", flush=True)
@@ -158,7 +102,7 @@ def main():
 
     for test_name, kappa_dict, duty_override, expected_coupled in tests:
         print(f"\n{'='*60}", flush=True)
-        print(f"Test {test_name} [{pipeline.upper()}]", flush=True)
+        print(f"Test {test_name}", flush=True)
         coupled_mods = [m for m, k in kappa_dict.items() if k > 0]
         print(f"  Coupled: {coupled_mods if coupled_mods else 'NONE (null)'}", flush=True)
         if duty_override:
@@ -239,7 +183,6 @@ def main():
 
         results_all.append({
             'test': test_name,
-            'pipeline': pipeline,
             'kappa_dict': kappa_dict,
             'duty_override': duty_override,
             'detected': {k: bool(v) for k, v in detected.items()},
@@ -249,7 +192,7 @@ def main():
 
     # Summary
     print(f"\n{'='*60}", flush=True)
-    print(f"SUMMARY [{pipeline.upper()}]: {n_passed}/{len(tests)} tests passed", flush=True)
+    print(f"SUMMARY: {n_passed}/{len(tests)} tests passed", flush=True)
     print(f"{'='*60}", flush=True)
     for r in results_all:
         icon = '[PASS]' if r['passed'] else '[FAIL]'

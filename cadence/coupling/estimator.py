@@ -1,9 +1,5 @@
 """CouplingEstimator: orchestrates the full CADENCE analysis pipeline.
 
-V1 Pipeline:
-  Phase 1: Modality-level pathway analysis (16 pathways per direction).
-  Phase 2: Feature-level decomposition within significant pathways.
-
 V2 Pipeline:
   Stage 1: Group lasso discovery (all pathways, full feature set).
   Stage 2: EWLS estimation on selected features + moderation + nonlinear.
@@ -24,7 +20,6 @@ def _log(msg):
 
 from cadence.config import load_config
 from cadence.constants import (
-    MODALITY_ORDER, MODALITY_SPECS,
     MODALITY_ORDER_V2, MODALITY_SPECS_V2, INTERBRAIN_MODALITY,
 )
 from cadence.basis.raised_cosine import raised_cosine_basis, multi_band_basis
@@ -38,8 +33,7 @@ from cadence.regression.ftest import f_test_timecourse, f_test_static
 from cadence.regression.group_lasso import GroupLassoSolver
 from cadence.surrogates import circular_shift_surrogate_batched
 from cadence.coupling.pathways import (
-    get_modality_pathways, get_cross_modal_pathways,
-    get_pathway_n_predictors, get_feature_groups,
+    get_pathway_n_predictors,
     get_modality_pathways_v2, get_pathway_category, get_feature_groups_v2,
 )
 
@@ -209,10 +203,7 @@ class CouplingEstimator:
         Returns:
             CouplingResult with all pathway analyses.
         """
-        pipeline = self.config.get('pipeline', 'v1')
-        if pipeline == 'v2':
-            return self._analyze_session_v2(session, direction)
-        return self._analyze_session_v1(session, direction)
+        return self._analyze_session_v2(session, direction)
 
     def analyze_session_both(self, session):
         """Run both directions concurrently on separate CUDA streams.
@@ -270,50 +261,6 @@ class CouplingEstimator:
             raise RuntimeError(f"Direction {d} failed: {e}")
 
         return results
-
-    def _analyze_session_v1(self, session, direction):
-        """V1 pipeline: surrogate screening + EWLS + Phase 2 decomposition."""
-        # Parse direction
-        if direction == 'p1_to_p2':
-            src_p, tgt_p = 'p1', 'p2'
-        elif direction == 'p2_to_p1':
-            src_p, tgt_p = 'p2', 'p1'
-        else:
-            raise ValueError(f"Unknown direction: {direction}")
-
-        # Extract signals
-        source_sigs = self._extract_signals(session, src_p)
-        target_sigs = self._extract_signals(session, tgt_p)
-
-        # Compute default eval grid (finest per-modality rate)
-        duration = session.get('duration', 0)
-        all_rates = [self.eval_rate] + list(self.eval_rate_overrides.values())
-        finest_rate = max(all_rates)
-        eval_times = np.arange(0, duration, 1.0 / finest_rate)
-
-        result = CouplingResult(direction=direction, times=eval_times)
-
-        # Phase 1: modality-level pathways (each uses its own eval grid)
-        self._phase1_modality_level(source_sigs, target_sigs, duration, result)
-
-        # Phase 2: feature-level decomposition (within significant pathways)
-        if self.config['decomposition']['enabled']:
-            self._phase2_feature_decompose(source_sigs, target_sigs, duration, result)
-
-        # Overall dR2 (resample all pathways to finest grid, then average)
-        if result.pathway_dr2:
-            dr2_stack = []
-            for key, dr2 in result.pathway_dr2.items():
-                dr2_clean = np.nan_to_num(dr2, nan=0.0)
-                pw_times = result.pathway_times.get(key, eval_times)
-                if len(dr2_clean) != len(eval_times):
-                    # Resample to finest grid
-                    dr2_clean = np.interp(eval_times, pw_times, dr2_clean)
-                dr2_stack.append(dr2_clean)
-            if dr2_stack:
-                result.overall_dr2 = np.mean(dr2_stack, axis=0)
-
-        return result
 
     def _analyze_session_v2(self, session, direction):
         """V2 pipeline: group lasso discovery + EWLS on selected features."""
@@ -414,33 +361,6 @@ class CouplingEstimator:
 
         return result
 
-    def _extract_signals(self, session, participant):
-        """Extract all modality signals for one participant.
-
-        Returns:
-            dict[mod_name] -> (signal, timestamps, valid)
-        """
-        signals = {}
-        for mod in MODALITY_ORDER:
-            data_key = f'{participant}_{mod}'
-            ts_key = f'{participant}_{mod}_ts'
-            valid_key = f'{participant}_{mod}_valid'
-
-            if data_key not in session:
-                continue
-
-            signal = session[data_key]
-            ts = session[ts_key]
-            valid = session.get(valid_key, np.ones(len(signal), dtype=bool))
-
-            # Check validity: need substantial valid data
-            if valid.sum() < 10:
-                continue
-
-            signals[mod] = (signal, ts, valid)
-
-        return signals
-
     def _get_dm_builder(self, src_mod):
         """Get the design matrix builder for a source modality.
 
@@ -517,343 +437,6 @@ class CouplingEstimator:
         idx = np.clip(np.searchsorted(src_ts, internal_times), 0, len(src_valid) - 1)
         valid_out = src_valid[idx]
         return resampled, internal_times, valid_out
-
-    def _reduce_modality(self, signal, max_channels):
-        """Reduce signal to max_channels via PCA for modality-level screening.
-
-        For Phase 1, we don't need all channels — just a low-dimensional
-        summary that captures dominant variance. Phase 2 uses full channels.
-        Output is standardized to unit variance for consistent regularization.
-        """
-        n_ch = signal.shape[1]
-        if n_ch <= max_channels:
-            return signal
-        mean = signal.mean(axis=0)
-        centered = signal - mean
-        U, s, Vt = np.linalg.svd(centered, full_matrices=False)
-        projected = U[:, :max_channels] * s[:max_channels]
-        # Standardize to unit variance so lambda_ridge is scale-independent
-        std = projected.std(axis=0, keepdims=True) + 1e-8
-        return (projected / std).astype(np.float32)
-
-    @staticmethod
-    def _bh_fdr(pvalues):
-        """Benjamini-Hochberg FDR correction. Returns adjusted p-values."""
-        n = len(pvalues)
-        if n == 0:
-            return np.array([])
-        pvals = np.array(pvalues)
-        sorted_idx = np.argsort(pvals)
-        adjusted = np.ones(n)
-        for rank, idx in enumerate(sorted_idx, 1):
-            adjusted[idx] = pvals[idx] * n / rank
-        # Enforce monotonicity (step-down)
-        prev = 1.0
-        for idx in reversed(sorted_idx):
-            adjusted[idx] = min(adjusted[idx], prev)
-            prev = adjusted[idx]
-        return np.clip(adjusted, 0.0, 1.0)
-
-    def _phase1_modality_level(self, source_sigs, target_sigs, duration, result):
-        """Phase 1: Analyze all 16 modality-level pathways (including same-modality).
-
-        Three-stage pipeline for GPU efficiency:
-          Stage 1: Build all design matrices + run surrogate significance tests
-          Stage 2: Batch EWLS across pathways grouped by solver+shape
-          Stage 3: Post-hoc significance (BH-FDR correction)
-
-        Batching EWLS gives B-fold better GPU occupancy per scan iteration
-        (B pathways × p² operations vs single p² per kernel launch).
-        """
-        from collections import defaultdict
-
-        pathways = get_modality_pathways()
-        sig_cfg = self.config['significance']
-        max_ch_cfg = self.config.get('phase1_max_channels', 4)
-        lam = self.config['ewls']['lambda_ridge']
-        n_surr = self.config['significance']['surrogate'].get('n_screen_surrogates', 200)
-        alpha = sig_cfg['f_test_alpha']
-        min_dr2 = sig_cfg.get('session_level', {}).get('min_dr2', 0.001)
-
-        def _get_max_ch(mod):
-            if isinstance(max_ch_cfg, dict):
-                return max_ch_cfg.get(mod, 4)
-            return max_ch_cfg
-
-        raw_pvalues = {}
-        static_dr2 = {}
-        ewls_times = np.arange(0, duration, 1.0 / self.eval_rate)
-
-        # === Stage 1: Build design matrices + surrogate testing ===
-        # Cache DMs on GPU for batched EWLS in Stage 2
-        dm_cache = {}  # key -> (X_full, X_restr, y, valid, src_reduced, output_times)
-
-        for src_mod, tgt_mod in pathways:
-            if src_mod not in source_sigs or tgt_mod not in target_sigs:
-                continue
-
-            src_signal, src_ts, src_valid = source_sigs[src_mod]
-            tgt_signal, tgt_ts, tgt_valid = target_sigs[tgt_mod]
-            key = (src_mod, tgt_mod)
-
-            conv_times = self._get_internal_times(src_mod, duration)
-            output_times = self._get_output_times(src_mod, duration)
-            result.pathway_times[key] = output_times
-
-            src_reduced = self._reduce_modality(src_signal, _get_max_ch(src_mod))
-            tgt_reduced = self._reduce_modality(tgt_signal, _get_max_ch(tgt_mod))
-
-            src_resampled, src_ts_conv, src_valid_conv = \
-                self._resample_source_to_internal(
-                    src_reduced, src_ts, src_valid, conv_times)
-
-            dm = self._get_dm_builder(src_mod)
-            X_full, y, valid = dm.build(
-                src_resampled, tgt_reduced,
-                source_valid=src_valid_conv, target_valid=tgt_valid,
-                eval_times=ewls_times, source_times=src_ts_conv,
-                target_times=tgt_ts, eval_rate=self.eval_rate,
-            )
-            X_restricted = dm._build_ar_terms(
-                tgt_reduced, tgt_ts, ewls_times, self.eval_rate)
-
-            # Static ridge
-            _, _, r2_full = batched_ridge(X_full, y, lam, valid)
-            _, _, r2_restr = batched_ridge(X_restricted, y, lam, valid)
-            dr2_real = r2_full - r2_restr
-            static_dr2[key] = dr2_real
-
-            # Surrogate testing (already well-batched per pathway)
-            n_source_cols = X_full.shape[1] - X_restricted.shape[1]
-            X_source = X_full[:, :n_source_cols]
-            X_src_3d = X_source.T.unsqueeze(0)
-            gen = torch.Generator(device=self.device)
-            pathway_seed = sum(ord(c) for c in f"{src_mod}_{tgt_mod}")
-            gen.manual_seed(42 + pathway_seed)
-
-            dr2_surrogates = []
-            T_full = X_full.shape[0]
-            p_full = X_full.shape[1]
-
-            # Pre-mask y and X_restricted to avoid redundant copies in loop
-            if valid is not None:
-                y_valid = y[valid]
-                X_restr_valid = X_restricted[valid]
-                T_v = int(valid.sum().item())
-            else:
-                y_valid = y
-                X_restr_valid = X_restricted
-                T_v = T_full
-
-            # VRAM: peak = shifted(K×n_src×T) + X_surr(K×T_v×p)
-            bytes_per_system = (n_source_cols * T_full + T_v * p_full) * 4
-            max_batch_mem = max(1, int(2 * 1024**3 / bytes_per_system))
-            try:
-                torch.cuda.empty_cache()
-                free_vram = torch.cuda.mem_get_info(self.device)[0]
-                max_batch_free = max(1, int(0.4 * free_vram / bytes_per_system))
-                max_batch = min(max_batch_mem, max_batch_free)
-            except Exception:
-                max_batch = max_batch_mem
-            batch_sz = min(max_batch, n_surr)
-
-            i = 0
-            while i < n_surr:
-                n_batch = min(batch_sz, n_surr - i)
-                try:
-                    shifted = circular_shift_surrogate_batched(
-                        X_src_3d, n_batch, min_shift_frac=0.1, generator=gen)
-                    shifted_2d = shifted.permute(0, 2, 1)
-                    # Apply valid mask BEFORE cat to avoid T-sized batch
-                    if valid is not None:
-                        shifted_masked = shifted_2d[:, valid]
-                        del shifted, shifted_2d
-                    else:
-                        shifted_masked = shifted_2d
-                        del shifted
-                    X_restr_exp = X_restr_valid.unsqueeze(0).expand(
-                        n_batch, -1, -1)
-                    X_surr_batch = torch.cat(
-                        [shifted_masked, X_restr_exp], dim=2)
-                    del shifted_masked
-                    r2_batch = batched_ridge_multi(
-                        X_surr_batch, y_valid, lam, valid=None)
-                    del X_surr_batch
-                    dr2_batch = (r2_batch - r2_restr).cpu(
-                        memory_format=torch.preserve_format)
-                    dr2_surrogates.extend(dr2_batch.numpy().tolist())
-                    i += n_batch
-                except torch.cuda.OutOfMemoryError:
-                    torch.cuda.empty_cache()
-                    batch_sz = max(1, batch_sz // 2)
-                    continue
-
-            dr2_surr_arr = np.array(dr2_surrogates)
-            p_value = np.mean(dr2_surr_arr >= dr2_real) if len(dr2_surr_arr) > 0 else 1.0
-            p_value = max(p_value, 1.0 / (n_surr + 1))
-            raw_pvalues[key] = p_value
-
-            # Cache for batched EWLS
-            dm_cache[key] = (X_full, X_restricted, y, valid,
-                             src_reduced, output_times)
-
-        # === Stage 2: Batched EWLS ===
-        # Group pathways by (solver_id, p_full, p_restr) for compatible batching
-        ewls_groups = defaultdict(list)
-        for key in dm_cache:
-            src_mod = key[0]
-            solver = self._get_solver(src_mod)
-            X_f, X_r = dm_cache[key][0], dm_cache[key][1]
-            group_key = (id(solver), X_f.shape[1], X_r.shape[1])
-            ewls_groups[group_key].append(key)
-
-        for (solver_id, _, _), pathway_keys in ewls_groups.items():
-            solver = self._get_solver(pathway_keys[0][0])
-            B = len(pathway_keys)
-
-            # Stack into batch tensors
-            X_full_batch = torch.stack([dm_cache[k][0] for k in pathway_keys])
-            X_restr_batch = torch.stack([dm_cache[k][1] for k in pathway_keys])
-            y_batch = torch.stack([dm_cache[k][2] for k in pathway_keys])
-            valid_batch = torch.stack([dm_cache[k][3] for k in pathway_keys])
-
-            # One batched EWLS call for all B pathways
-            dr2_b, r2_full_b, r2_restr_b, beta_full_b, _ = \
-                solver.solve_restricted_batched(
-                    X_full_batch, X_restr_batch, y_batch, valid_batch)
-
-            # Unpack per-pathway results
-            for i, key in enumerate(pathway_keys):
-                src_mod = key[0]
-                _, _, _, _, src_reduced, output_times = dm_cache[key]
-
-                dr2_np = self._resample_to_output(
-                    dr2_b[i].cpu().numpy(), ewls_times, output_times)
-                r2_full_np = self._resample_to_output(
-                    r2_full_b[i].cpu().numpy(), ewls_times, output_times)
-                r2_restr_np = self._resample_to_output(
-                    r2_restr_b[i].cpu().numpy(), ewls_times, output_times)
-
-                result.pathway_dr2[key] = dr2_np
-                result.pathway_r2_full[key] = r2_full_np
-                result.pathway_r2_restricted[key] = r2_restr_np
-                result.pathway_f_stat[key] = np.full(len(dr2_np), static_dr2[key])
-
-                # Reconstruct coupling kernel
-                n_src_r = src_reduced.shape[1]
-                n_b = self._get_n_basis(src_mod)
-                basis_coeffs = beta_full_b[i, :, :n_b * n_src_r, :].cpu().numpy()
-                kernel = self._reconstruct_kernel(
-                    basis_coeffs, n_src_r, basis=self._get_basis(src_mod))
-                kernel = self._resample_to_output(kernel, ewls_times, output_times)
-                result.pathway_kernels[key] = kernel
-
-            # Free batch tensors
-            del X_full_batch, X_restr_batch, y_batch, valid_batch
-            del dr2_b, r2_full_b, r2_restr_b, beta_full_b
-            torch.cuda.empty_cache()
-
-        # Free DM cache
-        del dm_cache
-        torch.cuda.empty_cache()
-
-        # === Stage 3: Post-hoc significance ===
-        if raw_pvalues:
-            keys = list(raw_pvalues.keys())
-            pvals = np.array([raw_pvalues[k] for k in keys])
-
-            fdr_setting = sig_cfg.get('fdr_correction', False)
-            use_fdr = fdr_setting and fdr_setting != 'false'
-            if use_fdr:
-                pvals_adj = self._bh_fdr(pvals)
-            else:
-                pvals_adj = pvals
-
-            for k, p_adj in zip(keys, pvals_adj):
-                ewls_mean_dr2 = float(np.nanmean(result.pathway_dr2[k]))
-                is_significant = (
-                    p_adj < alpha
-                    and static_dr2[k] > min_dr2
-                    and ewls_mean_dr2 > 0
-                )
-                result.pathway_significant[k] = is_significant
-                result.pathway_pvalues[k] = np.full(
-                    len(result.pathway_dr2[k]), p_adj)
-                if is_significant:
-                    result.n_significant_pathways += 1
-
-    def _phase2_feature_decompose(self, source_sigs, target_sigs, duration, result):
-        """Phase 2: Feature-level decomposition within significant pathways.
-
-        Conv1d at conv_rate for lag coverage, EWLS at default rate (2Hz).
-        """
-        ewls_times = np.arange(0, duration, 1.0 / self.eval_rate)
-
-        for key, is_sig in result.pathway_significant.items():
-            if not is_sig:
-                continue
-
-            src_mod, tgt_mod = key
-            if src_mod not in source_sigs or tgt_mod not in target_sigs:
-                continue
-
-            src_signal, src_ts, src_valid = source_sigs[src_mod]
-            tgt_signal, tgt_ts, tgt_valid = target_sigs[tgt_mod]
-
-            # Conv rate for lag coverage, output rate for storage
-            conv_times = self._get_internal_times(src_mod, duration)
-            output_times = self._get_output_times(src_mod, duration)
-
-            # Decompose source modality into feature groups
-            src_groups = get_feature_groups(src_mod)
-
-            for group_name, ch_spec in src_groups.items():
-                # Extract feature group channels
-                if isinstance(ch_spec, tuple):
-                    start, end = ch_spec
-                    src_subset = src_signal[:, start:end]
-                elif isinstance(ch_spec, list):
-                    src_subset = src_signal[:, ch_spec]
-                else:
-                    continue
-
-                if src_subset.shape[1] == 0:
-                    continue
-
-                # Pre-resample feature group to conv_rate for basis lag coverage
-                src_sub_r, src_ts_r, src_valid_r = \
-                    self._resample_source_to_internal(
-                        src_subset, src_ts, src_valid, conv_times)
-
-                # Build design matrix: conv1d at conv_rate, output at ewls_rate
-                subset_builder = DesignMatrixBuilder(
-                    self._get_basis(src_mod), ar_order=self.ar_order,
-                    device=self.device)
-
-                X_sub, y_sub, valid_sub = subset_builder.build(
-                    src_sub_r, tgt_signal,
-                    source_valid=src_valid_r, target_valid=tgt_valid,
-                    eval_times=ewls_times, source_times=src_ts_r,
-                    target_times=tgt_ts, eval_rate=self.eval_rate,
-                )
-
-                X_restricted = subset_builder._build_ar_terms(
-                    tgt_signal, tgt_ts, ewls_times, self.eval_rate)
-
-                solver = self._get_solver(src_mod)
-                dr2, _, _, beta, _ = solver.solve_restricted(
-                    X_sub, X_restricted, y_sub, valid_sub)
-
-                # Resample from ewls_rate to output_rate
-                dr2_np = self._resample_to_output(
-                    dr2.cpu().numpy(), ewls_times, output_times)
-
-                feat_key = (group_name, tgt_mod)
-                result.feature_dr2[feat_key] = dr2_np
-
-                # Free GPU memory
-                del X_sub, X_restricted, y_sub, valid_sub, dr2, beta
-                torch.cuda.empty_cache()
 
     def _reconstruct_kernel(self, basis_coeffs, n_source_channels, basis=None):
         """Reconstruct coupling kernel h(s) from basis coefficients.

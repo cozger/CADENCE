@@ -71,12 +71,10 @@ def find_session(session_name, cache_dir):
 
 
 def _direction_worker(gpu_id, direction, session_data, config_path, device,
-                      output_dir, session_name, pipeline):
+                      output_dir, session_name):
     """Worker: run one direction on a specific GPU."""
     config = load_config(config_path)
     config['device'] = device
-    if pipeline:
-        config['pipeline'] = pipeline
 
     # Phase 7: limit per-process VRAM when sharing a single GPU
     if torch.cuda.is_available() and torch.cuda.device_count() == 1:
@@ -180,9 +178,6 @@ def run_session(args):
     config = load_config(args.config)
     if args.device:
         config['device'] = args.device
-    if hasattr(args, 'pipeline') and args.pipeline:
-        config['pipeline'] = args.pipeline
-
     # Find session
     name, cache_path = find_session(args.session, config['session_cache'])
     if name is None:
@@ -220,8 +215,7 @@ def run_session(args):
             p = mp.Process(
                 target=_direction_worker,
                 args=(gpu_id, direction, session, args.config,
-                      dev, output_dir, name,
-                      getattr(args, 'pipeline', None)),
+                      dev, output_dir, name),
             )
             p.start()
             processes.append(p)
@@ -409,8 +403,6 @@ def main():
     parser.add_argument('--config', default=None, help='YAML config file')
     parser.add_argument('--output', default='results/cadence', help='Output directory')
     parser.add_argument('--device', default=None, help='Device override (cpu/cuda)')
-    parser.add_argument('--pipeline', default=None, choices=['v1', 'v2'],
-                        help='Pipeline version (v1=original, v2=wavelet+group lasso)')
     parser.add_argument('--no-surrogates', action='store_true',
                         help='Skip surrogate testing (F-test only)')
     parser.add_argument('--parallel-directions', action='store_true',

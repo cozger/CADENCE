@@ -44,6 +44,7 @@ CODE_DIRS = ['cadence', 'scripts', 'configs', 'cluster']
 
 # Data directories (large — opt-in)
 DATA_DIRS = ['session_cache']  # 3.7GB, shared with MCCT
+RAW_DATA_DIRS = ['raw sessions']  # 14GB XDF files — upload once
 
 # Exclusion patterns
 EXCLUDE_PARTS = {'.git', '__pycache__', '.pytest_cache', '.claude', 'results'}
@@ -60,6 +61,7 @@ SBATCH_FILES = {
     'discovery': 'cluster/ssrde_discovery.sbatch',
     'session': 'cluster/ssrde_session.sbatch',
     'corpus': 'cluster/ssrde_corpus.sbatch',
+    'all_sessions': 'cluster/ssrde_all_sessions.sbatch',
 }
 DEFAULT_JOB = 'discovery'
 
@@ -138,16 +140,23 @@ def _add_path(tar, local_path, arcname):
                     tar.add(full, arcname=rel)
 
 
-def create_sync_archive(include_data=False, extra_files=None):
-    """Create a tar.gz archive of code (and optionally data) to sync.
+def create_sync_archive(include_data=False, include_raw=False, extra_files=None):
+    """Create a tar archive of code (and optionally data) to sync.
 
     Uses Python's tarfile module — no local tar binary needed.
     Text files have \\r\\n converted to \\n for Linux compatibility.
+    Uses fast gzip (level 1) for large payloads, normal gzip otherwise.
     Returns path to temporary archive file.
     """
-    archive_path = os.path.join(tempfile.gettempdir(), 'cadence_sync.tar.gz')
+    # Skip compression entirely for raw XDF uploads (binary, won't compress)
+    if include_raw:
+        archive_path = os.path.join(tempfile.gettempdir(), 'cadence_sync.tar')
+        tar_mode = 'w:'
+    else:
+        archive_path = os.path.join(tempfile.gettempdir(), 'cadence_sync.tar.gz')
+        tar_mode = 'w:gz'
 
-    with tarfile.open(archive_path, 'w:gz') as tar:
+    with tarfile.open(archive_path, tar_mode) as tar:
         # Code directories
         for d in CODE_DIRS:
             local = os.path.join(PROJECT_ROOT, d)
@@ -164,6 +173,13 @@ def create_sync_archive(include_data=False, extra_files=None):
         # Data directories (large — opt-in only)
         if include_data:
             for d in DATA_DIRS:
+                local = os.path.join(PROJECT_ROOT, d)
+                if os.path.exists(local):
+                    _add_path(tar, local, d)
+
+        # Raw session XDF files (very large — one-time upload)
+        if include_raw:
+            for d in RAW_DATA_DIRS:
                 local = os.path.join(PROJECT_ROOT, d)
                 if os.path.exists(local):
                     _add_path(tar, local, d)
@@ -221,12 +237,18 @@ def cmd_sync(args):
     pipes through single SSH connection to extract on remote.
     """
     include_data = getattr(args, 'data', False)
+    include_raw = getattr(args, 'raw', False)
     extra_files = getattr(args, 'include', None)
 
-    dirs_label = "code + data" if include_data else "code"
-    print(f"Creating {dirs_label} archive...")
+    parts = ['code']
+    if include_data:
+        parts.append('data')
+    if include_raw:
+        parts.append('raw XDF')
+    print(f"Creating {' + '.join(parts)} archive...")
     archive_path = create_sync_archive(
         include_data=include_data,
+        include_raw=include_raw,
         extra_files=extra_files,
     )
     archive_size = os.path.getsize(archive_path) / (1024 * 1024)
@@ -335,16 +357,22 @@ def cmd_run(args):
     same authenticated connection.
     """
     include_data = getattr(args, 'data', False)
+    include_raw = getattr(args, 'raw', False)
     extra_files = getattr(args, 'include', None)
     sbatch = _resolve_sbatch(args)
     extra = _build_sbatch_args(args)
     node = getattr(args, 'node', None)
     node_cmd = _node_select_cmd(node)
 
-    dirs_label = "code + data" if include_data else "code"
-    print(f"Creating {dirs_label} archive...")
+    parts = ['code']
+    if include_data:
+        parts.append('data')
+    if include_raw:
+        parts.append('raw XDF')
+    print(f"Creating {' + '.join(parts)} archive...")
     archive_path = create_sync_archive(
         include_data=include_data,
+        include_raw=include_raw,
         extra_files=extra_files,
     )
     archive_size = os.path.getsize(archive_path) / (1024 * 1024)
@@ -490,12 +518,14 @@ def main():
     p_sync = subparsers.add_parser('sync', help='Upload code to cluster (1 Duo auth)')
     p_sync.add_argument('--data', action='store_true',
                         help='Also sync session_cache data (3.7GB)')
+    p_sync.add_argument('--raw', action='store_true',
+                        help='Also sync raw XDF session files (14GB)')
     p_sync.add_argument('--include', nargs='+', default=None,
                         help='Extra files to include')
 
     # submit
     p_submit = subparsers.add_parser('submit', help='Submit Slurm job (1 Duo auth)')
-    p_submit.add_argument('--job', choices=['discovery', 'session', 'corpus'],
+    p_submit.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
                           default=DEFAULT_JOB, help='Job type')
     p_submit.add_argument('--session', default=None,
                           help='Session name (for --job session)')
@@ -527,12 +557,14 @@ def main():
 
     # run (sync + submit)
     p_run = subparsers.add_parser('run', help='Sync + submit (1 Duo auth total)')
-    p_run.add_argument('--job', choices=['discovery', 'session', 'corpus'],
+    p_run.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
                        default=DEFAULT_JOB, help='Job type')
     p_run.add_argument('--session', default=None,
                        help='Session name (for --job session)')
     p_run.add_argument('--data', action='store_true',
                        help='Also sync session_cache data')
+    p_run.add_argument('--raw', action='store_true',
+                       help='Also sync raw XDF session files (14GB)')
     p_run.add_argument('--include', nargs='+', default=None,
                        help='Extra files to include')
     p_run.add_argument('--sbatch', default=None,
@@ -544,11 +576,12 @@ def main():
 
     # all (sync + submit + poll + retrieve)
     p_all = subparsers.add_parser('all', help='Sync + submit + poll + retrieve')
-    p_all.add_argument('--job', choices=['discovery', 'session', 'corpus'],
+    p_all.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
                        default=DEFAULT_JOB, help='Job type')
     p_all.add_argument('--session', default=None)
     p_all.add_argument('--output', default='results/cluster_discovery')
     p_all.add_argument('--data', action='store_true')
+    p_all.add_argument('--raw', action='store_true')
     p_all.add_argument('--include', nargs='+', default=None)
     p_all.add_argument('--sbatch', default=None)
     p_all.add_argument('--node', default=None,

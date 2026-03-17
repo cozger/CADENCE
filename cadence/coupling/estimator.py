@@ -3323,7 +3323,13 @@ class CouplingEstimator:
                     use_moderation=use_moderation,
                     moderator_names=moderator_names,
                     force_sequential=triton_unsafe,
-                    selected=list(selected))
+                    selected=list(selected),
+                    tp_enabled=tp_enabled,
+                    tp_n_surr=tp_n_surr,
+                    tp_surr_rate=tp_surr_rate,
+                    tp_smooth_sec=tp_smooth_sec,
+                    tp_seed=tp_seed,
+                    ib_surrogate_method=ib_surrogate_method)
                 continue
 
             # --- Standard full EWLS ---
@@ -3475,6 +3481,7 @@ class CouplingEstimator:
                                 device=self.device,
                                 min_effective_n=self.config['ewls'].get(
                                     'min_effective_n', 20),
+                                force_sequential=triton_unsafe,
                             )
                         else:
                             surr_solver = solver
@@ -3503,8 +3510,11 @@ class CouplingEstimator:
                     except Exception as tp_e:
                         _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
                              f"timepoint p-values failed ({tp_e})")
-                        # Fall back to session-level p-value broadcast
-                        pass
+                        # Broadcast session-level p-value to match dr2 length
+                        if key in result.pathway_pvalues:
+                            sess_p = result.pathway_pvalues[key].flat[0]
+                            result.pathway_pvalues[key] = np.full_like(
+                                dr2_np, sess_p)
 
             except Exception as e:
                 _log(f"  Stage 2 {src_mod}->{tgt_mod}: FAILED ({e}), retrying chunked")
@@ -3533,6 +3543,12 @@ class CouplingEstimator:
                         moderator_names=moderator_names,
                         force_sequential=is_triton_error,
                         selected=list(selected),
+                        tp_enabled=tp_enabled,
+                        tp_n_surr=tp_n_surr,
+                        tp_surr_rate=tp_surr_rate,
+                        tp_smooth_sec=tp_smooth_sec,
+                        tp_seed=tp_seed,
+                        ib_surrogate_method=ib_surrogate_method,
                     )
                 except Exception as e2:
                     _log(f"  Stage 2 {src_mod}->{tgt_mod}: chunked retry ALSO FAILED ({e2})")
@@ -3550,7 +3566,10 @@ class CouplingEstimator:
                           free_vram, result, target_sigs,
                           use_nonlinear=False, use_moderation=False,
                           moderator_names=None, force_sequential=False,
-                          selected=None):
+                          selected=None, tp_enabled=False,
+                          tp_n_surr=20, tp_surr_rate=None,
+                          tp_smooth_sec=30, tp_seed=42,
+                          ib_surrogate_method='circular_shift'):
         """Chunked Stage 2 for large pathways that would OOM full EWLS.
 
         Processes target channels in groups. Each group gets its own
@@ -3623,6 +3642,8 @@ class CouplingEstimator:
         if selected is None:
             selected = list(range(n_sel))
 
+        _surr_saved = False
+
         for g in range(n_groups):
             ch_start = g * max_ch
             ch_end = min((g + 1) * max_ch, C_tgt)
@@ -3660,6 +3681,15 @@ class CouplingEstimator:
                 all_dr2.append(dr2_g.cpu())
                 all_r2_full.append(r2f_g.cpu())
                 all_r2_restr.append(r2r_g.cpu())
+
+                # Save first chunk's matrices for per-timepoint surrogates
+                if g == 0 and tp_enabled and not _surr_saved:
+                    _surr_X_aug = X_augmented_g.clone()
+                    _surr_X_res = X_restr_g.clone()
+                    _surr_y = y_g.clone()
+                    _surr_valid = valid_g.clone() if valid_g is not None else None
+                    _surr_n_source = n_source_cols
+                    _surr_saved = True
 
                 # Accumulate per-feature beta energy from this chunk
                 if beta_g is not None and n_source_cols > 0 and len(selected) > 1:
@@ -3735,6 +3765,88 @@ class CouplingEstimator:
                         frac = src_tgt_energy[(si, ti)] / (total_energy_accum + 1e-20)
                         src_tgt_dict[(si, ti)] = dr2_avg * frac
                     result.pathway_src_tgt_dr2[key] = src_tgt_dict
+
+            # --- Per-timepoint significance via surrogate threshold ---
+            if tp_enabled and n_source_cols > 0 and _surr_saved:
+                from cadence.significance.surrogate import (
+                    surrogate_pvalues_from_design,
+                )
+                surr_method = 'circular_shift'
+                if src_mod == INTERBRAIN_MODALITY:
+                    surr_method = ib_surrogate_method
+
+                surr_rate = tp_surr_rate or eval_rate
+                if surr_rate < eval_rate:
+                    step = max(1, int(round(eval_rate / surr_rate)))
+                    X_aug_s = _surr_X_aug[::step]
+                    X_res_s = _surr_X_res[::step]
+                    y_s = _surr_y[::step]
+                    valid_s = _surr_valid[::step] if _surr_valid is not None else None
+                    dr2_s = dr2_avg[::step]
+                    smooth_s = max(1, int(tp_smooth_sec * surr_rate))
+                else:
+                    X_aug_s, X_res_s, y_s = _surr_X_aug, _surr_X_res, _surr_y
+                    valid_s, dr2_s = _surr_valid, dr2_avg
+                    smooth_s = max(1, int(tp_smooth_sec * eval_rate))
+                    step = 1
+
+                _log(f"  Stage 2 {src_mod}->{tgt_mod} [chunked]: "
+                     f"per-timepoint p-values "
+                     f"({tp_n_surr} {surr_method} surrogates"
+                     f"{f' @{surr_rate}Hz' if step > 1 else ''})...")
+
+                try:
+                    if step > 1:
+                        surr_solver = EWLSSolver(
+                            tau_seconds=tau,
+                            lambda_ridge=lam_ridge,
+                            eval_rate=surr_rate,
+                            device=self.device,
+                            min_effective_n=self.config['ewls'].get(
+                                'min_effective_n', 20),
+                            force_sequential=True,
+                        )
+                    else:
+                        surr_solver = EWLSSolver(
+                            tau_seconds=tau,
+                            lambda_ridge=lam_ridge,
+                            eval_rate=eval_rate,
+                            device=self.device,
+                            min_effective_n=self.config['ewls'].get(
+                                'min_effective_n', 20),
+                            force_sequential=True,
+                        )
+
+                    tp_pvalues_raw, tp_dr2_null = \
+                        surrogate_pvalues_from_design(
+                            surr_solver, X_aug_s, X_res_s,
+                            y_s, valid_s, _surr_n_source, dr2_s,
+                            n_surrogates=tp_n_surr,
+                            min_shift_frac=0.1,
+                            seed=tp_seed,
+                            smooth_samples=smooth_s,
+                            surrogate_method=surr_method)
+
+                    if step > 1:
+                        T_full = len(dr2_avg)
+                        T_sub = len(tp_pvalues_raw)
+                        t_sub = np.arange(T_sub) * step
+                        t_full = np.arange(T_full)
+                        tp_pvalues = np.interp(t_full, t_sub, tp_pvalues_raw)
+                    else:
+                        tp_pvalues = tp_pvalues_raw
+
+                    result.pathway_pvalues[key] = tp_pvalues
+                except Exception as tp_e:
+                    _log(f"  Stage 2 {src_mod}->{tgt_mod} [chunked]: "
+                         f"timepoint p-values failed ({tp_e})")
+
+                # Clean up surrogate matrices
+                try:
+                    del _surr_X_aug, _surr_X_res, _surr_y, _surr_valid
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
 
         else:
             _log(f"  Stage 2 {src_mod}->{tgt_mod} [chunked]: "

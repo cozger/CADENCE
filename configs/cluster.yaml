@@ -18,6 +18,7 @@ pipeline: "v2"
 
 # Data pipeline — symlinked by cluster/setup_env.sh
 session_cache: "session_cache"
+raw_sessions: "raw sessions"
 device: cuda
 
 # Doubly-sparse: tuned for 48GB VRAM per GPU

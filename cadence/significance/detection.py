@@ -32,6 +32,13 @@ def detect_coupling_session(p_values, dr2_values, alpha_binomial=0.01,
         detected: bool, whether coupling was detected.
         details: dict with test statistics.
     """
+    # Ensure matching shapes (session-level p may be size-1 if timepoint failed)
+    if p_values.shape != dr2_values.shape:
+        if p_values.size == 1:
+            p_values = np.full_like(dr2_values, p_values.flat[0])
+        elif dr2_values.size == 1:
+            dr2_values = np.full_like(p_values, dr2_values.flat[0])
+
     # Clean NaN
     valid = ~np.isnan(dr2_values) & ~np.isnan(p_values)
     p_clean = p_values[valid]

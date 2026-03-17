@@ -22,7 +22,7 @@ import torch
 import torch.multiprocessing as mp
 
 from cadence.config import load_config
-from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
+from cadence.data.alignment import discover_cached_sessions, load_session_from_cache, ensure_all_cached
 from cadence.coupling.estimator import CouplingEstimator
 from cadence.significance.detection import detection_summary
 from cadence.visualization.timecourse import plot_coupling_timecourse
@@ -73,6 +73,18 @@ def find_session(session_name, cache_dir):
 def _direction_worker(gpu_id, direction, session_data, config_path, device,
                       output_dir, session_name):
     """Worker: run one direction on a specific GPU."""
+    import tempfile
+
+    # Set default CUDA device for this process — Triton launches kernels on
+    # torch.cuda.current_device(), not the tensor's device.
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu_id)
+
+    # Per-process Triton cache to prevent JIT compilation race between workers
+    triton_cache = os.path.join(tempfile.gettempdir(), f'triton_cache_gpu{gpu_id}')
+    os.makedirs(triton_cache, exist_ok=True)
+    os.environ['TRITON_CACHE_DIR'] = triton_cache
+
     config = load_config(config_path)
     config['device'] = device
 
@@ -85,17 +97,15 @@ def _direction_worker(gpu_id, direction, session_data, config_path, device,
 
     session = session_data  # already loaded, passed via fork
 
-    # Warm up Triton JIT compilation with a tiny dummy EWLS solve.
-    # Without this, both direction processes race to compile the same
-    # Triton kernels via the shared ~/.triton/cache/, causing
-    # "illegal memory access" on the loser.
+    # Warm up Triton JIT at realistic BLOCK sizes (not just tiny T=20)
     try:
         from cadence.regression.ewls import EWLSSolver
         _ws = EWLSSolver(tau_seconds=10.0, lambda_ridge=1e-3,
                          eval_rate=2.0, device=device)
-        _X = torch.randn(1, 20, 5, device=device)
-        _y = torch.randn(1, 20, 1, device=device)
-        _ws.solve_batched(_X, _y)
+        for _T in [20, 512, 2048]:
+            _X = torch.randn(1, _T, 5, device=device)
+            _y = torch.randn(1, _T, 1, device=device)
+            _ws.solve_batched(_X, _y)
         del _ws, _X, _y
         torch.cuda.empty_cache()
     except Exception:
@@ -194,6 +204,17 @@ def run_session(args):
     config = load_config(args.config)
     if args.device:
         config['device'] = args.device
+
+    # Auto-cache any raw XDF files not yet in session_cache
+    raw_dir = config.get('raw_sessions')
+    if raw_dir:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.isabs(raw_dir):
+            raw_dir = os.path.join(project_root, raw_dir)
+        n_new = ensure_all_cached(raw_dir, config['session_cache'])
+        if n_new:
+            print(f"Cached {n_new} new session(s) from {raw_dir}", flush=True)
+
     # Find session
     name, cache_path = find_session(args.session, config['session_cache'])
     if name is None:

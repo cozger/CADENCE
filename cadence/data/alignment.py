@@ -437,3 +437,39 @@ def load_and_preprocess_cached(xdf_path, cache_dir='session_cache',
     session = load_and_preprocess(xdf_path, p1_eeg_index, p2_eeg_index)
     _save_session_cache(session, cache_path)
     return session
+
+
+def ensure_all_cached(raw_dir, cache_dir='session_cache'):
+    """Check raw XDF files against cache; process any that are missing.
+
+    Args:
+        raw_dir: Directory containing .xdf files.
+        cache_dir: Session cache directory.
+
+    Returns:
+        n_new: Number of sessions that were newly cached.
+    """
+    if not os.path.isdir(raw_dir):
+        return 0
+
+    # Discover what's already cached (by session name)
+    cached = {name for name, _path in discover_cached_sessions(cache_dir)}
+
+    # Find XDF files not yet cached
+    n_new = 0
+    for fname in sorted(os.listdir(raw_dir)):
+        if not fname.lower().endswith('.xdf'):
+            continue
+        session_name = os.path.splitext(fname)[0]
+        if session_name in cached:
+            continue
+
+        xdf_path = os.path.join(raw_dir, fname)
+        print(f"  Caching uncached session: {fname}")
+        try:
+            load_and_preprocess_cached(xdf_path, cache_dir=cache_dir)
+            n_new += 1
+        except Exception as e:
+            print(f"  WARNING: Failed to cache {fname}: {e}")
+
+    return n_new

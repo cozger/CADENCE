@@ -88,8 +88,11 @@ def plot_coupling_timecourse(result, save_path=None, figsize=(16, 10), dpi=150,
         else:
             pw_times = result.times / 60.0
 
-        # Get per-timepoint p-values
+        # Get per-timepoint p-values (may be size-1 if timepoint surrogates failed)
         pvalues = result.pathway_pvalues.get(key, np.zeros_like(dr2))
+        if pvalues.shape != dr2.shape:
+            pvalues = np.full_like(dr2, pvalues.flat[0]) if pvalues.size == 1 \
+                else np.zeros_like(dr2)
 
         if smooth_window and smooth_window > 0:
             window = max(int(smooth_window * 2), 2)

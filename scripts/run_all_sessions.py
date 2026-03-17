@@ -28,7 +28,7 @@ import torch
 import torch.multiprocessing as mp
 
 from cadence.config import load_config
-from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
+from cadence.data.alignment import discover_cached_sessions, load_session_from_cache, ensure_all_cached
 from cadence.coupling.estimator import CouplingEstimator
 from cadence.conditions import (
     session_condition_summary, aggregate_condition_summaries,
@@ -36,6 +36,8 @@ from cadence.conditions import (
 )
 from cadence.visualization.timecourse import plot_coupling_timecourse
 from cadence.visualization.heatmaps import plot_coupling_matrix
+from cadence.visualization.kernels import plot_coupling_kernels
+from cadence.visualization.sparsity import plot_sparsity_summary, plot_block_detail
 from cadence.visualization.grand_average import (
     plot_grand_classification_bars,
     plot_grand_dr2_bars,
@@ -43,6 +45,7 @@ from cadence.visualization.grand_average import (
     plot_grand_coupling_by_condition,
 )
 from cadence.coupling.serialization import save_result, load_result
+from cadence.significance.detection import detection_summary
 from cadence.constants import (
     MOD_SHORT_V2, MODALITY_ORDER_V2, INTERBRAIN_MODALITY,
 )
@@ -51,17 +54,30 @@ from cadence.constants import (
 def _parallel_direction_worker(gpu_id, direction, session_data, config_path,
                                device, result_path):
     """Worker process: run one direction on a specific GPU, save result to file."""
+    # Set default CUDA device for this process — Triton launches kernels on
+    # torch.cuda.current_device(), not the tensor's device. Without this,
+    # GPU 1's worker has default device=cuda:0 and Triton can't access
+    # cuda:1 pointers ("Pointer argument cannot be accessed from Triton").
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu_id)
+
+    # Per-process Triton cache to prevent JIT compilation race between workers
+    triton_cache = os.path.join(tempfile.gettempdir(), f'triton_cache_gpu{gpu_id}')
+    os.makedirs(triton_cache, exist_ok=True)
+    os.environ['TRITON_CACHE_DIR'] = triton_cache
+
     config = load_config(config_path)
     config['device'] = device
 
-    # Warm up Triton JIT before real work (avoids cache race between processes)
+    # Warm up Triton JIT at realistic BLOCK sizes (not just tiny T=20)
     try:
         from cadence.regression.ewls import EWLSSolver
         _ws = EWLSSolver(tau_seconds=10.0, lambda_ridge=1e-3,
                          eval_rate=2.0, device=device)
-        _X = torch.randn(1, 20, 5, device=device)
-        _y = torch.randn(1, 20, 1, device=device)
-        _ws.solve_batched(_X, _y)
+        for _T in [20, 512, 2048]:
+            _X = torch.randn(1, _T, 5, device=device)
+            _y = torch.randn(1, _T, 1, device=device)
+            _ws.solve_batched(_X, _y)
         del _ws, _X, _y
         torch.cuda.empty_cache()
     except Exception:
@@ -69,9 +85,41 @@ def _parallel_direction_worker(gpu_id, direction, session_data, config_path,
 
     estimator = CouplingEstimator(config)
     print(f"[GPU {gpu_id}] {direction} starting on {device}...", flush=True)
-    result = estimator.analyze_session(session_data, direction)
-    save_result(result, result_path)
-    print(f"[GPU {gpu_id}] {direction} done.", flush=True)
+    try:
+        result = estimator.analyze_session(session_data, direction)
+        save_result(result, result_path)
+        print(f"[GPU {gpu_id}] {direction} done.", flush=True)
+    except Exception as e:
+        is_cuda_error = ('CUDA' in str(e) or 'Triton' in str(e)
+                         or 'illegal memory' in str(e))
+        if is_cuda_error:
+            print(f"[GPU {gpu_id}] {direction} CUDA error: {e}", flush=True)
+            print(f"[GPU {gpu_id}] Retrying with Triton disabled...", flush=True)
+            try:
+                # Reset CUDA state
+                torch.cuda.synchronize(device)
+            except Exception:
+                pass
+            torch.cuda.empty_cache()
+
+            # Disable Triton and retry
+            from cadence.regression.ewls import disable_triton_scan
+            disable_triton_scan()
+            estimator2 = CouplingEstimator(config)
+            try:
+                result = estimator2.analyze_session(session_data, direction)
+                save_result(result, result_path)
+                print(f"[GPU {gpu_id}] {direction} done (Triton-free retry).", flush=True)
+            except Exception as e2:
+                import traceback
+                print(f"[GPU {gpu_id}] {direction} FAILED on retry: {e2}", flush=True)
+                traceback.print_exc()
+                sys.exit(1)
+        else:
+            import traceback
+            print(f"[GPU {gpu_id}] {direction} FAILED: {e}", flush=True)
+            traceback.print_exc()
+            sys.exit(1)
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -124,6 +172,16 @@ def main():
         config['device'] = args.device
     mod_short = MOD_SHORT_V2
     modality_order = MODALITY_ORDER_V2
+
+    # Auto-cache any raw XDF files not yet in session_cache
+    raw_dir = config.get('raw_sessions')
+    if raw_dir:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.isabs(raw_dir):
+            raw_dir = os.path.join(project_root, raw_dir)
+        n_new = ensure_all_cached(raw_dir, config['session_cache'])
+        if n_new:
+            print(f"Cached {n_new} new session(s) from {raw_dir}", flush=True)
 
     # Discover sessions
     all_sessions = discover_cached_sessions(config['session_cache'])
@@ -189,10 +247,19 @@ def main():
             for p in procs:
                 p.join()
             dt = time.time() - t0
+
+            # Check for worker failures
+            failed = [p for p in procs if p.exitcode != 0]
+            if failed:
+                print(f"\n  WARNING: {len(failed)} worker(s) crashed", flush=True)
+
             print(f"\n  Both directions completed in {dt:.1f}s (parallel GPUs)", flush=True)
 
             # Load results back from temp files
             for role_label, (p_direction, tmp_path) in tmp_paths.items():
+                if not os.path.exists(tmp_path):
+                    print(f"  {role_label}: SKIPPED (worker crashed, no result file)", flush=True)
+                    continue
                 result, _meta = load_result(tmp_path)
                 result.direction = p_direction
                 short_label = 'T->P' if role_label == 'therapist_to_patient' else 'P->T'
@@ -201,13 +268,79 @@ def main():
                 print(f"  {short_label}: {n_sig}/{total} significant", flush=True)
 
                 for key, is_sig in sorted(result.pathway_significant.items()):
-                    dr2_mean = np.nanmean(result.pathway_dr2[key])
+                    dr2_mean = np.nanmean(result.pathway_dr2[key]) if key in result.pathway_dr2 else 0.0
                     src_s = mod_short.get(key[0], key[0])
                     tgt_s = mod_short.get(key[1], key[1])
                     sig = '***' if is_sig else ''
                     print(f"      {src_s}->{tgt_s}: {dr2_mean:+.4f} {sig}", flush=True)
 
                 results[role_label] = result
+
+                # Save permanent result files
+                prefix = role_label.replace('_to_', '-')
+                try:
+                    npz_path = os.path.join(sess_dir, f'{prefix}_full.npz')
+                    save_result(result, npz_path, session_name=name,
+                                runtime_s=dt / 2)
+                    print(f"    Saved NPZ: {npz_path}", flush=True)
+
+                    det = detection_summary(result, config)
+                    det_json = {f"{k[0]}->{k[1]}": v for k, v in det.items()}
+                    result_data = {
+                        'direction': role_label,
+                        'session': name,
+                        'n_significant': n_sig,
+                        'duration_s': session.get('duration', 0),
+                        'analysis_time_s': dt / 2,
+                        'pathway_summary': {},
+                        'detection': det_json,
+                    }
+                    for key2 in result.pathway_dr2:
+                        pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                        result_data['pathway_summary'][pkey] = {
+                            'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                            'significant': bool(result.pathway_significant.get(key2, False)),
+                        }
+                    json_path = os.path.join(sess_dir, f'{prefix}_results.json')
+                    with open(json_path, 'w') as f:
+                        json.dump(result_data, f, indent=2, cls=NumpyEncoder)
+                except Exception as save_err:
+                    print(f"    SAVE ERROR: {save_err}", flush=True)
+
+                # Visualizations (non-critical)
+                try:
+                    fig = plot_coupling_timecourse(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_timecourse.png'))
+                    plt.close(fig)
+                    fig = plot_coupling_matrix(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_matrix.png'))
+                    plt.close(fig)
+                    plot_coupling_kernels(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_kernels.png'))
+                    plot_sparsity_summary(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_sparsity.png'))
+                    plot_block_detail(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_blocks.png'))
+                except Exception as viz_err:
+                    print(f"    Visualization error (non-fatal): {viz_err}", flush=True)
+
+                # Store pathway summary for grand aggregation
+                sess_summary = {
+                    'session': name,
+                    'direction': role_label,
+                    'p_direction': p_direction,
+                    'n_significant': n_sig,
+                    'analysis_time_s': dt / 2,
+                    'pathways': {},
+                }
+                for key2 in result.pathway_dr2:
+                    pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                    sess_summary['pathways'][pkey] = {
+                        'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                        'significant': bool(result.pathway_significant.get(key2, False)),
+                    }
+                grand_summary.append(sess_summary)
+
                 # Clean up temp file
                 try:
                     os.remove(tmp_path)
@@ -229,13 +362,78 @@ def main():
                 print(f"  {short_label}: {n_sig}/{total} significant", flush=True)
 
                 for key, is_sig in sorted(result.pathway_significant.items()):
-                    dr2_mean = np.nanmean(result.pathway_dr2[key])
+                    dr2_mean = np.nanmean(result.pathway_dr2[key]) if key in result.pathway_dr2 else 0.0
                     src_s = mod_short.get(key[0], key[0])
                     tgt_s = mod_short.get(key[1], key[1])
                     sig = '***' if is_sig else ''
                     print(f"      {src_s}->{tgt_s}: {dr2_mean:+.4f} {sig}", flush=True)
 
                 results[role_label] = result
+
+                # Save results first (before viz)
+                prefix = role_label.replace('_to_', '-')
+                try:
+                    npz_path = os.path.join(sess_dir, f'{prefix}_full.npz')
+                    save_result(result, npz_path, session_name=name,
+                                runtime_s=dt / 2)
+                    print(f"    Saved NPZ: {npz_path}", flush=True)
+
+                    det = detection_summary(result, config)
+                    det_json = {f"{k[0]}->{k[1]}": v for k, v in det.items()}
+                    result_data = {
+                        'direction': role_label,
+                        'session': name,
+                        'n_significant': n_sig,
+                        'duration_s': session.get('duration', 0),
+                        'analysis_time_s': dt / 2,
+                        'pathway_summary': {},
+                        'detection': det_json,
+                    }
+                    for key2 in result.pathway_dr2:
+                        pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                        result_data['pathway_summary'][pkey] = {
+                            'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                            'significant': bool(result.pathway_significant.get(key2, False)),
+                        }
+                    json_path = os.path.join(sess_dir, f'{prefix}_results.json')
+                    with open(json_path, 'w') as f:
+                        json.dump(result_data, f, indent=2, cls=NumpyEncoder)
+                except Exception as save_err:
+                    print(f"    SAVE ERROR: {save_err}", flush=True)
+
+                # Visualizations (non-critical)
+                try:
+                    fig = plot_coupling_timecourse(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_timecourse.png'))
+                    plt.close(fig)
+                    fig = plot_coupling_matrix(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_matrix.png'))
+                    plt.close(fig)
+                    plot_coupling_kernels(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_kernels.png'))
+                    plot_sparsity_summary(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_sparsity.png'))
+                    plot_block_detail(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_blocks.png'))
+                except Exception as viz_err:
+                    print(f"    Visualization error (non-fatal): {viz_err}", flush=True)
+
+                # Store pathway summary for grand aggregation
+                sess_summary = {
+                    'session': name,
+                    'direction': role_label,
+                    'p_direction': p_direction,
+                    'n_significant': n_sig,
+                    'analysis_time_s': dt / 2,
+                    'pathways': {},
+                }
+                for key2 in result.pathway_dr2:
+                    pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                    sess_summary['pathways'][pkey] = {
+                        'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                        'significant': bool(result.pathway_significant.get(key2, False)),
+                    }
+                grand_summary.append(sess_summary)
         else:
             for role_label, p_direction in role_dirs.items():
                 short_label = 'T->P' if role_label == 'therapist_to_patient' else 'P->T'
@@ -249,7 +447,7 @@ def main():
                 print(f"    {n_sig}/{total} significant pathways ({dt:.1f}s)", flush=True)
 
                 for key, is_sig in sorted(result.pathway_significant.items()):
-                    dr2_mean = np.nanmean(result.pathway_dr2[key])
+                    dr2_mean = np.nanmean(result.pathway_dr2[key]) if key in result.pathway_dr2 else 0.0
                     src_s = mod_short.get(key[0], key[0])
                     tgt_s = mod_short.get(key[1], key[1])
                     sig = '***' if is_sig else ''
@@ -257,34 +455,78 @@ def main():
 
                 results[role_label] = result
 
-            # Save plots with role-based naming
-            prefix = role_label.replace('_to_', '-')
-            fig = plot_coupling_timecourse(
-                result, save_path=os.path.join(sess_dir, f'{prefix}_timecourse.png'))
-            plt.close(fig)
-            fig = plot_coupling_matrix(
-                result,
-                save_path=os.path.join(sess_dir, f'{prefix}_matrix.png'))
-            plt.close(fig)
+                # Save results first (before viz)
+                prefix = role_label.replace('_to_', '-')
+                try:
+                    npz_path = os.path.join(sess_dir, f'{prefix}_full.npz')
+                    save_result(result, npz_path, session_name=name,
+                                runtime_s=dt)
+                    print(f"    Saved NPZ: {npz_path}", flush=True)
 
-            # Store pathway summary
-            sess_summary = {
-                'session': name,
-                'direction': role_label,
-                'p_direction': p_direction,
-                'n_significant': n_sig,
-                'analysis_time_s': dt,
-                'pathways': {},
-            }
-            for key in result.pathway_dr2:
-                pkey = f"{mod_short.get(key[0], key[0])}->{mod_short.get(key[1], key[1])}"
-                sess_summary['pathways'][pkey] = {
-                    'mean_dr2': float(np.nanmean(result.pathway_dr2[key])),
-                    'significant': bool(result.pathway_significant.get(key, False)),
+                    det = detection_summary(result, config)
+                    det_json = {f"{k[0]}->{k[1]}": v for k, v in det.items()}
+                    result_data = {
+                        'direction': role_label,
+                        'session': name,
+                        'n_significant': n_sig,
+                        'duration_s': session.get('duration', 0),
+                        'analysis_time_s': dt,
+                        'pathway_summary': {},
+                        'detection': det_json,
+                    }
+                    for key2 in result.pathway_dr2:
+                        pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                        result_data['pathway_summary'][pkey] = {
+                            'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                            'significant': bool(result.pathway_significant.get(key2, False)),
+                        }
+                    json_path = os.path.join(sess_dir, f'{prefix}_results.json')
+                    with open(json_path, 'w') as f:
+                        json.dump(result_data, f, indent=2, cls=NumpyEncoder)
+                except Exception as save_err:
+                    print(f"    SAVE ERROR: {save_err}", flush=True)
+
+                # Visualizations (non-critical)
+                try:
+                    fig = plot_coupling_timecourse(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_timecourse.png'))
+                    plt.close(fig)
+                    fig = plot_coupling_matrix(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_matrix.png'))
+                    plt.close(fig)
+                    plot_coupling_kernels(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_kernels.png'))
+                    plot_sparsity_summary(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_sparsity.png'))
+                    plot_block_detail(
+                        result, save_path=os.path.join(sess_dir, f'{prefix}_blocks.png'))
+                except Exception as viz_err:
+                    print(f"    Visualization error (non-fatal): {viz_err}", flush=True)
+
+                # Store pathway summary for grand aggregation
+                sess_summary = {
+                    'session': name,
+                    'direction': role_label,
+                    'p_direction': p_direction,
+                    'n_significant': n_sig,
+                    'analysis_time_s': dt,
+                    'pathways': {},
                 }
-            grand_summary.append(sess_summary)
+                for key2 in result.pathway_dr2:
+                    pkey = f"{mod_short.get(key2[0], key2[0])}->{mod_short.get(key2[1], key2[1])}"
+                    sess_summary['pathways'][pkey] = {
+                        'mean_dr2': float(np.nanmean(result.pathway_dr2[key2])),
+                        'significant': bool(result.pathway_significant.get(key2, False)),
+                    }
+                grand_summary.append(sess_summary)
 
         # Condition-level analysis (needs both directions)
+        if 'therapist_to_patient' not in results or 'patient_to_therapist' not in results:
+            missing = [k for k in ['therapist_to_patient', 'patient_to_therapist']
+                       if k not in results]
+            print(f"\n  Condition analysis: SKIPPED (missing {missing})", flush=True)
+            continue
+
         result_tp = results['therapist_to_patient']
         result_pt = results['patient_to_therapist']
 

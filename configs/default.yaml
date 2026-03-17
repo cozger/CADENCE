@@ -6,6 +6,7 @@ pipeline: "v2"
 
 # Data pipeline
 session_cache: "C:/Users/optilab/desktop/MCCT/session_cache"
+raw_sessions: "raw sessions"  # XDF files; auto-cached if missing from session_cache
 device: cuda
 
 # Basis functions
@@ -104,7 +105,7 @@ significance:
   # FDR correction across pathways: false (default), or 'bh' for Benjamini-Hochberg.
   # Requires n_screen_surrogates >= 500 with 16 pathways to be practical.
   fdr_correction: bh
-  max_pathway_p: 0.7            # skip Stage 2 for pathways with session-level p > this
+  max_pathway_p: 0.8            # skip Stage 2 for pathways with session-level p > this
   session_level:
     binomial_alpha: 0.01
     ttest_alpha: 0.01

@@ -289,10 +289,35 @@ class CouplingEstimator:
         for key in [f'{ib_key}', f'{ib_key}_ts', f'{ib_key}_valid']:
             pass  # inter-brain stored without participant prefix
         if ib_key in session:
-            ib_signal = session[ib_key]
+            ib_signal = session[ib_key].copy()
             ib_ts = session[f'{ib_key}_ts']
             ib_valid = session.get(f'{ib_key}_valid',
                                     np.ones(len(ib_signal), dtype=bool))
+
+            # Delta floor: zero out interbrain channels below min_freq_hz
+            ib_min_freq = self.config.get('interbrain', {}).get(
+                'min_freq_hz', 0.0)
+            if ib_min_freq > 0:
+                from cadence.constants import (
+                    WAVELET_CENTER_FREQS, EEG_WAVELET_N_FREQS,
+                    EEG_WAVELET_N_ROIS,
+                )
+                n_freqs = EEG_WAVELET_N_FREQS
+                n_rois = EEG_WAVELET_N_ROIS
+                n_zeroed = 0
+                for comp_idx in range(2):  # cos, sin
+                    for f_idx in range(n_freqs):
+                        if WAVELET_CENTER_FREQS[f_idx] < ib_min_freq:
+                            for r_idx in range(n_rois):
+                                col = comp_idx * (n_freqs * n_rois) + \
+                                      f_idx * n_rois + r_idx
+                                if col < ib_signal.shape[1]:
+                                    ib_signal[:, col] = 0.0
+                                    n_zeroed += 1
+                if n_zeroed > 0:
+                    _log(f"[{direction}] Interbrain: zeroed {n_zeroed}/160 "
+                         f"channels below {ib_min_freq} Hz")
+
             if ib_valid.sum() >= 10:
                 source_sigs[ib_key] = (ib_signal, ib_ts, ib_valid)
 
@@ -3211,6 +3236,15 @@ class CouplingEstimator:
         tp_n_surr = tp_cfg.get('n_surrogates', 20)
         tp_smooth_sec = tp_cfg.get('smooth_sec', 30)
         tp_seed = tp_cfg.get('seed', 42)
+        tp_surr_rate = tp_cfg.get('surrogate_eval_rate', None)
+
+        # Interbrain surrogate method
+        ib_cfg = self.config.get('interbrain', {})
+        ib_surrogate_method = ib_cfg.get('surrogate_method', 'circular_shift')
+        ib_min_freq = ib_cfg.get('min_freq_hz', 0.0)
+
+        # Pathway-p gate for Stage 2
+        max_pathway_p = self.config['significance'].get('max_pathway_p', 1.0)
 
         eval_times = np.arange(0, duration, 1.0 / eval_rate)
 
@@ -3220,6 +3254,16 @@ class CouplingEstimator:
 
             # Only run Stage 2 for pathways that passed significance screening
             if not result.pathway_significant.get(key, False):
+                continue
+
+            # Gate on pathway-level p-value (skip clearly non-significant)
+            pw_p = discovery.block_pathway_pvalue.get(key, 1.0)
+            if pw_p > max_pathway_p:
+                _log(f"  Stage 2 {key[0]}->{key[1]}: skipped "
+                     f"(pathway_p={pw_p:.4f} > {max_pathway_p})")
+                result.pathway_significant[key] = False
+                result.n_significant_pathways = max(
+                    0, result.n_significant_pathways - 1)
                 continue
 
             src_mod, tgt_mod = key
@@ -3395,19 +3439,66 @@ class CouplingEstimator:
                     from cadence.significance.surrogate import (
                         surrogate_pvalues_from_design,
                     )
-                    smooth_samples = max(1, int(tp_smooth_sec * eval_rate))
+                    # Choose surrogate method (Fourier for interbrain)
+                    surr_method = 'circular_shift'
+                    if src_mod == INTERBRAIN_MODALITY:
+                        surr_method = ib_surrogate_method
+
+                    # Optionally subsample to lower eval rate for surrogates
+                    surr_rate = tp_surr_rate or eval_rate
+                    if surr_rate < eval_rate:
+                        step = max(1, int(round(eval_rate / surr_rate)))
+                        X_aug_s = X_augmented[::step]
+                        X_res_s = X_restricted[::step]
+                        y_s = y[::step]
+                        valid_s = valid[::step] if valid is not None else None
+                        dr2_s = dr2_np[::step]
+                        smooth_s = max(1, int(tp_smooth_sec * surr_rate))
+                    else:
+                        X_aug_s, X_res_s, y_s = X_augmented, X_restricted, y
+                        valid_s, dr2_s = valid, dr2_np
+                        smooth_s = max(1, int(tp_smooth_sec * eval_rate))
+                        step = 1
+
                     _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
-                         f"computing per-timepoint p-values "
-                         f"({tp_n_surr} surrogates)...")
+                         f"per-timepoint p-values "
+                         f"({tp_n_surr} {surr_method} surrogates"
+                         f"{f' @{surr_rate}Hz' if step > 1 else ''})...")
+
                     try:
-                        tp_pvalues, tp_dr2_null = \
+                        # Create solver at surrogate rate if subsampled
+                        if step > 1:
+                            surr_solver = EWLSSolver(
+                                tau_seconds=tau,
+                                lambda_ridge=lam_ridge,
+                                eval_rate=surr_rate,
+                                device=self.device,
+                                min_effective_n=self.config['ewls'].get(
+                                    'min_effective_n', 20),
+                            )
+                        else:
+                            surr_solver = solver
+
+                        tp_pvalues_raw, tp_dr2_null = \
                             surrogate_pvalues_from_design(
-                                solver, X_augmented, X_restricted,
-                                y, valid, n_source_cols, dr2_np,
+                                surr_solver, X_aug_s, X_res_s,
+                                y_s, valid_s, n_source_cols, dr2_s,
                                 n_surrogates=tp_n_surr,
                                 min_shift_frac=0.1,
                                 seed=tp_seed,
-                                smooth_samples=smooth_samples)
+                                smooth_samples=smooth_s,
+                                surrogate_method=surr_method)
+
+                        # Interpolate back to full eval rate if subsampled
+                        if step > 1:
+                            T_full = len(dr2_np)
+                            T_sub = len(tp_pvalues_raw)
+                            t_sub = np.arange(T_sub) * step
+                            t_full = np.arange(T_full)
+                            tp_pvalues = np.interp(t_full, t_sub, tp_pvalues_raw)
+                        else:
+                            tp_pvalues = tp_pvalues_raw
+
                         result.pathway_pvalues[key] = tp_pvalues
                     except Exception as tp_e:
                         _log(f"  Stage 2 {src_mod}->{tgt_mod}: "

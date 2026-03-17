@@ -9,7 +9,9 @@ circular-shift the convolved outputs for each surrogate.
 import numpy as np
 import torch
 
-from cadence.surrogates import circular_shift_surrogate_batched
+from cadence.surrogates import (
+    circular_shift_surrogate_batched, fourier_surrogate_gpu_batched,
+)
 from cadence.regression.ewls import EWLSSolver
 from cadence.basis.design_matrix import DesignMatrixBuilder
 
@@ -111,7 +113,8 @@ def surrogate_significance(dm_builder, solver, source_signal, target_signal,
 def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
                                    n_source_cols, dr2_real,
                                    n_surrogates=20, min_shift_frac=0.1,
-                                   seed=42, smooth_samples=0):
+                                   seed=42, smooth_samples=0,
+                                   surrogate_method='circular_shift'):
     """Per-timepoint p-values by circular-shifting source columns of X_augmented.
 
     Shifts only the first n_source_cols columns (basis-convolved source).
@@ -134,6 +137,10 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
         min_shift_frac: Minimum shift as fraction of T.
         seed: Random seed.
         smooth_samples: If > 0, apply uniform smoothing before p-value computation.
+        surrogate_method: 'circular_shift' or 'fourier_phase'. Fourier phase
+            randomization destroys phase structure while preserving power spectrum,
+            providing a stronger null for autocorrelated features (e.g., delta-band
+            interbrain PLV).
 
     Returns:
         p_values: (T_eval,) per-timepoint p-values.
@@ -180,8 +187,8 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
         multiplier = multiplier.median(dim=1, keepdim=True).values
         aug_multipliers.append(multiplier)
 
-    # Reshape source for circular shifting: (1, n_source_cols, T_eval)
-    X_src_for_shift = X_source.T.unsqueeze(0)
+    # Reshape source for surrogate generation: (1, n_source_cols, T_eval)
+    X_src_3d = X_source.T.unsqueeze(0)
 
     gen = torch.Generator(device=device)
     gen.manual_seed(seed)
@@ -193,9 +200,13 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
         batch_end = min(batch_start + batch_size, n_surrogates)
         n_batch = batch_end - batch_start
 
-        shifted = circular_shift_surrogate_batched(
-            X_src_for_shift, n_batch, min_shift_frac=min_shift_frac,
-            generator=gen)  # (n_batch, n_source_cols, T_eval)
+        if surrogate_method == 'fourier_phase':
+            shifted = fourier_surrogate_gpu_batched(
+                X_src_3d, n_batch, base_seed=seed + batch_start)
+        else:
+            shifted = circular_shift_surrogate_batched(
+                X_src_3d, n_batch, min_shift_frac=min_shift_frac,
+                generator=gen)  # (n_batch, n_source_cols, T_eval)
 
         for k in range(n_batch):
             X_src_shifted = shifted[k].T  # (T_eval, n_source_cols)

@@ -73,9 +73,12 @@ All parameters in `configs/default.yaml`. Key settings:
 - `basis.layer1.max_lag_seconds`: 5.0s maximum lag
 - `autoregressive.order`: 3 AR lags
 - `significance.surrogate.n_surrogates`: 100 circular shifts (session-level)
-- `significance.timepoint.n_surrogates`: 20 (per-timepoint, cheaper)
-- `significance.timepoint.smooth_sec`: 30 (smoothing before p-value computation)
+- `significance.max_pathway_p`: 0.7 (skip Stage 2 for high session-level p)
+- `significance.timepoint.n_surrogates`: 20 (per-timepoint)
+- `significance.timepoint.surrogate_eval_rate`: 1.0 Hz (surrogates at lower rate for speed)
 - `significance.fdr_correction`: Benjamini-Hochberg
+- `interbrain.min_freq_hz`: 4.0 (exclude delta band — artifact-prone on Emotiv EPOC)
+- `interbrain.surrogate_method`: fourier_phase (stronger null for autocorrelated features)
 
 ## Session Cache
 
@@ -84,7 +87,7 @@ Shares MCCT's `session_cache/` directory. Reads cached `.npz` + `.json` session 
 ## Modalities (V2)
 
 - EEG wavelet: 160ch @ 5Hz (2 components × 20 freqs × 4 ROIs)
-- EEG interbrain: 160ch @ 5Hz (cross-brain PLV features)
+- EEG interbrain: 120ch @ 5Hz (cross-brain PLV, delta excluded by default)
 - ECG features: 7ch @ 2Hz (HRV)
 - Blendshapes v2: 31ch @ 30Hz (15 PCA + 15 derivatives + activity)
 - Pose features: 41ch @ 12Hz (40 joint groups + activity)

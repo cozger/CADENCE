@@ -78,13 +78,21 @@ DEFAULTS = {
             'ttest_alpha': 0.01,
             'min_dr2': 0.001,
         },
+        'max_pathway_p': 0.7,
         'timepoint': {
             'enabled': True,
             'n_surrogates': 20,
             'quantile': 0.95,
             'smooth_sec': 30,
             'seed': 42,
+            'surrogate_eval_rate': 1.0,
         },
+    },
+
+    # Interbrain feature configuration
+    'interbrain': {
+        'min_freq_hz': 4.0,               # zero channels below this (exclude delta)
+        'surrogate_method': 'fourier_phase',  # 'circular_shift' or 'fourier_phase'
     },
 
     # Layer 3 modulation (deferred)

@@ -49,13 +49,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def _gpu_worker_sessions(gpu_id, session_batch, config_path, output_dir, pipeline):
+def _gpu_worker_sessions(gpu_id, session_batch, config_path, output_dir):
     """Worker function: run analysis on a batch of sessions on one GPU."""
     device = f'cuda:{gpu_id}'
     config = load_config(config_path)
     config['device'] = device
-    if pipeline:
-        config['pipeline'] = pipeline
 
     print(f"[GPU {gpu_id}] Processing {len(session_batch)} sessions on {device}")
     print(f"[GPU {gpu_id}] GPU: {torch.cuda.get_device_name(gpu_id)}")
@@ -152,7 +150,7 @@ def run_discovery(args):
             continue
         p = mp.Process(
             target=_gpu_worker_sessions,
-            args=(gpu_id, batch, args.config, args.output, 'v2'),
+            args=(gpu_id, batch, args.config, args.output),
         )
         p.start()
         processes.append(p)
@@ -181,7 +179,6 @@ def run_session(args):
     sa.session = args.session or 'y_06'
     sa.output = args.output
     sa.device = 'cuda:0'
-    sa.pipeline = None
     sa.no_surrogates = False
     _run_session(sa)
 
@@ -197,7 +194,7 @@ def run_all_sessions(args):
     print(f"Found {len(sessions_list)} sessions, using {n_gpus} GPU(s)")
 
     if n_gpus <= 1:
-        _gpu_worker_sessions(0, sessions_list, args.config, args.output, None)
+        _gpu_worker_sessions(0, sessions_list, args.config, args.output)
         return
 
     # Split across GPUs
@@ -212,7 +209,7 @@ def run_all_sessions(args):
             continue
         p = mp.Process(
             target=_gpu_worker_sessions,
-            args=(gpu_id, batch, args.config, args.output, None),
+            args=(gpu_id, batch, args.config, args.output),
         )
         p.start()
         processes.append(p)
@@ -326,7 +323,6 @@ def _gpu_analyze_corpus(gpu_id, session_names, specs_dict, config_path, output_d
 
     config = load_config(config_path)
     config['device'] = device
-    config['pipeline'] = 'v2'
 
     from cadence.coupling.estimator import CouplingEstimator
 

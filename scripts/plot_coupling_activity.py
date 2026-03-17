@@ -198,6 +198,15 @@ def load_direction(npz_path, json_path):
                 src_tgt_dr2.setdefault(pks, {})[
                     (src_idx, tgt_idx)] = arr
 
+    # Load discovery selected features
+    discovery_features = {}  # pathway_key -> list of feature indices
+    if 'disc/selected_features/_keys' in d:
+        for dk in d['disc/selected_features/_keys']:
+            dk = str(dk)
+            feats = d[f'disc/selected_features/{dk}']
+            if len(feats) > 0:
+                discovery_features[dk] = feats.tolist()
+
     # Load auxiliary data (PCA loadings etc.)
     bl_pca_loadings = d['aux/bl_pca_loadings'] if 'aux/bl_pca_loadings' in d else None
 
@@ -211,6 +220,7 @@ def load_direction(npz_path, json_path):
         'pathways': pathways,
         'features': features,
         'src_tgt_dr2': src_tgt_dr2,
+        'discovery_features': discovery_features,
         'bl_pca_loadings': bl_pca_loadings,
         'direction': direction,
         'direction_display': _direction_display(direction),
@@ -584,6 +594,105 @@ def plot_feature_heatmaps(data, save_dir, smooth_sec=30, trim_sec=60):
         print(f"  Saved: {save_path}")
 
 
+def plot_selected_features(data, save_dir):
+    """Bar chart of selected features per significant pathway, grouped by frequency band."""
+    sig_pw = [p for p in data['pathways'] if p['significant']]
+    disc = data.get('discovery_features', {})
+    bl_loadings = data.get('bl_pca_loadings')
+    if not sig_pw or not disc:
+        return
+
+    for pw in sig_pw:
+        feat_indices = disc.get(pw['key'])
+        if not feat_indices:
+            continue
+
+        src = pw['src']
+        tgt = pw['tgt']
+        src_s = MOD_SHORT.get(src, src)
+        tgt_s = MOD_SHORT.get(tgt, tgt)
+
+        # Map indices to names and group by frequency band (for EEG) or category
+        feat_names = []
+        band_colors = []
+        band_map = {
+            'delta(2-4)': '#e53935', 'theta(4-8)': '#FB8C00',
+            'alpha(8-13)': '#43A047', 'beta(13-30)': '#1E88E5',
+            'gamma(30+)': '#8E24AA', 'other': '#757575',
+        }
+        for idx in sorted(feat_indices):
+            name = _feature_name(src, idx, bl_loadings)
+            feat_names.append(name)
+            # Determine band from name
+            band = 'other'
+            if 'eeg' in src:
+                # Extract frequency from feature name patterns
+                for part in name.replace('_', ' ').split():
+                    if 'Hz' in part:
+                        try:
+                            freq = float(part.replace('Hz', ''))
+                            if freq < 4:
+                                band = 'delta(2-4)'
+                            elif freq < 8:
+                                band = 'theta(4-8)'
+                            elif freq < 13:
+                                band = 'alpha(8-13)'
+                            elif freq < 30:
+                                band = 'beta(13-30)'
+                            else:
+                                band = 'gamma(30+)'
+                        except ValueError:
+                            pass
+                        break
+            band_colors.append(band_map.get(band, '#757575'))
+
+        n_feat = len(feat_names)
+        fig, ax = plt.subplots(figsize=(10, max(3, 0.3 * n_feat + 1.5)), dpi=150)
+
+        y_pos = np.arange(n_feat)
+        ax.barh(y_pos, [1] * n_feat, color=band_colors, height=0.8, alpha=0.8)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(feat_names, fontsize=7)
+        ax.set_xlim(0, 1.3)
+        ax.set_xticks([])
+        ax.invert_yaxis()
+
+        # Add band legend for EEG
+        if 'eeg' in src:
+            used_bands = set()
+            for bc in band_colors:
+                for band_name, color in band_map.items():
+                    if color == bc:
+                        used_bands.add((band_name, color))
+            legend_handles = [plt.Rectangle((0, 0), 1, 1, color=c, alpha=0.8)
+                              for _, c in sorted(used_bands)]
+            legend_labels = [b for b, _ in sorted(used_bands)]
+            ax.legend(legend_handles, legend_labels, loc='lower right',
+                      fontsize=7, framealpha=0.9)
+
+        # Count per band
+        band_counts = {}
+        for bc in band_colors:
+            for band_name, color in band_map.items():
+                if color == bc:
+                    band_counts[band_name] = band_counts.get(band_name, 0) + 1
+        band_summary = ', '.join(f'{b}: {c}' for b, c in sorted(band_counts.items()))
+
+        ax.set_title(
+            f'{src_s} \u2192 {tgt_s} Selected Features  \u2014  '
+            f'{data["direction_display"]}  ({data["session"]})\n'
+            f'{n_feat} features  |  mean dR\u00b2={pw["mean_dr2"]:.4f}  |  '
+            f'{band_summary}',
+            fontsize=9)
+
+        fig.tight_layout()
+        fname = f'{data["file_prefix"]}_{src_s}-{tgt_s}_selected.png'
+        save_path = os.path.join(save_dir, fname)
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  Saved: {save_path}")
+
+
 def plot_src_tgt_heatmaps(data, save_dir, smooth_sec=30, trim_sec=60):
     """Source x Target feature heatmap for significant pathways with decomposition data."""
     times_plot, t_sl, dt = _trim_times(data['times'], trim_sec)
@@ -708,6 +817,8 @@ def main():
 
         plot_src_tgt_heatmaps(data, out_dir,
                                smooth_sec=args.smooth, trim_sec=args.trim)
+
+        plot_selected_features(data, out_dir)
 
     # Coupling matrix (both directions side by side)
     if len(data_list) == 2:

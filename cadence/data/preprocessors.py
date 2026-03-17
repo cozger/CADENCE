@@ -623,7 +623,11 @@ def extract_blendshapes_v2(blendshapes, valid, ts, n_components=15,
 
     # Stack: [PCA(15) | derivatives(15) | activity(1)] = 31 channels
     features = np.concatenate([projected, derivatives, activity], axis=1)
-    return features, valid, ts
+
+    # PCA loadings: (n_components, 52) maps AUs -> PCs
+    pca_loadings = Vt[:n_components].astype(np.float32)
+
+    return features, valid, ts, pca_loadings
 
 
 # ---------------------------------------------------------------------------

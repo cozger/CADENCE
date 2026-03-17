@@ -15,6 +15,92 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import uniform_filter1d
 
+# Feature name lookup per modality
+from cadence.constants import (
+    WAVELET_FEATURE_NAMES, INTERBRAIN_FEATURE_NAMES,
+    BL_FEATURE_NAMES_V2, ECG_FEATURE_NAMES_V2,
+    POSE_SEGMENT_MAP, bl_pca_label,
+)
+
+def _load_bl_pca_loadings(session_name):
+    """Try to recompute BL PCA loadings from session cache (fallback)."""
+    try:
+        from cadence.config import load_config
+        from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
+        config = load_config()
+        sessions = discover_cached_sessions(config['session_cache'])
+        for name, path in sessions:
+            if session_name in name:
+                session = load_session_from_cache(path, config=config)
+                for p in ['p1', 'p2']:
+                    key = f'{p}_blendshapes_v2_pca_loadings'
+                    if key in session:
+                        return session[key]
+                # Loadings not cached — recompute from raw blendshapes
+                for p in ['p1', 'p2']:
+                    bl_key = f'{p}_blendshapes'
+                    if bl_key in session:
+                        bl_raw = session[bl_key][:, :52].astype(np.float64)
+                        valid = session.get(f'{bl_key}_valid',
+                                            np.ones(len(bl_raw), dtype=bool))
+                        bl_valid = bl_raw[valid]
+                        mean = bl_valid.mean(axis=0)
+                        _, _, Vt = np.linalg.svd(bl_valid - mean,
+                                                  full_matrices=False)
+                        return Vt[:15].astype(np.float32)
+                break
+    except Exception:
+        pass
+    return None
+
+
+def _feature_name(modality, ch_idx, bl_pca_loadings=None):
+    """Map (modality, channel_index) to a human-readable feature name."""
+    if modality in ('eeg_wavelet',):
+        if ch_idx < len(WAVELET_FEATURE_NAMES):
+            # Shorten: eeg_w_real_f4.2_frontal -> real_4.2Hz_frontal
+            name = WAVELET_FEATURE_NAMES[ch_idx]
+            name = name.replace('eeg_w_', '').replace('_f', '_')
+            parts = name.split('_', 2)  # comp, freq, roi
+            if len(parts) == 3:
+                return f'{parts[0]}_{parts[1]}Hz_{parts[2]}'
+            return name
+        return f'eeg_w[{ch_idx}]'
+    elif modality in ('eeg_interbrain',):
+        if ch_idx < len(INTERBRAIN_FEATURE_NAMES):
+            name = INTERBRAIN_FEATURE_NAMES[ch_idx]
+            name = name.replace('eeg_ib_', '').replace('_f', '_')
+            parts = name.split('_', 2)
+            if len(parts) == 3:
+                return f'{parts[0]}_{parts[1]}Hz_{parts[2]}'
+            return name
+        return f'eeg_ib[{ch_idx}]'
+    elif modality in ('blendshapes_v2',):
+        if ch_idx < 15 and bl_pca_loadings is not None:
+            return bl_pca_label(ch_idx, bl_pca_loadings)
+        if ch_idx < 15:
+            return f'bl_pca_{ch_idx:02d}'
+        if 15 <= ch_idx < 30 and bl_pca_loadings is not None:
+            return bl_pca_label(ch_idx - 15, bl_pca_loadings) + '_dt'
+        if 15 <= ch_idx < 30:
+            return f'bl_pca_{ch_idx-15:02d}_dt'
+        if ch_idx == 30:
+            return 'bl_activity'
+        return f'bl[{ch_idx}]'
+    elif modality in ('ecg_features_v2',):
+        if ch_idx < len(ECG_FEATURE_NAMES_V2):
+            return ECG_FEATURE_NAMES_V2[ch_idx].replace('ecg_', '')
+        return f'ecg[{ch_idx}]'
+    elif modality in ('pose_features',):
+        for seg_name, (start, end) in POSE_SEGMENT_MAP.items():
+            if start <= ch_idx < end:
+                offset = ch_idx - start
+                short = seg_name.replace('pose_', '')
+                return f'{short}[{offset}]'
+        return f'pose[{ch_idx}]'
+    return f'[{ch_idx}]'
+
+
 # Short names for display
 MOD_SHORT = {
     'eeg_features': 'EEG', 'eeg_wavelet': 'EEG',
@@ -73,7 +159,10 @@ def load_direction(npz_path, json_path):
     pathways = []
     for k, is_sig in zip(sig_keys, sig_vals):
         src, tgt = k.split('||')
-        dr2 = d[f'pathway_dr2/{k}']
+        dr2_key = f'pathway_dr2/{k}'
+        if dr2_key not in d:
+            continue  # pathway screened but no Stage 2 results
+        dr2 = d[dr2_key]
         # Load per-timepoint p-values if available
         pval_key = f'pathway_pvalues/{k}'
         pvalues = d[pval_key] if pval_key in d else None
@@ -109,12 +198,20 @@ def load_direction(npz_path, json_path):
                 src_tgt_dr2.setdefault(pks, {})[
                     (src_idx, tgt_idx)] = arr
 
+    # Load auxiliary data (PCA loadings etc.)
+    bl_pca_loadings = d['aux/bl_pca_loadings'] if 'aux/bl_pca_loadings' in d else None
+
+    # Fallback: recompute PCA loadings from session cache if not in NPZ
+    if bl_pca_loadings is None:
+        bl_pca_loadings = _load_bl_pca_loadings(meta.get('session', ''))
+
     direction = meta['direction']
     return {
         'times': times,
         'pathways': pathways,
         'features': features,
         'src_tgt_dr2': src_tgt_dr2,
+        'bl_pca_loadings': bl_pca_loadings,
         'direction': direction,
         'direction_display': _direction_display(direction),
         'file_prefix': _direction_to_prefix(direction),
@@ -527,7 +624,10 @@ def plot_src_tgt_heatmaps(data, save_dir, smooth_sec=30, trim_sec=60):
         for i, ((si, ti), dr2_arr) in enumerate(ranked):
             dr2_s = smooth(dr2_arr, smooth_sec, dt)[t_sl]
             heatmap[i] = np.where(dr2_s > 0, dr2_s, 0.0)
-            labels.append(f'src[{si}]\u2192tgt[{ti}]')
+            bl_loadings = data.get('bl_pca_loadings')
+            src_name = _feature_name(pw['src'], si, bl_loadings)
+            tgt_name = _feature_name(pw['tgt'], ti, bl_loadings)
+            labels.append(f'{src_name}\u2192{tgt_name}')
 
         pos_vals = heatmap[heatmap > 0]
         vmax = np.percentile(pos_vals, 95) if len(pos_vals) > 0 else 0.1

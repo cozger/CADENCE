@@ -109,6 +109,13 @@ def save_result(result, path, session_name='', runtime_s=0.0,
                 pair_keys, dtype=object)
         data['pathway_src_tgt_dr2/_pw_keys'] = np.array(pw_keys, dtype=object)
 
+    # Auxiliary data (e.g., PCA loadings for interpretation)
+    aux = getattr(result, 'aux', {})
+    if aux:
+        for aux_key, aux_arr in aux.items():
+            if isinstance(aux_arr, np.ndarray):
+                data[f'aux/{aux_key}'] = aux_arr
+
     # Discovery result (if V2 pipeline)
     discovery = getattr(result, 'discovery', None)
     if discovery is not None:
@@ -276,6 +283,13 @@ def load_result(path):
                     tgt_idx = int(parts[1][1:])
                     pair_dict[(src_idx, tgt_idx)] = raw[arr_key]
             result.pathway_src_tgt_dr2[pw_key] = pair_dict
+
+    # Auxiliary data
+    result.aux = {}
+    for key in raw.files:
+        if key.startswith('aux/'):
+            aux_key = key[4:]  # strip 'aux/' prefix
+            result.aux[aux_key] = raw[key]
 
     # Discovery
     if 'disc/_session_name' in raw:

@@ -83,6 +83,51 @@ BLENDSHAPE_SEGMENT_MAP = {
 }
 BL_SEGMENT_NAMES = list(BLENDSHAPE_SEGMENT_MAP.keys())
 
+# Reverse map: AU channel index -> segment name (for PCA interpretation)
+_BL_CH_TO_SEGMENT = {}
+for _seg_name, _ch_list in BLENDSHAPE_SEGMENT_MAP.items():
+    for _ch in _ch_list:
+        _BL_CH_TO_SEGMENT[_ch] = _seg_name.replace('bl_', '')
+
+
+_BL_SEG_SHORT = {
+    'brow': 'brw', 'cheek_nose': 'chk', 'eye_blink': 'blnk',
+    'eye_gaze': 'gaze', 'eye_lid': 'lid', 'jaw': 'jaw',
+    'mouth_affect': 'maff', 'mouth_form': 'mfrm',
+    'mouth_move': 'mmov', 'neutral': 'neut', 'activity': 'act',
+}
+
+
+def bl_pca_label(pc_idx, pca_loadings, top_n=2):
+    """Name a blendshape PCA component by its dominant AU group contributions.
+
+    Args:
+        pc_idx: PCA component index (0-14)
+        pca_loadings: (n_components, 52) PCA loadings matrix (Vt rows)
+        top_n: number of top AU groups to include in label
+
+    Returns:
+        str like 'PC0(mmov+jaw)' or 'PC3(brw+gaze)'
+    """
+    if pca_loadings is None or pc_idx >= pca_loadings.shape[0]:
+        return f'PC{pc_idx}'
+
+    loadings = pca_loadings[pc_idx]  # (52,)
+    abs_loadings = abs(loadings)
+
+    # Accumulate loading energy per AU segment
+    segment_energy = {}
+    for ch_idx in range(min(52, len(abs_loadings))):
+        seg = _BL_CH_TO_SEGMENT.get(ch_idx, 'other')
+        segment_energy[seg] = segment_energy.get(seg, 0.0) + abs_loadings[ch_idx] ** 2
+
+    # Sort by energy, take top_n
+    ranked = sorted(segment_energy.items(), key=lambda kv: -kv[1])
+    top_segs = [_BL_SEG_SHORT.get(name, name) for name, _ in ranked[:top_n]]
+
+    return f'PC{pc_idx}({"+".join(top_segs)})'
+
+
 # ---------------------------------------------------------------------------
 # EEG feature names (8 channels: 7 base + activity)
 # ---------------------------------------------------------------------------

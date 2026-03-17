@@ -89,6 +89,9 @@ class CouplingResult:
     # Only top-N pairs stored to keep NPZ manageable.
     pathway_src_tgt_dr2: Dict[Tuple[str, str], Dict[Tuple[int, int], np.ndarray]] = field(default_factory=dict)
 
+    # Auxiliary data for interpretation (e.g., PCA loadings)
+    aux: Dict[str, np.ndarray] = field(default_factory=dict)
+
     # Summary statistics
     overall_dr2: Optional[np.ndarray] = None  # average across pathways
     n_significant_pathways: int = 0
@@ -362,6 +365,13 @@ class CouplingEstimator:
                 dr2_stack.append(dr2_clean)
             if dr2_stack:
                 result.overall_dr2 = np.mean(dr2_stack, axis=0)
+
+        # Store PCA loadings for blendshapes interpretation
+        for p in [src_p, tgt_p]:
+            loadings_key = f'{p}_blendshapes_v2_pca_loadings'
+            if loadings_key in session:
+                result.aux['bl_pca_loadings'] = session[loadings_key]
+                break  # same PCA for both participants
 
         return result
 

@@ -330,7 +330,7 @@ def _ensure_v2_features(session, config, cache_path=None):
             n_comp = bl_cfg.get('n_pca_components', 15)
             sigma = bl_cfg.get('derivative_sigma_s', 0.5)
             print(f"  Computing blendshape v2 for {p}...")
-            feats, valid, ts = extract_blendshapes_v2(
+            feats, valid, ts, pca_loadings = extract_blendshapes_v2(
                 session[bl_key], session[f'{bl_key}_valid'],
                 session[f'{bl_key}_ts'],
                 n_components=n_comp, deriv_sigma_s=sigma,
@@ -338,6 +338,7 @@ def _ensure_v2_features(session, config, cache_path=None):
             session[bl_v2_key] = feats
             session[f'{bl_v2_key}_valid'] = valid
             session[f'{bl_v2_key}_ts'] = ts
+            session[f'{bl_v2_key}_pca_loadings'] = pca_loadings
             needs_resave = True
 
     # ECG v2 (add RMSSD derivative)

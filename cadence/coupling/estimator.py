@@ -3278,7 +3278,8 @@ class CouplingEstimator:
                     use_nonlinear=use_nonlinear,
                     use_moderation=use_moderation,
                     moderator_names=moderator_names,
-                    force_sequential=triton_unsafe)
+                    force_sequential=triton_unsafe,
+                    selected=list(selected))
                 continue
 
             # --- Standard full EWLS ---
@@ -3440,6 +3441,7 @@ class CouplingEstimator:
                         use_moderation=use_moderation,
                         moderator_names=moderator_names,
                         force_sequential=is_triton_error,
+                        selected=list(selected),
                     )
                 except Exception as e2:
                     _log(f"  Stage 2 {src_mod}->{tgt_mod}: chunked retry ALSO FAILED ({e2})")
@@ -3456,7 +3458,8 @@ class CouplingEstimator:
                           eval_times, eval_rate, tau, lam_ridge,
                           free_vram, result, target_sigs,
                           use_nonlinear=False, use_moderation=False,
-                          moderator_names=None, force_sequential=False):
+                          moderator_names=None, force_sequential=False,
+                          selected=None):
         """Chunked Stage 2 for large pathways that would OOM full EWLS.
 
         Processes target channels in groups. Each group gets its own
@@ -3519,12 +3522,22 @@ class CouplingEstimator:
         all_dr2 = []
         all_r2_full = []
         all_r2_restr = []
+        # Collect per-feature beta energy across chunks for decomposition
+        # feat_energy[feat_idx] = (T,) cumulative squared beta energy
+        feat_energy_accum = {}
+        total_energy_accum = np.zeros(T_eval, dtype=np.float64)
+        # src×tgt pairs: (src_feat_idx, global_tgt_ch) -> (T,) energy
+        src_tgt_energy = {}
+
+        if selected is None:
+            selected = list(range(n_sel))
 
         for g in range(n_groups):
             ch_start = g * max_ch
             ch_end = min((g + 1) * max_ch, C_tgt)
             tgt_chunk = tgt_signal[:, ch_start:ch_end]
             tgt_valid_chunk = tgt_valid
+            C_g = ch_end - ch_start
 
             dm_g = DesignMatrixBuilder(basis, ar_order=self.ar_order,
                                         device=self.device)
@@ -3551,12 +3564,39 @@ class CouplingEstimator:
                     X_augmented_g = torch.cat([X_augmented_g, X_mod_g], dim=1)
 
             try:
-                dr2_g, r2f_g, r2r_g, _, _ = solver.solve_restricted(
+                dr2_g, r2f_g, r2r_g, beta_g, _ = solver.solve_restricted(
                     X_augmented_g, X_restr_g, y_g, valid_g)
                 all_dr2.append(dr2_g.cpu())
                 all_r2_full.append(r2f_g.cpu())
                 all_r2_restr.append(r2r_g.cpu())
-                del dr2_g, r2f_g, r2r_g
+
+                # Accumulate per-feature beta energy from this chunk
+                if beta_g is not None and n_source_cols > 0 and len(selected) > 1:
+                    beta_src_g = beta_g[:, :n_source_cols, :]  # (T, n_src_cols, C_g)
+                    chunk_total = (beta_src_g ** 2).sum(dim=(1, 2)).cpu().numpy()
+                    total_energy_accum += chunk_total
+
+                    for i, feat_idx in enumerate(selected):
+                        col_s = i * n_basis
+                        col_e = (i + 1) * n_basis
+                        feat_beta = beta_src_g[:, col_s:col_e, :]
+                        feat_e = (feat_beta ** 2).sum(dim=(1, 2)).cpu().numpy()
+                        if feat_idx not in feat_energy_accum:
+                            feat_energy_accum[feat_idx] = np.zeros(T_eval, dtype=np.float64)
+                        feat_energy_accum[feat_idx] += feat_e
+
+                        # Per src×tgt channel
+                        for c_local in range(C_g):
+                            c_global = ch_start + c_local
+                            pair_e = (feat_beta[:, :, c_local] ** 2).sum(dim=1).cpu().numpy()
+                            pair_key = (feat_idx, c_global)
+                            if pair_key not in src_tgt_energy:
+                                src_tgt_energy[pair_key] = np.zeros(T_eval, dtype=np.float64)
+                            src_tgt_energy[pair_key] += pair_e
+
+                    del beta_src_g
+
+                del dr2_g, r2f_g, r2r_g, beta_g
                 torch.cuda.empty_cache()
             except Exception as e:
                 _log(f"    Chunk {g} ({ch_start}:{ch_end}): FAILED ({e})")
@@ -3582,6 +3622,29 @@ class CouplingEstimator:
             mean_dr2 = float(np.nanmean(dr2_avg))
             _log(f"  Stage 2 {src_mod}->{tgt_mod} [chunked]: "
                   f"mean_dr2={mean_dr2:.6f}")
+
+            # Per-feature dR2 decomposition from accumulated beta energy
+            if feat_energy_accum and total_energy_accum.sum() > 0:
+                feat_dr2_dict = {}
+                for feat_idx, feat_e in feat_energy_accum.items():
+                    feat_frac = feat_e / (total_energy_accum + 1e-20)
+                    feat_dr2_dict[feat_idx] = dr2_avg * feat_frac
+                result.pathway_feature_dr2[key] = feat_dr2_dict
+
+                # Source x Target decomposition (top-20 pairs)
+                max_pairs = 20
+                if src_tgt_energy:
+                    pair_means = {k: np.nanmean(np.abs(
+                        dr2_avg * (v / (total_energy_accum + 1e-20))))
+                        for k, v in src_tgt_energy.items()}
+                    ranked = sorted(pair_means.items(),
+                                    key=lambda kv: -kv[1])
+                    src_tgt_dict = {}
+                    for (si, ti), _ in ranked[:max_pairs]:
+                        frac = src_tgt_energy[(si, ti)] / (total_energy_accum + 1e-20)
+                        src_tgt_dict[(si, ti)] = dr2_avg * frac
+                    result.pathway_src_tgt_dr2[key] = src_tgt_dict
+
         else:
             _log(f"  Stage 2 {src_mod}->{tgt_mod} [chunked]: "
                   f"ALL chunks failed")

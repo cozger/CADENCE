@@ -1,0 +1,6 @@
+{"name": "a1_null_eeg_0", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": ["eeg_interbrain->eeg_wavelet"], "tn": [], "n_sig": 1, "elapsed_s": 23.0, "freq_recovered": null, "temporal_auc": {"eeg_interbrain->eeg_wavelet": 0.493}}
+{"name": "a1_null_eeg_1", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": ["eeg_interbrain->eeg_wavelet"], "tn": [], "n_sig": 1, "elapsed_s": 21.2, "freq_recovered": null, "temporal_auc": {"eeg_interbrain->eeg_wavelet": 0.484}}
+{"name": "a1_null_eeg_2", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": [], "n_sig": 0, "elapsed_s": 19.7, "freq_recovered": null, "temporal_auc": {}}
+{"name": "a2_null_all_0", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": [], "n_sig": 0, "elapsed_s": 104.3, "freq_recovered": null, "temporal_auc": {}}
+{"name": "a2_null_all_1", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": [], "n_sig": 0, "elapsed_s": 105.5, "freq_recovered": null, "temporal_auc": {}}
+{"name": "a2_null_all_2", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": ["eeg_wavelet->eeg_wavelet"], "tn": [], "n_sig": 1, "elapsed_s": 350.1, "freq_recovered": null, "temporal_auc": {}}

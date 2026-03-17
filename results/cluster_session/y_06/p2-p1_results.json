@@ -1,0 +1,236 @@
+{
+  "direction": "Therapist \u2192 Patient",
+  "session": "y_06",
+  "n_significant": 5,
+  "duration_s": 3012.642043138774,
+  "analysis_time_s": 11.124092102050781,
+  "gpu": 1,
+  "pathway_summary": {
+    "EEG->EEG": {
+      "mean_dr2": 0.17576777935028076,
+      "significant": false
+    },
+    "EEG->ECG": {
+      "mean_dr2": 0.02745973877608776,
+      "significant": false
+    },
+    "EEG->BL": {
+      "mean_dr2": 0.11308197677135468,
+      "significant": true
+    },
+    "EEG->Pose": {
+      "mean_dr2": 0.09991678595542908,
+      "significant": false
+    },
+    "ECG->EEG": {
+      "mean_dr2": 0.17714104056358337,
+      "significant": false
+    },
+    "ECG->ECG": {
+      "mean_dr2": 0.032669797539711,
+      "significant": false
+    },
+    "ECG->BL": {
+      "mean_dr2": 0.10816562175750732,
+      "significant": false
+    },
+    "ECG->Pose": {
+      "mean_dr2": 0.09222698956727982,
+      "significant": false
+    },
+    "BL->EEG": {
+      "mean_dr2": 0.16676147282123566,
+      "significant": true
+    },
+    "BL->ECG": {
+      "mean_dr2": 0.02916683256626129,
+      "significant": false
+    },
+    "BL->BL": {
+      "mean_dr2": 0.11881723999977112,
+      "significant": true
+    },
+    "BL->Pose": {
+      "mean_dr2": 0.09707947820425034,
+      "significant": false
+    },
+    "Pose->EEG": {
+      "mean_dr2": 0.16757501661777496,
+      "significant": true
+    },
+    "Pose->ECG": {
+      "mean_dr2": 0.02968659996986389,
+      "significant": false
+    },
+    "Pose->BL": {
+      "mean_dr2": 0.12527039647102356,
+      "significant": true
+    },
+    "Pose->Pose": {
+      "mean_dr2": 0.09826494008302689,
+      "significant": false
+    }
+  },
+  "detection": {
+    "eeg_features->eeg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.17576777935028076,
+      "t_stat": 53.758121490478516,
+      "t_p": 0.0
+    },
+    "eeg_features->ecg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.02745973877608776,
+      "t_stat": 18.131338119506836,
+      "t_p": 0.0
+    },
+    "eeg_features->blendshapes": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.11308197677135468,
+      "t_stat": 31.29124641418457,
+      "t_p": 0.0
+    },
+    "eeg_features->pose_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.09991678595542908,
+      "t_stat": 30.020336151123047,
+      "t_p": 0.0
+    },
+    "ecg_features->eeg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.17714104056358337,
+      "t_stat": 58.111473083496094,
+      "t_p": 0.0
+    },
+    "ecg_features->ecg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.032669797539711,
+      "t_stat": 20.5571231842041,
+      "t_p": 0.0
+    },
+    "ecg_features->blendshapes": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.10816562175750732,
+      "t_stat": 30.844730377197266,
+      "t_p": 0.0
+    },
+    "ecg_features->pose_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.09222698956727982,
+      "t_stat": 28.52853012084961,
+      "t_p": 0.0
+    },
+    "blendshapes->eeg_features": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.16676147282123566,
+      "t_stat": 52.070526123046875,
+      "t_p": 0.0
+    },
+    "blendshapes->ecg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.02916683256626129,
+      "t_stat": 19.32784652709961,
+      "t_p": 0.0
+    },
+    "blendshapes->blendshapes": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.11881723999977112,
+      "t_stat": 31.61981201171875,
+      "t_p": 0.0
+    },
+    "blendshapes->pose_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.09707947820425034,
+      "t_stat": 29.584123611450195,
+      "t_p": 0.0
+    },
+    "pose_features->eeg_features": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.16757501661777496,
+      "t_stat": 52.823936462402344,
+      "t_p": 0.0
+    },
+    "pose_features->ecg_features": {
+      "detected": false,
+      "sig_rate": 0.0,
+      "n_sig": 0,
+      "n_total": 6026,
+      "binom_p": 1.0,
+      "mean_dr2": 0.02968659996986389,
+      "t_stat": 19.344667434692383,
+      "t_p": 0.0
+    },
+    "pose_features->blendshapes": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.12527039647102356,
+      "t_stat": 32.997344970703125,
+      "t_p": 0.0
+    },
+    "pose_features->pose_features": {
+      "detected": true,
+      "sig_rate": 1.0,
+      "n_sig": 6026,
+      "n_total": 6026,
+      "binom_p": 0.0,
+      "mean_dr2": 0.09826494008302689,
+      "t_stat": 29.194555282592773,
+      "t_p": 0.0
+    }
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "total_tp": 15,
+  "total_fn": 1,
+  "total_fp": 4,
+  "total_tn": 156,
+  "per_scenario": [
+    {
+      "name": "single_EEGw",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 55.9
+    },
+    {
+      "name": "single_ECG",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->blendshapes_v2",
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "elapsed_s": 51.4
+    },
+    {
+      "name": "single_BL",
+      "tp": [
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 50.3
+    },
+    {
+      "name": "single_Pose",
+      "tp": [
+        "pose_features->pose_features"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 50.7
+    },
+    {
+      "name": "pair_EEGw+ECG",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->ecg_features_v2"
+      ],
+      "elapsed_s": 136.8
+    },
+    {
+      "name": "pair_EEGw+BL",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "fp": [],
+      "elapsed_s": 70.3
+    },
+    {
+      "name": "pair_EEGw+Pose",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet",
+        "pose_features->pose_features"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 54.7
+    },
+    {
+      "name": "pair_ECG+BL",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 64.8
+    },
+    {
+      "name": "pair_ECG+Pose",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2",
+        "pose_features->pose_features"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 56.6
+    },
+    {
+      "name": "pair_BL+Pose",
+      "tp": [
+        "blendshapes_v2->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "fn": [],
+      "fp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "elapsed_s": 53.3
+    },
+    {
+      "name": "null",
+      "tp": [],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 49.7
+    }
+  ]
+}

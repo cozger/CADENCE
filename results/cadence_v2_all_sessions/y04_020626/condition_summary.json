@@ -1,0 +1,11 @@
+{
+  "conditions_found": [
+    "baseline",
+    "conv_1",
+    "meditate_K"
+  ],
+  "n_intervals": 3,
+  "threshold_method": "median",
+  "pathways": {},
+  "modality_summary": {}
+}

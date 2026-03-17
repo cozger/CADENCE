@@ -1,0 +1,116 @@
+[
+  {
+    "test": "A_eeg_only",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.7,
+      "ecg_features_v2": 0.0,
+      "blendshapes_v2": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "B_bl_only",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.0,
+      "ecg_features_v2": 0.0,
+      "blendshapes_v2": 0.7,
+      "pose_features": 0.0
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "C_ecg_only",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.0,
+      "ecg_features_v2": 0.7,
+      "blendshapes_v2": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "D_pose_only",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.0,
+      "ecg_features_v2": 0.0,
+      "blendshapes_v2": 0.0,
+      "pose_features": 0.7
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "E_eeg_bl",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.7,
+      "ecg_features_v2": 0.0,
+      "blendshapes_v2": 0.7,
+      "pose_features": 0.0
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "F_null",
+    "pipeline": "v2",
+    "kappa_dict": {
+      "eeg_wavelet": 0.0,
+      "ecg_features_v2": 0.0,
+      "blendshapes_v2": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_wavelet": false,
+      "ecg_features_v2": false,
+      "blendshapes_v2": false,
+      "pose_features": false
+    },
+    "passed": true,
+    "status": "PASS"
+  }
+]

@@ -1,0 +1,912 @@
+[
+  {
+    "session": "y01_021726",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 7,
+    "analysis_time_s": 30.929518699645996,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3050653025713492,
+        "significant": false
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.0734222149128148,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.2957820330253616,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.28189104183051755,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.16140346035086947,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.057885264742945884,
+        "significant": true
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.22865966418056138,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.18936168300127765,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.22504006493186074,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.14799503657364382,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.45257793531884666,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.35579863170706916,
+        "significant": true
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.25456111236958495,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.16329711927094184,
+        "significant": true
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.5180417463478584,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.4099611832609268,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y01_021726",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 7,
+    "analysis_time_s": 29.850406646728516,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3032927009667123,
+        "significant": false
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.03643045651359848,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.29309416175028646,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.26803985157249505,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.19802084389022073,
+        "significant": true
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.03822441567320362,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.2293841858998086,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.1789432242475973,
+        "significant": true
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.23104440073726254,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.04794487098217162,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.43564551454294315,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.35423261906994435,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.2631298023729051,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.054755479425344936,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.4992410743271526,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.41315781713756494,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y04_020626",
+    "direction": "therapist_to_patient",
+    "p_direction": "p1_to_p2",
+    "n_significant": 12,
+    "analysis_time_s": 41.0638952255249,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.2938740405870661,
+        "significant": true
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.06548548679245887,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.26123745669744086,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.24805868796249403,
+        "significant": true
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.1997254616170038,
+        "significant": true
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.05206049214656727,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.10602502085199872,
+        "significant": true
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.15751920501529432,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.1815773173339115,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.08307951105058227,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.3351599775523063,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.2620314953725202,
+        "significant": true
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.07666286900106678,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.03447689544166594,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.16603990726025605,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.11274420159375613,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y04_020626",
+    "direction": "patient_to_therapist",
+    "p_direction": "p2_to_p1",
+    "n_significant": 5,
+    "analysis_time_s": 20.871680974960327,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3164273242162392,
+        "significant": false
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.030632496667566077,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.06980278504412545,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.020793384078856444,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.25220744224325004,
+        "significant": true
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.037920230586789984,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": -0.003449950978034605,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.003932389655004457,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.235139629280916,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.040665223285711115,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.29529067091230116,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": -0.00038675702468784356,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.2656029046810521,
+        "significant": true
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.04698922000214188,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.3225826878581771,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.009408901557232284,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y05_02192026",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 6,
+    "analysis_time_s": 33.052653789520264,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.30917212605177924,
+        "significant": false
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.06039058912508122,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.2633538545357603,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.23593785644828186,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.21610473168288738,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0559061728178056,
+        "significant": true
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.200238549417812,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.15647673159550396,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.23709300373586364,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.09617084482623457,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.40226795521658704,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.328220740409767,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.26728173276948985,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.11268746874187502,
+        "significant": true
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.4903603649039945,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.3877582647554639,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y05_02192026",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 5,
+    "analysis_time_s": 30.13666558265686,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3106902785958077,
+        "significant": false
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.03779431131904237,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.26646385339964207,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.2711270903703929,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.2253610407194551,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.03528310550301579,
+        "significant": true
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.19854703608060106,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.17744457964628854,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.22863697828169854,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.04942849804289779,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.40539640972002755,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.3476631706627602,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.25688129896131545,
+        "significant": true
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.05910922151782658,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.4818796700708062,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.41036956800820573,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y11_022526",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 6,
+    "analysis_time_s": 24.48005247116089,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.31024814898587133,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.24024689345348543,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.18591844882104694,
+        "significant": true
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.23303444316000338,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.30651874629657105,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.24539482517395683,
+        "significant": true
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.26426391463975923,
+        "significant": true
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.3235678651155889,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.276442611076509,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y11_022526",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 7,
+    "analysis_time_s": 29.71689248085022,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.30652298162496766,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.29808971186778704,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.28138937157609806,
+        "significant": true
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.19830141421077782,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.3824002435540135,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.31051027852993507,
+        "significant": true
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.22958567816320485,
+        "significant": true
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.44755935950924874,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.3645638519408847,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y24_022526",
+    "direction": "therapist_to_patient",
+    "p_direction": "p1_to_p2",
+    "n_significant": 2,
+    "analysis_time_s": 8.1869478225708,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.30887371845002004,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.2680098017691511,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.18564928724576735,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.10962655080931749,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.1908041668334945,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0821838849356492,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.12058894682512374,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.2194653420863519,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.09938549595413378,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y24_022526",
+    "direction": "patient_to_therapist",
+    "p_direction": "p2_to_p1",
+    "n_significant": 3,
+    "analysis_time_s": 9.830575942993164,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.2871983971333943,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.1175705412818661,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.08838363723892365,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.2204267948214637,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.16170728407101878,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.1423519043861601,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.2071516048690047,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.11143730196500579,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.10410745217941632,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_06",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 7,
+    "analysis_time_s": 35.969682931900024,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.29013981617516255,
+        "significant": true
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.06049782502258732,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.23338944939495798,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.1806250804062857,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.2282953453178136,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.06585027919672667,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.199552067928282,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.15815292883133755,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.22596598612426552,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.08728779747931818,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.38839048692205735,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.3049630842948632,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.2566393045859997,
+        "significant": true
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.10101742414869504,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.4557003736139887,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.3570506081919792,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y_06",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 7,
+    "analysis_time_s": 35.68784809112549,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.31007492972524947,
+        "significant": true
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.029755062774116457,
+        "significant": false
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.26974658031240006,
+        "significant": true
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.2980634540438144,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.2134910804405287,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.038289986684824626,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.1129068262662226,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.1751253620431215,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.24345859043533602,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.03867660650881556,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.41069155651967354,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.3447583883074893,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.27478463761323,
+        "significant": true
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.04564142860212557,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.4696082790310186,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.40321731517926584,
+        "significant": true
+      }
+    }
+  },
+  {
+    "session": "y_17",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 8,
+    "analysis_time_s": 31.64083170890808,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3046621671007852,
+        "significant": true
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.05704749483322402,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.2670385823363977,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.2527435297043691,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.19841643033908668,
+        "significant": true
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0784491932649206,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.15915300542055025,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.17614207581059038,
+        "significant": false
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.22663747307810994,
+        "significant": true
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0822575161937197,
+        "significant": true
+      },
+      "BL->BL": {
+        "mean_dr2": 0.44190046911186665,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.3498460067720622,
+        "significant": false
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.26310901295177036,
+        "significant": true
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.09780252102839343,
+        "significant": true
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.5005519490751943,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.4168728339962843,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_17",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 6,
+    "analysis_time_s": 27.610297918319702,
+    "pathways": {
+      "EEG->EEG": {
+        "mean_dr2": 0.3022885014494916,
+        "significant": true
+      },
+      "EEG->ECG": {
+        "mean_dr2": 0.046661376438635944,
+        "significant": true
+      },
+      "EEG->BL": {
+        "mean_dr2": 0.28285059031446685,
+        "significant": false
+      },
+      "EEG->Pose": {
+        "mean_dr2": 0.28479444902240086,
+        "significant": false
+      },
+      "ECG->EEG": {
+        "mean_dr2": 0.22301726983086423,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.043357154841720334,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.17510190899846742,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.19621164461385687,
+        "significant": true
+      },
+      "BL->EEG": {
+        "mean_dr2": 0.22892119674937492,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.06558140610231225,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.43276966715650156,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.35812095445635683,
+        "significant": true
+      },
+      "Pose->EEG": {
+        "mean_dr2": 0.25642228551474566,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.07284361385717625,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.5269807763439629,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.41113671581024974,
+        "significant": true
+      }
+    }
+  }
+]

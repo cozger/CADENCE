@@ -1,0 +1,25 @@
+{
+  "name": "pair_EEGw+Pose",
+  "seed": 6042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.0,
+    "pose_features": 0.3
+  },
+  "n_significant": 1,
+  "pathway_summary": {
+    "eeg_wavelet->eeg_wavelet": {
+      "mean_dr2": 0.03591696545481682,
+      "significant": true
+    }
+  },
+  "tp": [
+    "eeg_wavelet->eeg_wavelet"
+  ],
+  "fn": [],
+  "fp": [],
+  "tn": [],
+  "elapsed_s": 66.9
+}

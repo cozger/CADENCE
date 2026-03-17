@@ -1,0 +1,58 @@
+{
+  "total_tp": 6,
+  "total_fn": 0,
+  "total_fp": 3,
+  "total_tn": 0,
+  "per_scenario": [
+    {
+      "name": "single_ECG",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [
+        "blendshapes_v2->pose_features"
+      ],
+      "elapsed_s": 39.3
+    },
+    {
+      "name": "pair_EEGw+ECG",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->blendshapes_v2",
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "elapsed_s": 151.9
+    },
+    {
+      "name": "pair_ECG+BL",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 107.6
+    },
+    {
+      "name": "pair_ECG+Pose",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 42.3
+    },
+    {
+      "name": "null",
+      "tp": [],
+      "fn": [],
+      "fp": [],
+      "elapsed_s": 31.0
+    }
+  ]
+}

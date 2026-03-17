@@ -1,0 +1,30 @@
+{
+  "name": "pair_ECG+BL",
+  "seed": 2042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.0,
+    "ecg_features_v2": 0.3,
+    "blendshapes_v2": 0.3,
+    "pose_features": 0.0
+  },
+  "n_significant": 2,
+  "pathway_summary": {
+    "ecg_features_v2->ecg_features_v2": {
+      "mean_dr2": 0.01774030551314354,
+      "significant": true
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "mean_dr2": -0.025516286492347717,
+      "significant": true
+    }
+  },
+  "tp": [
+    "ecg_features_v2->ecg_features_v2",
+    "blendshapes_v2->blendshapes_v2"
+  ],
+  "fn": [],
+  "fp": [],
+  "tn": [],
+  "elapsed_s": 107.6
+}

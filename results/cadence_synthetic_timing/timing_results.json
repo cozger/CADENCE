@@ -1,0 +1,700 @@
+{
+  "config": {
+    "duration": 3000,
+    "n_seeds": 3,
+    "base_seed": 42,
+    "n_surrogates": 100
+  },
+  "seeds": {
+    "42": [
+      {
+        "test": "A_eeg_only",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.1335546374320984,
+          "ecg_features": 0.0472620353102684,
+          "blendshapes": 0.057289429008960724,
+          "pose_features": 0.12129409611225128
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.6677521641463949,
+            "n_pos": 1944,
+            "n_neg": 4056,
+            "pearson_r": 0.2791801384342133,
+            "pearson_p": 9.90020688745833e-106
+          }
+        },
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 137.37643241882324
+      },
+      {
+        "test": "B_bl_only",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.0976601392030716,
+          "ecg_features": 0.0472620353102684,
+          "blendshapes": 0.0634845495223999,
+          "pose_features": 0.12129409611225128
+        },
+        "auc_results": {
+          "blendshapes": {
+            "auc": 0.5118011539165768,
+            "n_pos": 788,
+            "n_neg": 5212,
+            "pearson_r": 0.001293777454959333,
+            "pearson_p": 0.9209895560893785
+          }
+        },
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 126.57525062561035
+      },
+      {
+        "test": "C_ecg_only",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.5,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "ecg_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.0976601392030716,
+          "ecg_features": 0.04084145277738571,
+          "blendshapes": 0.057289429008960724,
+          "pose_features": 0.12129409611225128
+        },
+        "auc_results": {
+          "ecg_features": {
+            "auc": 0.733978626943541,
+            "n_pos": 2267,
+            "n_neg": 3733,
+            "pearson_r": 0.3590142997958322,
+            "pearson_p": 2.1596585600385444e-178
+          }
+        },
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 125.3736584186554
+      },
+      {
+        "test": "D_pose_only",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.5
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "pose_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": true
+        },
+        "dr2_values": {
+          "eeg_features": 0.0976601392030716,
+          "ecg_features": 0.0472620353102684,
+          "blendshapes": 0.057289429008960724,
+          "pose_features": 0.07818260043859482
+        },
+        "auc_results": {
+          "pose_features": {
+            "auc": 0.610144300269748,
+            "n_pos": 596,
+            "n_neg": 5404,
+            "pearson_r": 0.11714715928631236,
+            "pearson_p": 2.0212122245839143e-19
+          }
+        },
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 126.24240112304688
+      },
+      {
+        "test": "E_eeg_bl",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features",
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.1335546374320984,
+          "ecg_features": 0.0472620353102684,
+          "blendshapes": 0.0634845495223999,
+          "pose_features": 0.12129409611225128
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.6677521641463949,
+            "n_pos": 1944,
+            "n_neg": 4056,
+            "pearson_r": 0.2791801384342133,
+            "pearson_p": 9.90020688745833e-106
+          },
+          "blendshapes": {
+            "auc": 0.5118011539165768,
+            "n_pos": 788,
+            "n_neg": 5212,
+            "pearson_r": 0.001293777454959333,
+            "pearson_p": 0.9209895560893785
+          }
+        },
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 126.74656009674072
+      },
+      {
+        "test": "F_null",
+        "seed": 42,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": true,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.0976601392030716,
+          "ecg_features": 0.0472620353102684,
+          "blendshapes": 0.057289429008960724,
+          "pose_features": 0.12129409611225128
+        },
+        "auc_results": {},
+        "passed": false,
+        "status": "FAIL (false positive)",
+        "analysis_time": 127.11387300491333
+      }
+    ],
+    "1042": [
+      {
+        "test": "A_eeg_only",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.13803033530712128,
+          "ecg_features": 0.0604744516313076,
+          "blendshapes": 0.05828868970274925,
+          "pose_features": 0.12583911418914795
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.7143812096682908,
+            "n_pos": 1846,
+            "n_neg": 4154,
+            "pearson_r": 0.35257792386905756,
+            "pearson_p": 1.0854053396777113e-171
+          }
+        },
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 128.01635003089905
+      },
+      {
+        "test": "B_bl_only",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09792590141296387,
+          "ecg_features": 0.0604744516313076,
+          "blendshapes": 0.06973429024219513,
+          "pose_features": 0.12583911418914795
+        },
+        "auc_results": {
+          "blendshapes": {
+            "auc": 0.5774373042268127,
+            "n_pos": 842,
+            "n_neg": 5158,
+            "pearson_r": 0.09147371700480658,
+            "pearson_p": 2.1018219138760464e-12
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 127.27379083633423
+      },
+      {
+        "test": "C_ecg_only",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.5,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "ecg_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09792590141296387,
+          "ecg_features": 0.07270139455795288,
+          "blendshapes": 0.05828868970274925,
+          "pose_features": 0.12583911418914795
+        },
+        "auc_results": {
+          "ecg_features": {
+            "auc": 0.7695043365316127,
+            "n_pos": 1885,
+            "n_neg": 4115,
+            "pearson_r": 0.3203912419458395,
+            "pearson_p": 1.8413276403268879e-140
+          }
+        },
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 135.91048216819763
+      },
+      {
+        "test": "D_pose_only",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.5
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "pose_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09792590141296387,
+          "ecg_features": 0.0604744516313076,
+          "blendshapes": 0.05828868970274925,
+          "pose_features": 0.08423925936222076
+        },
+        "auc_results": {
+          "pose_features": {
+            "auc": 0.5939046426708399,
+            "n_pos": 675,
+            "n_neg": 5325,
+            "pearson_r": 0.11442530461710172,
+            "pearson_p": 1.3521634668854152e-18
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 133.0790467262268
+      },
+      {
+        "test": "E_eeg_bl",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features",
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.13803033530712128,
+          "ecg_features": 0.0604744516313076,
+          "blendshapes": 0.06973429024219513,
+          "pose_features": 0.12583911418914795
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.7143812096682908,
+            "n_pos": 1846,
+            "n_neg": 4154,
+            "pearson_r": 0.35257792386905756,
+            "pearson_p": 1.0854053396777113e-171
+          },
+          "blendshapes": {
+            "auc": 0.5774373042268127,
+            "n_pos": 842,
+            "n_neg": 5158,
+            "pearson_r": 0.09147371700480658,
+            "pearson_p": 2.1018219138760464e-12
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 195.49955201148987
+      },
+      {
+        "test": "F_null",
+        "seed": 1042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09792590141296387,
+          "ecg_features": 0.0604744516313076,
+          "blendshapes": 0.05828868970274925,
+          "pose_features": 0.12583911418914795
+        },
+        "auc_results": {},
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 231.30546188354492
+      }
+    ],
+    "2042": [
+      {
+        "test": "A_eeg_only",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.1264818161725998,
+          "ecg_features": 0.06061616167426109,
+          "blendshapes": 0.0634341612458229,
+          "pose_features": 0.13751855492591858
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.7227106436716358,
+            "n_pos": 1959,
+            "n_neg": 4041,
+            "pearson_r": 0.3338903217453123,
+            "pearson_p": 4.1888450846894327e-153
+          }
+        },
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 161.7672083377838
+      },
+      {
+        "test": "B_bl_only",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09893850982189178,
+          "ecg_features": 0.06061616167426109,
+          "blendshapes": 0.06310731172561646,
+          "pose_features": 0.13751855492591858
+        },
+        "auc_results": {
+          "blendshapes": {
+            "auc": 0.5230864113871847,
+            "n_pos": 623,
+            "n_neg": 5377,
+            "pearson_r": -0.00799972893901584,
+            "pearson_p": 0.5396727884457002
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 124.05974435806274
+      },
+      {
+        "test": "C_ecg_only",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.5,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "ecg_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": true,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09893850982189178,
+          "ecg_features": 0.11378723382949829,
+          "blendshapes": 0.0634341612458229,
+          "pose_features": 0.13751855492591858
+        },
+        "auc_results": {
+          "ecg_features": {
+            "auc": 0.7190306474517962,
+            "n_pos": 2552,
+            "n_neg": 3448,
+            "pearson_r": 0.3911990151694822,
+            "pearson_p": 2.621704477458096e-214
+          }
+        },
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 145.82487392425537
+      },
+      {
+        "test": "D_pose_only",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.5
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "pose_features"
+        ],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09893850982189178,
+          "ecg_features": 0.06061616167426109,
+          "blendshapes": 0.0634341612458229,
+          "pose_features": 0.10376711189746857
+        },
+        "auc_results": {
+          "pose_features": {
+            "auc": 0.5506578792227448,
+            "n_pos": 659,
+            "n_neg": 5341,
+            "pearson_r": 0.059889722341673474,
+            "pearson_p": 4.3158426102060785e-06
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 136.7772810459137
+      },
+      {
+        "test": "E_eeg_bl",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.5,
+          "ecg_features": 0.0,
+          "blendshapes": 0.5,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [
+          "eeg_features",
+          "blendshapes"
+        ],
+        "detected": {
+          "eeg_features": true,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.1264818161725998,
+          "ecg_features": 0.06061616167426109,
+          "blendshapes": 0.06310731172561646,
+          "pose_features": 0.13751855492591858
+        },
+        "auc_results": {
+          "eeg_features": {
+            "auc": 0.7227106436716358,
+            "n_pos": 1959,
+            "n_neg": 4041,
+            "pearson_r": 0.3338903217453123,
+            "pearson_p": 4.1888450846894327e-153
+          },
+          "blendshapes": {
+            "auc": 0.5230864113871847,
+            "n_pos": 623,
+            "n_neg": 5377,
+            "pearson_r": -0.00799972893901584,
+            "pearson_p": 0.5396727884457002
+          }
+        },
+        "passed": false,
+        "status": "FAIL (missed coupling)",
+        "analysis_time": 136.9111475944519
+      },
+      {
+        "test": "F_null",
+        "seed": 2042,
+        "kappa_dict": {
+          "eeg_features": 0.0,
+          "ecg_features": 0.0,
+          "blendshapes": 0.0,
+          "pose_features": 0.0
+        },
+        "duty_override": null,
+        "expected_coupled": [],
+        "detected": {
+          "eeg_features": false,
+          "ecg_features": false,
+          "blendshapes": false,
+          "pose_features": false
+        },
+        "dr2_values": {
+          "eeg_features": 0.09893850982189178,
+          "ecg_features": 0.06061616167426109,
+          "blendshapes": 0.0634341612458229,
+          "pose_features": 0.13751855492591858
+        },
+        "auc_results": {},
+        "passed": true,
+        "status": "PASS",
+        "analysis_time": 139.36009216308594
+      }
+    ]
+  },
+  "aggregate": {
+    "n_pass": 6,
+    "n_total": 18,
+    "pass_rate": 0.3333333333333333,
+    "total_time_s": 3341.3564212322235
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "C000_eeg0.30_bl0.30",
+  "seed": 7000,
+  "duration": 60,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.3,
+    "pose_features": 0.0
+  },
+  "n_significant": 0,
+  "pathway_summary": {},
+  "elapsed_s": 64.1
+}

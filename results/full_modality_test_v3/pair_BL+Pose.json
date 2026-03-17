@@ -1,0 +1,31 @@
+{
+  "name": "pair_BL+Pose",
+  "seed": 9042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.0,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.3,
+    "pose_features": 0.3
+  },
+  "n_significant": 2,
+  "pathway_summary": {
+    "ecg_features_v2->ecg_features_v2": {
+      "mean_dr2": 0.04411742463707924,
+      "significant": true
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "mean_dr2": 0.022124158218503,
+      "significant": true
+    }
+  },
+  "tp": [
+    "blendshapes_v2->blendshapes_v2"
+  ],
+  "fn": [],
+  "fp": [
+    "ecg_features_v2->ecg_features_v2"
+  ],
+  "tn": [],
+  "elapsed_s": 49.7
+}

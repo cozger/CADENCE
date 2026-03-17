@@ -1,0 +1,23 @@
+{
+  "name": "C000_eeg0.30_bl0.30",
+  "seed": 7000,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.3,
+    "pose_features": 0.0
+  },
+  "n_significant": 2,
+  "pathway_summary": {
+    "eeg_wavelet->eeg_wavelet": {
+      "mean_dr2": 0.03937264531850815,
+      "significant": true
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "mean_dr2": 0.03205939382314682,
+      "significant": true
+    }
+  },
+  "elapsed_s": 18.3
+}

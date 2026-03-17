@@ -1,0 +1,56 @@
+{
+  "n_sessions": 1,
+  "per_modality": {
+    "EEGw": {
+      "tp_rate": 0.0,
+      "tp_count": 0,
+      "tp_total": 1,
+      "fp_rate": 0.0,
+      "fp_count": 0,
+      "fp_total": 0
+    },
+    "ECG": {
+      "tp_rate": 0.0,
+      "tp_count": 0,
+      "tp_total": 0,
+      "fp_rate": 0.0,
+      "fp_count": 0,
+      "fp_total": 1
+    },
+    "BL": {
+      "tp_rate": 0.0,
+      "tp_count": 0,
+      "tp_total": 1,
+      "fp_rate": 0.0,
+      "fp_count": 0,
+      "fp_total": 0
+    },
+    "Pose": {
+      "tp_rate": 0.0,
+      "tp_count": 0,
+      "tp_total": 0,
+      "fp_rate": 0.0,
+      "fp_count": 0,
+      "fp_total": 1
+    }
+  },
+  "null_sessions": {
+    "total": 0,
+    "any_fp": 0,
+    "fp_rate": 0.0
+  },
+  "tp_by_kappa_bin": {
+    "low_0.3-0.5": {
+      "tp_rate": 0.0,
+      "count": 1
+    },
+    "mid_0.5-0.7": {
+      "tp_rate": 0.0,
+      "count": 0
+    },
+    "high_0.7-0.9": {
+      "tp_rate": 0.0,
+      "count": 0
+    }
+  }
+}

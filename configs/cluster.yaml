@@ -1,0 +1,43 @@
+# CADENCE cluster configuration — 2x RTX6000 Ada (48GB each)
+#
+# Optimized for maximum GPU utilization on dual-GPU cluster nodes.
+# Only overrides performance-relevant settings; all other parameters
+# are inherited from defaults via deep merge.
+#
+# Key benefit: --parallel-directions puts each direction on its own GPU.
+# Stage 2 (EWLS) requires ~40GB peak VRAM. On a 16GB GPU this spills into
+# slow shared memory (~25GB). With 48GB native VRAM per direction, Stage 2
+# stays entirely in fast GDDR6, eliminating the shared memory bottleneck.
+#
+# Usage:
+#   python scripts/run_session.py --session y_06 --config configs/cluster.yaml --parallel-directions
+#   python scripts/run_all_sessions.py --config configs/cluster.yaml --parallel-directions
+
+# Pipeline version
+pipeline: "v2"
+
+# Data pipeline — symlinked by cluster/setup_env.sh
+session_cache: "session_cache"
+device: cuda
+
+# Doubly-sparse: tuned for 48GB VRAM per GPU
+doubly_sparse:
+  enabled: true
+  # 3 concurrent pathways per GPU direction (matches default).
+  # Higher values trigger Triton JIT race conditions on PyTorch 2.6.
+  # TODO: increase once cluster upgrades to PyTorch 2.10+.
+  pathway_workers: 3
+
+  stability_selection:
+    enabled: true
+    n_subsamples: 50
+    subsample_fraction: 0.5
+    selection_threshold: 0.6
+
+  block_selection:
+    enabled: true
+    block_duration_s: 120.0
+    # 15 shifts (down from 20): ~25% faster null calibration.
+    # Shah & Samworth (2013) show 10-20 shifts suffice for complementary pairs.
+    # Saves ~25% on the 200-340s block selection bottleneck per pathway.
+    block_n_shifts: 15

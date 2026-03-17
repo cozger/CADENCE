@@ -1,0 +1,75 @@
+[
+  {
+    "name": "g_fwd_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [],
+    "n_sig": 1,
+    "elapsed_s": 20.9,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.668
+    },
+    "sub": "g_fwd"
+  },
+  {
+    "name": "g_rev_0",
+    "direction": "p2_to_p1",
+    "tp": [],
+    "fn": [],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 18.9,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "g_rev"
+  },
+  {
+    "name": "g_fwd_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [],
+    "n_sig": 1,
+    "elapsed_s": 22.1,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.679
+    },
+    "sub": "g_fwd"
+  },
+  {
+    "name": "g_rev_1",
+    "direction": "p2_to_p1",
+    "tp": [],
+    "fn": [],
+    "fp": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "tn": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "n_sig": 1,
+    "elapsed_s": 23.9,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_wavelet->eeg_wavelet": 0.387
+    },
+    "sub": "g_rev"
+  }
+]

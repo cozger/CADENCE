@@ -1,0 +1,102 @@
+{
+  "name": "pair_EEGw+BL",
+  "seed": 5042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.3,
+    "pose_features": 0.0
+  },
+  "n_significant": 1,
+  "pathway_summary": {
+    "eeg_wavelet->eeg_wavelet": {
+      "mean_dr2": 0.03282775357365608,
+      "significant": true
+    },
+    "eeg_wavelet->ecg_features_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "eeg_wavelet->blendshapes_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "eeg_wavelet->pose_features": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "ecg_features_v2->eeg_wavelet": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "ecg_features_v2->ecg_features_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "ecg_features_v2->blendshapes_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "ecg_features_v2->pose_features": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "blendshapes_v2->eeg_wavelet": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "blendshapes_v2->ecg_features_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "blendshapes_v2->pose_features": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "pose_features->eeg_wavelet": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "pose_features->ecg_features_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "pose_features->blendshapes_v2": {
+      "mean_dr2": 0.0,
+      "significant": false
+    },
+    "pose_features->pose_features": {
+      "mean_dr2": 0.0,
+      "significant": false
+    }
+  },
+  "tp": [
+    "eeg_wavelet->eeg_wavelet"
+  ],
+  "fn": [
+    "blendshapes_v2->blendshapes_v2"
+  ],
+  "fp": [],
+  "tn": [
+    "eeg_wavelet->ecg_features_v2",
+    "eeg_wavelet->blendshapes_v2",
+    "eeg_wavelet->pose_features",
+    "ecg_features_v2->eeg_wavelet",
+    "ecg_features_v2->ecg_features_v2",
+    "ecg_features_v2->blendshapes_v2",
+    "ecg_features_v2->pose_features",
+    "blendshapes_v2->eeg_wavelet",
+    "blendshapes_v2->ecg_features_v2",
+    "blendshapes_v2->pose_features",
+    "pose_features->eeg_wavelet",
+    "pose_features->ecg_features_v2",
+    "pose_features->blendshapes_v2",
+    "pose_features->pose_features"
+  ],
+  "elapsed_s": 73.9
+}

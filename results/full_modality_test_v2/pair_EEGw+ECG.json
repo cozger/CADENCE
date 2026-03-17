@@ -1,0 +1,41 @@
+{
+  "name": "pair_EEGw+ECG",
+  "seed": 1042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.3,
+    "blendshapes_v2": 0.0,
+    "pose_features": 0.0
+  },
+  "n_significant": 4,
+  "pathway_summary": {
+    "eeg_wavelet->eeg_wavelet": {
+      "mean_dr2": 0.037926435470581055,
+      "significant": true
+    },
+    "eeg_wavelet->blendshapes_v2": {
+      "mean_dr2": -0.050572123378515244,
+      "significant": true
+    },
+    "ecg_features_v2->ecg_features_v2": {
+      "mean_dr2": 0.007997196167707443,
+      "significant": true
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "mean_dr2": 0.048478927463293076,
+      "significant": true
+    }
+  },
+  "tp": [
+    "eeg_wavelet->eeg_wavelet",
+    "ecg_features_v2->ecg_features_v2"
+  ],
+  "fn": [],
+  "fp": [
+    "eeg_wavelet->blendshapes_v2",
+    "blendshapes_v2->blendshapes_v2"
+  ],
+  "tn": [],
+  "elapsed_s": 151.9
+}

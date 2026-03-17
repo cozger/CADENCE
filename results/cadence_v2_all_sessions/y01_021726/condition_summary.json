@@ -1,0 +1,14 @@
+{
+  "conditions_found": [
+    "base_EO",
+    "base_EC",
+    "conv_1",
+    "PE",
+    "PE",
+    "conv_2"
+  ],
+  "n_intervals": 6,
+  "threshold_method": "median",
+  "pathways": {},
+  "modality_summary": {}
+}

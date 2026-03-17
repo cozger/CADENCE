@@ -1,0 +1,9 @@
+{
+  "verdicts": {
+    "B: EEG Sensitivity": true
+  },
+  "mode": "default",
+  "duration": 1800,
+  "elapsed_min": 2.5,
+  "category_b": []
+}

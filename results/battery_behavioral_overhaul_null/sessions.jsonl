@@ -1,0 +1,3 @@
+{"name": "a1_null_eeg_0", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": ["eeg_wavelet->eeg_wavelet", "eeg_interbrain->eeg_wavelet"], "n_sig": 0, "elapsed_s": 25.3, "freq_recovered": null, "temporal_auc": {}}
+{"name": "a1_null_eeg_1", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": ["eeg_wavelet->eeg_wavelet", "eeg_interbrain->eeg_wavelet"], "n_sig": 0, "elapsed_s": 25.9, "freq_recovered": null, "temporal_auc": {}}
+{"name": "a1_null_eeg_2", "direction": "p1_to_p2", "tp": [], "fn": [], "fp": [], "tn": ["eeg_wavelet->eeg_wavelet", "eeg_interbrain->eeg_wavelet"], "n_sig": 0, "elapsed_s": 37.2, "freq_recovered": null, "temporal_auc": {}}

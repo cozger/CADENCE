@@ -1,0 +1,31 @@
+{
+  "name": "single_EEGw",
+  "seed": 42,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.3,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.0,
+    "pose_features": 0.0
+  },
+  "n_significant": 2,
+  "pathway_summary": {
+    "eeg_wavelet->eeg_wavelet": {
+      "mean_dr2": 0.03460318222641945,
+      "significant": true
+    },
+    "blendshapes_v2->pose_features": {
+      "mean_dr2": 5.578898708336055e-05,
+      "significant": true
+    }
+  },
+  "tp": [
+    "eeg_wavelet->eeg_wavelet"
+  ],
+  "fn": [],
+  "fp": [
+    "blendshapes_v2->pose_features"
+  ],
+  "tn": [],
+  "elapsed_s": 53.9
+}

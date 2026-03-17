@@ -1,0 +1,659 @@
+{
+  "verdicts": {
+    "A: Null Control": false,
+    "B: Power Curves": false,
+    "C: Cross-Modal": true,
+    "D: Temporal": false
+  },
+  "mode": "quick",
+  "duration_main": 300,
+  "duration_power": 300,
+  "elapsed_min": 10.8,
+  "category_a": [
+    {
+      "name": "a1_null_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->blendshapes_v2",
+        "blendshapes_v2->eeg_wavelet"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 3,
+      "elapsed_s": 23.2,
+      "sub": "a1"
+    },
+    {
+      "name": "a1_null_1",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->eeg_wavelet",
+        "pose_features->pose_features"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "n_sig": 2,
+      "elapsed_s": 22.8,
+      "sub": "a1"
+    },
+    {
+      "name": "a2_trend_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->pose_features"
+      ],
+      "tn": [
+        "eeg_wavelet->blendshapes_v2",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 3,
+      "elapsed_s": 26.9,
+      "sub": "a2"
+    },
+    {
+      "name": "a3_corract_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.5,
+      "sub": "a3"
+    },
+    {
+      "name": "a4_noise_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->pose_features"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "n_sig": 5,
+      "elapsed_s": 13.5,
+      "sub": "a4"
+    },
+    {
+      "name": "a5_wrong_EEGw_0",
+      "direction": "p2_to_p1",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "ecg_features_v2->eeg_wavelet"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.6,
+      "sub": "a5"
+    },
+    {
+      "name": "a5_wrong_ECG_0",
+      "direction": "p2_to_p1",
+      "tp": [],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.3,
+      "sub": "a5"
+    }
+  ],
+  "category_b": [
+    {
+      "name": "b_EEGw_k0.10_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fp": [
+        "pose_features->eeg_wavelet"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 26.0,
+      "sub": "b",
+      "kappa": 0.1,
+      "modality": "eeg_wavelet"
+    },
+    {
+      "name": "b_EEGw_k0.20_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->pose_features",
+        "blendshapes_v2->blendshapes_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 4,
+      "elapsed_s": 26.5,
+      "sub": "b",
+      "kappa": 0.2,
+      "modality": "eeg_wavelet"
+    },
+    {
+      "name": "b_EEGw_k0.30_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 2,
+      "elapsed_s": 25.0,
+      "sub": "b",
+      "kappa": 0.3,
+      "modality": "eeg_wavelet"
+    },
+    {
+      "name": "b_ECG_k0.10_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [
+        "eeg_wavelet->pose_features",
+        "blendshapes_v2->blendshapes_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 3,
+      "elapsed_s": 22.5,
+      "sub": "b",
+      "kappa": 0.1,
+      "modality": "ecg_features_v2"
+    },
+    {
+      "name": "b_ECG_k0.20_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.1,
+      "sub": "b",
+      "kappa": 0.2,
+      "modality": "ecg_features_v2"
+    },
+    {
+      "name": "b_ECG_k0.30_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [
+        "eeg_wavelet->eeg_wavelet",
+        "pose_features->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 2,
+      "elapsed_s": 22.2,
+      "sub": "b",
+      "kappa": 0.3,
+      "modality": "ecg_features_v2"
+    }
+  ],
+  "category_c": [
+    {
+      "name": "c_EEGw_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fp": [
+        "pose_features->eeg_wavelet"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 26.0,
+      "sub": "c"
+    },
+    {
+      "name": "c_ECG_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 0,
+      "elapsed_s": 21.6,
+      "sub": "c"
+    }
+  ],
+  "category_d": [
+    {
+      "name": "d_sustained_EEGw_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [
+        "eeg_wavelet->pose_features",
+        "blendshapes_v2->blendshapes_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 4,
+      "elapsed_s": 24.8,
+      "sub": "d",
+      "pattern": "sustained"
+    },
+    {
+      "name": "d_sustained_ECG_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fn": [],
+      "fp": [
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "pose_features->eeg_wavelet",
+        "pose_features->pose_features"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2"
+      ],
+      "n_sig": 5,
+      "elapsed_s": 24.4,
+      "sub": "d",
+      "pattern": "sustained"
+    },
+    {
+      "name": "d_sparse_EEGw_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fp": [
+        "blendshapes_v2->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 24.4,
+      "sub": "d",
+      "pattern": "sparse"
+    },
+    {
+      "name": "d_sparse_ECG_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [
+        "eeg_wavelet->ecg_features_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.3,
+      "sub": "d",
+      "pattern": "sparse"
+    },
+    {
+      "name": "d_late_onset_EEGw_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->ecg_features_v2",
+        "ecg_features_v2->blendshapes_v2",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 27.2,
+      "sub": "d",
+      "pattern": "late_onset"
+    },
+    {
+      "name": "d_late_onset_ECG_0",
+      "direction": "p1_to_p2",
+      "tp": [],
+      "fn": [
+        "ecg_features_v2->ecg_features_v2"
+      ],
+      "fp": [
+        "ecg_features_v2->blendshapes_v2"
+      ],
+      "tn": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_wavelet->ecg_features_v2",
+        "eeg_wavelet->blendshapes_v2",
+        "eeg_wavelet->pose_features",
+        "ecg_features_v2->eeg_wavelet",
+        "ecg_features_v2->pose_features",
+        "blendshapes_v2->eeg_wavelet",
+        "blendshapes_v2->ecg_features_v2",
+        "blendshapes_v2->blendshapes_v2",
+        "blendshapes_v2->pose_features",
+        "pose_features->eeg_wavelet",
+        "pose_features->ecg_features_v2",
+        "pose_features->blendshapes_v2",
+        "pose_features->pose_features"
+      ],
+      "n_sig": 1,
+      "elapsed_s": 22.5,
+      "sub": "d",
+      "pattern": "late_onset"
+    }
+  ]
+}

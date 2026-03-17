@@ -1,0 +1,451 @@
+[
+  {
+    "name": "c_ib_k0.20_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 3,
+    "elapsed_s": 58.1,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.484
+    },
+    "sub": "c",
+    "kappa": 0.2,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.20_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 2,
+    "elapsed_s": 56.3,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.497
+    },
+    "sub": "c",
+    "kappa": 0.2,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.20_2",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fn": [
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 3,
+    "elapsed_s": 63.4,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.502
+    },
+    "sub": "c",
+    "kappa": 0.2,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.30_0",
+    "direction": "p1_to_p2",
+    "tp": [],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 56.1,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.3,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.30_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 1,
+    "elapsed_s": 53.0,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.3,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.30_2",
+    "direction": "p1_to_p2",
+    "tp": [],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 35.1,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.3,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.40_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 2,
+    "elapsed_s": 56.6,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.529,
+      "eeg_interbrain->blendshapes_v2": 0.495
+    },
+    "sub": "c",
+    "kappa": 0.4,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.40_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 1,
+    "elapsed_s": 94.6,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.4,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.40_2",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 1,
+    "elapsed_s": 81.1,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.4,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.50_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 3,
+    "elapsed_s": 98.0,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.514,
+      "eeg_interbrain->blendshapes_v2": 0.504
+    },
+    "sub": "c",
+    "kappa": 0.5,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.50_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 3,
+    "elapsed_s": 41.0,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.448
+    },
+    "sub": "c",
+    "kappa": 0.5,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.50_2",
+    "direction": "p1_to_p2",
+    "tp": [],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 42.1,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.5,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.60_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 2,
+    "elapsed_s": 64.9,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.487
+    },
+    "sub": "c",
+    "kappa": 0.6,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.60_1",
+    "direction": "p1_to_p2",
+    "tp": [],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 49.2,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.6,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.60_2",
+    "direction": "p1_to_p2",
+    "tp": [],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 0,
+    "elapsed_s": 66.9,
+    "freq_recovered": null,
+    "temporal_auc": {},
+    "sub": "c",
+    "kappa": 0.6,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.80_0",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 3,
+    "elapsed_s": 81.9,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.471
+    },
+    "sub": "c",
+    "kappa": 0.8,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.80_1",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fn": [
+      "eeg_wavelet->eeg_wavelet",
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 1,
+    "elapsed_s": 59.3,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->blendshapes_v2": 0.441
+    },
+    "sub": "c",
+    "kappa": 0.8,
+    "modality": "eeg_interbrain"
+  },
+  {
+    "name": "c_ib_k0.80_2",
+    "direction": "p1_to_p2",
+    "tp": [
+      "eeg_wavelet->eeg_wavelet",
+      "eeg_interbrain->eeg_wavelet"
+    ],
+    "fn": [
+      "blendshapes_v2->eeg_wavelet",
+      "eeg_interbrain->blendshapes_v2"
+    ],
+    "fp": [],
+    "tn": [
+      "eeg_wavelet->blendshapes_v2",
+      "blendshapes_v2->blendshapes_v2"
+    ],
+    "n_sig": 2,
+    "elapsed_s": 30.4,
+    "freq_recovered": null,
+    "temporal_auc": {
+      "eeg_interbrain->eeg_wavelet": 0.537
+    },
+    "sub": "c",
+    "kappa": 0.8,
+    "modality": "eeg_interbrain"
+  }
+]

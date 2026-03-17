@@ -1,0 +1,116 @@
+[
+  {
+    "test": "A_eeg_only",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.7,
+      "ecg_features": 0.0,
+      "blendshapes": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_features": true,
+      "ecg_features": false,
+      "blendshapes": false,
+      "pose_features": false
+    },
+    "passed": true,
+    "status": "PASS"
+  },
+  {
+    "test": "B_bl_only",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.0,
+      "ecg_features": 0.0,
+      "blendshapes": 0.7,
+      "pose_features": 0.0
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_features": false,
+      "ecg_features": false,
+      "blendshapes": true,
+      "pose_features": false
+    },
+    "passed": true,
+    "status": "PASS"
+  },
+  {
+    "test": "C_ecg_only",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.0,
+      "ecg_features": 0.7,
+      "blendshapes": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_features": false,
+      "ecg_features": false,
+      "blendshapes": false,
+      "pose_features": false
+    },
+    "passed": false,
+    "status": "FAIL (missed coupling)"
+  },
+  {
+    "test": "D_pose_only",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.0,
+      "ecg_features": 0.0,
+      "blendshapes": 0.0,
+      "pose_features": 0.7
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_features": false,
+      "ecg_features": false,
+      "blendshapes": false,
+      "pose_features": true
+    },
+    "passed": true,
+    "status": "PASS"
+  },
+  {
+    "test": "E_eeg_bl",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.7,
+      "ecg_features": 0.0,
+      "blendshapes": 0.7,
+      "pose_features": 0.0
+    },
+    "duty_override": 0.3,
+    "detected": {
+      "eeg_features": true,
+      "ecg_features": false,
+      "blendshapes": true,
+      "pose_features": false
+    },
+    "passed": true,
+    "status": "PASS"
+  },
+  {
+    "test": "F_null",
+    "pipeline": "v1",
+    "kappa_dict": {
+      "eeg_features": 0.0,
+      "ecg_features": 0.0,
+      "blendshapes": 0.0,
+      "pose_features": 0.0
+    },
+    "duty_override": null,
+    "detected": {
+      "eeg_features": false,
+      "ecg_features": false,
+      "blendshapes": false,
+      "pose_features": false
+    },
+    "passed": true,
+    "status": "PASS"
+  }
+]

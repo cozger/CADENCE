@@ -1,0 +1,73 @@
+{
+  "eeg_only": {
+    "tp_rates": {
+      "eeg_features": 1.0
+    },
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "ecg_features": 0,
+      "blendshapes": 0,
+      "pose_features": 0
+    },
+    "passed": true
+  },
+  "ecg_only": {
+    "tp_rates": {
+      "ecg_features": 1.0
+    },
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "eeg_features": 0,
+      "blendshapes": 0,
+      "pose_features": 0
+    },
+    "passed": true
+  },
+  "bl_only": {
+    "tp_rates": {
+      "blendshapes": 0.6
+    },
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "eeg_features": 0,
+      "ecg_features": 0,
+      "pose_features": 0
+    },
+    "passed": true
+  },
+  "pose_only": {
+    "tp_rates": {
+      "pose_features": 0.6
+    },
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "eeg_features": 0,
+      "ecg_features": 0,
+      "blendshapes": 0
+    },
+    "passed": true
+  },
+  "eeg_bl": {
+    "tp_rates": {
+      "eeg_features": 1.0,
+      "blendshapes": 0.6
+    },
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "ecg_features": 0,
+      "pose_features": 0
+    },
+    "passed": true
+  },
+  "null": {
+    "tp_rates": {},
+    "fp_rate": 0.0,
+    "fp_counts": {
+      "eeg_features": 0,
+      "ecg_features": 0,
+      "pose_features": 0,
+      "blendshapes": 0
+    },
+    "passed": true
+  }
+}

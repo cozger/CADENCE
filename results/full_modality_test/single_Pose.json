@@ -1,0 +1,18 @@
+{
+  "name": "single_Pose",
+  "seed": 3042,
+  "duration": 1800,
+  "kappa_dict": {
+    "eeg_wavelet": 0.0,
+    "ecg_features_v2": 0.0,
+    "blendshapes_v2": 0.0,
+    "pose_features": 0.3
+  },
+  "n_significant": 0,
+  "pathway_summary": {},
+  "tp": [],
+  "fn": [],
+  "fp": [],
+  "tn": [],
+  "elapsed_s": 40.0
+}

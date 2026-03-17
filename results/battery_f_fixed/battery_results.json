@@ -1,0 +1,102 @@
+{
+  "verdicts": {
+    "F: Temporal": true
+  },
+  "mode": "default",
+  "duration": 1800,
+  "elapsed_min": 4.1,
+  "category_f": [
+    {
+      "name": "f_sustained_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_interbrain->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [],
+      "n_sig": 1,
+      "elapsed_s": 27.8,
+      "freq_recovered": null,
+      "temporal_auc": {},
+      "sub": "f",
+      "pattern": "sustained"
+    },
+    {
+      "name": "f_sparse_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_interbrain->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [],
+      "n_sig": 1,
+      "elapsed_s": 38.8,
+      "freq_recovered": null,
+      "temporal_auc": {
+        "eeg_interbrain->eeg_wavelet": 0.735
+      },
+      "sub": "f",
+      "pattern": "sparse"
+    },
+    {
+      "name": "f_single_event_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_interbrain->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [],
+      "n_sig": 1,
+      "elapsed_s": 47.1,
+      "freq_recovered": null,
+      "temporal_auc": {
+        "eeg_interbrain->eeg_wavelet": 0.714
+      },
+      "sub": "f",
+      "pattern": "single_event"
+    },
+    {
+      "name": "f_late_onset_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_interbrain->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [],
+      "n_sig": 2,
+      "elapsed_s": 41.5,
+      "freq_recovered": null,
+      "temporal_auc": {
+        "eeg_wavelet->eeg_wavelet": 0.739,
+        "eeg_interbrain->eeg_wavelet": 0.766
+      },
+      "sub": "f",
+      "pattern": "late_onset"
+    },
+    {
+      "name": "f_early_offset_0",
+      "direction": "p1_to_p2",
+      "tp": [
+        "eeg_wavelet->eeg_wavelet",
+        "eeg_interbrain->eeg_wavelet"
+      ],
+      "fn": [],
+      "fp": [],
+      "tn": [],
+      "n_sig": 2,
+      "elapsed_s": 36.7,
+      "freq_recovered": null,
+      "temporal_auc": {
+        "eeg_wavelet->eeg_wavelet": 0.565,
+        "eeg_interbrain->eeg_wavelet": 0.682
+      },
+      "sub": "f",
+      "pattern": "early_offset"
+    }
+  ]
+}

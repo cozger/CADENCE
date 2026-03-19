@@ -380,35 +380,59 @@ def main():
 
                 summary = detection_summary(result, config)
 
-                pathway_key = SAME_MOD_PATHWAYS[target_mod]
-                if pathway_key in summary:
-                    det = summary[pathway_key]
-                    p_val = det.get('p_value', 1.0)
-                    detected = det.get('detected', False)
-                    mean_dr2 = det.get('mean_dr2', 0.0)
-                else:
-                    p_val = 1.0
-                    detected = False
-                    mean_dr2 = 0.0
+                # Score ALL pathways targeting the injected modality
+                # (not just same-source). Any src→target_mod pathway
+                # can detect the injected coupling.
+                best_p = 1.0
+                best_det = False
+                best_dr2 = 0.0
+                best_key = None
+                pw_details = []
+                for key, det_info in summary.items():
+                    s_mod, t_mod = key
+                    if t_mod != target_mod:
+                        continue
+                    p = det_info.get('p_value', 1.0)
+                    d = det_info.get('detected', False)
+                    dr2 = det_info.get('mean_dr2', 0.0)
+                    s_short = MOD_SHORT_V2.get(s_mod, s_mod)
+                    t_short = MOD_SHORT_V2.get(t_mod, t_mod)
+                    status = 'DETECTED' if d else ''
+                    pw_details.append(
+                        f"    {s_short}->{t_short}: p={p:.4f} "
+                        f"dR2={dr2:.6f} {status}")
+                    if p < best_p:
+                        best_p = p
+                        best_det = d
+                        best_dr2 = dr2
+                        best_key = key
+
+                # Also check same-mod if no targeting pathways found
+                if best_key is None:
+                    same_key = SAME_MOD_PATHWAYS[target_mod]
+                    if same_key in summary:
+                        det_info = summary[same_key]
+                        best_p = det_info.get('p_value', 1.0)
+                        best_det = det_info.get('detected', False)
+                        best_dr2 = det_info.get('mean_dr2', 0.0)
+
+                p_val = best_p
+                detected = best_det
+                mean_dr2 = best_dr2
 
                 roc_data[target_mod]['labels'].append(label)
                 roc_data[target_mod]['scores'].append(p_val)
 
-                status = 'DETECTED' if detected else ''
-                print(f"    {short}->{short}: p={p_val:.4f} "
-                      f"dR2={mean_dr2:.6f} {status} ({dt:.1f}s)",
-                      flush=True)
-
-                # Check false cross-modal detections
-                cross_fp = []
-                for key, det_info in summary.items():
-                    if key != pathway_key and det_info.get('detected', False):
-                        s_mod, t_mod = key
-                        cross_fp.append(
-                            f"{MOD_SHORT_V2.get(s_mod,s_mod)}->"
-                            f"{MOD_SHORT_V2.get(t_mod,t_mod)}")
-                if cross_fp:
-                    print(f"    Cross-modal FP: {', '.join(cross_fp)}",
+                # Print all targeting pathways
+                for line in pw_details:
+                    print(line, flush=True)
+                if best_key:
+                    bk_short = (f"{MOD_SHORT_V2.get(best_key[0], best_key[0])}"
+                                f"->{MOD_SHORT_V2.get(best_key[1], best_key[1])}")
+                    print(f"    Best: {bk_short} p={p_val:.4f} ({dt:.1f}s)",
+                          flush=True)
+                else:
+                    print(f"    No pathways targeting {short} ({dt:.1f}s)",
                           flush=True)
 
                 all_results.append({
@@ -420,7 +444,8 @@ def main():
                     'p_value': p_val,
                     'detected': detected,
                     'mean_dr2': mean_dr2,
-                    'cross_fp': cross_fp,
+                    'best_pathway': (f"{best_key[0]}->{best_key[1]}"
+                                     if best_key else 'none'),
                     'analysis_time_s': dt,
                 })
 

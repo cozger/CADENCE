@@ -2195,6 +2195,12 @@ class CouplingEstimator:
               and src_mod != tgt_mod):
             final_groups = stable_groups
             fallback_used = 'tertiary'
+        elif n_stable >= 2:
+            # HMM fallback: stability found features but block/intersection
+            # failed. Use stability features directly — the post-Stage-2 HMM
+            # handles temporal discrimination (episodic coupling detection).
+            final_groups = stable_groups
+            fallback_used = 'stability_hmm'
         else:
             final_groups = []
 
@@ -2210,7 +2216,11 @@ class CouplingEstimator:
         discovery.selected_features[key] = original_indices
         discovery.n_selected[key] = len(original_indices)
         discovery.feature_clusters[key] = cluster_map
-        discovery.selection_method[key] = 'doubly_sparse'
+        # stability_hmm bypasses block selection — needs surrogate screening
+        if fallback_used == 'stability_hmm':
+            discovery.selection_method[key] = 'stability_hmm'
+        else:
+            discovery.selection_method[key] = 'doubly_sparse'
 
         _pw_t3 = _time.perf_counter()
         pt_str = " [per-target]" if use_per_target else ""
@@ -2498,6 +2508,12 @@ class CouplingEstimator:
             basis, n_basis = self._get_pathway_basis_v2(
                 src_mod, tgt_mod, eval_rate)
 
+            # For stability_hmm pathways, use selected features only (focused)
+            method = discovery.selection_method.get(key, 'legacy')
+            sel_feats = discovery.selected_features.get(key, [])
+            if method == 'stability_hmm' and sel_feats:
+                src_signal = src_signal[:, sel_feats]
+
             n_src_ch = src_signal.shape[1]
             C_tgt = tgt_signal.shape[1]
             C_min = min(n_src_ch, C_tgt)
@@ -2545,7 +2561,31 @@ class CouplingEstimator:
         if raw_pvalues:
             fdr_method = sig_cfg.get('fdr_correction', False)
 
-            all_keys = list(raw_pvalues.keys())
+            # Separate stability_hmm from true legacy — HMM pathways
+            # skip FDR and use permissive threshold (HMM is the real FP control)
+            hmm_keys = [k for k in raw_pvalues
+                        if discovery.selection_method.get(k) == 'stability_hmm']
+            true_legacy_keys = [k for k in raw_pvalues if k not in hmm_keys]
+
+            # --- HMM pathways: permissive screening (just a compute gate) ---
+            hmm_screen_alpha = 0.30  # generous — HMM handles FP control
+            for k in hmm_keys:
+                p_raw = raw_pvalues[k]
+                is_significant = p_raw < hmm_screen_alpha
+                result.pathway_significant[k] = is_significant
+                if is_significant:
+                    result.n_significant_pathways += 1
+                    result.pathway_pvalues[k] = np.full(1, p_raw)
+                    _log(f"  Screen {k[0]}->{k[1]}: PASS "
+                          f"(p={p_raw:.4f} [hmm, no FDR])")
+                else:
+                    discovery.selected_features[k] = []
+                    discovery.n_selected[k] = 0
+                    _log(f"  Screen {k[0]}->{k[1]}: FAIL "
+                          f"(p={p_raw:.4f} [hmm, no FDR])")
+
+            # --- True legacy pathways: standard FDR ---
+            all_keys = true_legacy_keys
             same_keys = [k for k in all_keys if k[0] == k[1]]
             cross_keys = [k for k in all_keys if k[0] != k[1]]
 
@@ -3346,14 +3386,17 @@ class CouplingEstimator:
                 continue
 
             # Gate on pathway-level p-value (skip clearly non-significant)
-            pw_p = discovery.block_pathway_pvalue.get(key, 1.0)
-            if pw_p > max_pathway_p:
-                _log(f"  Stage 2 {key[0]}->{key[1]}: skipped "
-                     f"(pathway_p={pw_p:.4f} > {max_pathway_p})")
-                result.pathway_significant[key] = False
-                result.n_significant_pathways = max(
-                    0, result.n_significant_pathways - 1)
-                continue
+            # Skip this gate for stability_hmm pathways — they bypass block selection
+            sel_method = discovery.selection_method.get(key, '')
+            if sel_method != 'stability_hmm':
+                pw_p = discovery.block_pathway_pvalue.get(key, 1.0)
+                if pw_p > max_pathway_p:
+                    _log(f"  Stage 2 {key[0]}->{key[1]}: skipped "
+                         f"(pathway_p={pw_p:.4f} > {max_pathway_p})")
+                    result.pathway_significant[key] = False
+                    result.n_significant_pathways = max(
+                        0, result.n_significant_pathways - 1)
+                    continue
 
             src_mod, tgt_mod = key
             if src_mod not in source_sigs or tgt_mod not in target_sigs:

@@ -2368,7 +2368,24 @@ class CouplingEstimator:
                            if discovery.selection_method.get(k) == 'doubly_sparse'
                            and not discovery.selected_features.get(k, [])
                            and discovery.block_pathway_pvalue.get(k, 1.0) < max_pathway_p]
-            ds_empty = ds_legacy + ds_rejected
+            # Doubly-sparse pathways where stability found features but
+            # block selection killed them (episodic coupling in high-dim modalities).
+            # Use stability features for focused screening regardless of pathway_p.
+            stab_threshold = ds_cfg.get('stability_selection', {}).get(
+                'selection_threshold', 0.6)
+            ds_stable_only = []
+            for k in all_pathway_keys:
+                if discovery.selection_method.get(k) != 'doubly_sparse':
+                    continue
+                if discovery.selected_features.get(k, []):
+                    continue  # already has features
+                if k in ds_rejected:
+                    continue  # already covered
+                # Check if stability found >= 2 features
+                stab = discovery.stability_scores.get(k)
+                if stab is not None and np.sum(stab > stab_threshold) >= 2:
+                    ds_stable_only.append(k)
+            ds_empty = ds_legacy + ds_rejected + ds_stable_only
             # Re-run these with surrogate screening
             for key in ds_empty:
                 src_mod, tgt_mod = key
@@ -2381,13 +2398,25 @@ class CouplingEstimator:
                 basis, n_basis = self._get_pathway_basis_v2(
                     src_mod, tgt_mod, eval_rate)
 
-                n_src_ch = src_signal.shape[1]
+                # Use stability-selected features if available (focused screening)
+                stab = discovery.stability_scores.get(key)
+                if stab is not None and np.sum(stab > stab_threshold) >= 2:
+                    stable_feat = np.where(stab > stab_threshold)[0].tolist()
+                    src_subset = src_signal[:, stable_feat]
+                    n_src_ch = len(stable_feat)
+                    use_focused = True
+                else:
+                    src_subset = src_signal
+                    n_src_ch = src_signal.shape[1]
+                    stable_feat = None
+                    use_focused = False
+
                 C_tgt = tgt_signal.shape[1]
                 C_min = min(n_src_ch, C_tgt)
 
                 src_r, src_ts_r, src_valid_r = \
                     self._resample_source_to_internal(
-                        src_signal, src_ts, src_valid, eval_times)
+                        src_subset, src_ts, src_valid, eval_times)
 
                 dm = DesignMatrixBuilder(basis, ar_order=self.ar_order,
                                           device=self.device)
@@ -2408,6 +2437,8 @@ class CouplingEstimator:
                 is_same_mod = (src_mod == tgt_mod)
                 use_matched = is_same_mod and C_min >= 4
 
+                label = 'focused' if use_focused else 'surrogate fallback'
+
                 try:
                     if use_matched:
                         p_val = self._screen_matched_diagonal(
@@ -2421,14 +2452,22 @@ class CouplingEstimator:
                             all_features)
 
                     if p_val < alpha:
-                        # Sustained coupling detected — use legacy cc_sq selection
-                        cc_sq, _, _ = self._compute_matched_cc_sq(
-                            X_source, X_ar, y, valid,
-                            n_basis, n_src_ch, C_tgt, lam)
-                        cc_np = cc_sq.cpu().numpy()
-                        n_sel = min(20, C_min)
-                        top_idx = np.argsort(cc_np)[-n_sel:]
-                        selected = sorted(top_idx.tolist())
+                        # Coupling detected — select features
+                        if use_focused and stable_feat is not None:
+                            # Use stability features (already focused)
+                            selected = stable_feat
+                        else:
+                            # Legacy cc_sq selection
+                            cc_sq, _, _ = self._compute_matched_cc_sq(
+                                X_source, X_ar, y, valid,
+                                n_basis, n_src_ch, C_tgt, lam)
+                            cc_np = cc_sq.cpu().numpy()
+                            n_sel = min(20, C_min)
+                            top_idx = np.argsort(cc_np)[-n_sel:]
+                            selected = sorted(top_idx.tolist())
+                            if use_focused and stable_feat is not None:
+                                # Map back to original feature indices
+                                selected = [stable_feat[i] for i in selected]
                         discovery.selected_features[key] = selected
                         discovery.n_selected[key] = len(selected)
                         discovery.selection_method[key] = 'surrogate_fallback'
@@ -2436,10 +2475,11 @@ class CouplingEstimator:
                         result.n_significant_pathways += 1
                         result.pathway_pvalues[key] = np.full(1, p_val)
                         _log(f"  Screen {src_mod}->{tgt_mod}: PASS "
-                              f"[surrogate fallback] (p={p_val:.4f})")
+                              f"[{label}] (p={p_val:.4f}, "
+                              f"n_feat={len(selected)})")
                     else:
                         _log(f"  Screen {src_mod}->{tgt_mod}: FAIL "
-                              f"[surrogate fallback] (p={p_val:.4f})")
+                              f"[{label}] (p={p_val:.4f})")
                 except Exception as e:
                     _log(f"  Screen {src_mod}->{tgt_mod}: FALLBACK FAILED ({e})")
 

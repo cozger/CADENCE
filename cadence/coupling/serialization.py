@@ -94,6 +94,20 @@ def save_result(result, path, session_name='', runtime_s=0.0,
                 feat_indices, dtype=int)
         data['pathway_feature_dr2/_pw_keys'] = np.array(pw_keys, dtype=object)
 
+    # pathway_feature_pvalues: Dict[Tuple, Dict[int, ndarray]]
+    if hasattr(result, 'pathway_feature_pvalues') and result.pathway_feature_pvalues:
+        pw_keys = []
+        for pw_key, feat_dict in result.pathway_feature_pvalues.items():
+            pks = _key_str(pw_key)
+            pw_keys.append(pks)
+            feat_indices = []
+            for feat_idx, arr in feat_dict.items():
+                feat_indices.append(feat_idx)
+                data[f'pathway_feature_pvalues/{pks}/f{feat_idx}'] = arr
+            data[f'pathway_feature_pvalues/{pks}/_feat_indices'] = np.array(
+                feat_indices, dtype=int)
+        data['pathway_feature_pvalues/_pw_keys'] = np.array(pw_keys, dtype=object)
+
     # pathway_src_tgt_dr2: Dict[Tuple, Dict[Tuple[int,int], ndarray]]
     if hasattr(result, 'pathway_src_tgt_dr2') and result.pathway_src_tgt_dr2:
         pw_keys = []
@@ -264,6 +278,20 @@ def load_result(path):
                 if arr_key in raw:
                     feat_dict[int(fi)] = raw[arr_key]
             result.pathway_feature_dr2[pw_key] = feat_dict
+
+    # pathway_feature_pvalues
+    if 'pathway_feature_pvalues/_pw_keys' in raw:
+        result.pathway_feature_pvalues = {}
+        for pks in raw['pathway_feature_pvalues/_pw_keys']:
+            pks = str(pks)
+            pw_key = _str_key(pks)
+            feat_indices = raw[f'pathway_feature_pvalues/{pks}/_feat_indices']
+            feat_dict = {}
+            for fi in feat_indices:
+                arr_key = f'pathway_feature_pvalues/{pks}/f{fi}'
+                if arr_key in raw:
+                    feat_dict[int(fi)] = raw[arr_key]
+            result.pathway_feature_pvalues[pw_key] = feat_dict
 
     # pathway_src_tgt_dr2
     if 'pathway_src_tgt_dr2/_pw_keys' in raw:

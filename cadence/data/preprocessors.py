@@ -87,52 +87,39 @@ def preprocess_eeg(data, timestamps, srate=256):
 
 
 def preprocess_ecg(data, timestamps, target_srate=130):
-    """
-    Preprocess ECG from Polar H10 (irregular Bluetooth timestamps).
+    """Preprocess ECG from Polar H10.
+
+    The Polar H10 samples at 130 Hz internally and transmits via BLE in
+    batches. pyxdf dejitters the timestamps to a uniform grid on load,
+    so no resampling is needed here — just bandpass filter and z-score.
 
     Parameters:
         data: (N, 1) raw ECG
-        timestamps: (N,) irregular LSL timestamps
+        timestamps: (N,) dejittered timestamps (uniform after pyxdf)
+        target_srate: nominal sampling rate (130 Hz)
 
     Returns:
-        ecg: (M,) uniformly sampled ECG
-        valid: (M,) boolean validity mask
-        t_uniform: (M,) uniform timestamp grid
+        ecg: (N,) filtered ECG
+        valid: (N,) boolean validity mask
+        timestamps: (N,) pass-through timestamps
     """
     ecg_flat = data.flatten().astype(np.float64)
 
-    # Create uniform time grid
-    t_uniform = np.arange(timestamps[0], timestamps[-1], 1.0 / target_srate)
-
-    if len(t_uniform) < 10:
+    if len(ecg_flat) < 10:
         return ecg_flat, np.ones(len(ecg_flat), dtype=bool), timestamps
 
-    # Interpolate to uniform grid
-    ecg_uniform = np.interp(t_uniform, timestamps, ecg_flat)
-
-    # Detect true dropouts (gaps > 3 sample periods in original timestamps)
-    dt = np.diff(timestamps)
-    gap_threshold = 3.0 / target_srate
-    valid = np.ones(len(t_uniform), dtype=bool)
-
-    gap_indices = np.where(dt > gap_threshold)[0]
-    for idx in gap_indices:
-        gap_start = timestamps[idx]
-        gap_end = timestamps[idx + 1]
-        valid[(t_uniform >= gap_start) & (t_uniform <= gap_end)] = False
+    valid = np.ones(len(ecg_flat), dtype=bool)
 
     # Bandpass filter 0.5-40 Hz
     sos = butter(4, [0.5, 40.0], btype='bandpass', fs=target_srate, output='sos')
-    ecg_filtered = sosfiltfilt(sos, ecg_uniform)
+    ecg_filtered = sosfiltfilt(sos, ecg_flat)
 
     # Z-score normalize
-    valid_samples = ecg_filtered[valid]
-    if len(valid_samples) > 100:
-        mu, sigma = valid_samples.mean(), valid_samples.std()
-        if sigma > 1e-8:
-            ecg_filtered = (ecg_filtered - mu) / sigma
+    mu, sigma = ecg_filtered.mean(), ecg_filtered.std()
+    if sigma > 1e-8:
+        ecg_filtered = (ecg_filtered - mu) / sigma
 
-    return ecg_filtered, valid, t_uniform
+    return ecg_filtered, valid, timestamps
 
 
 def preprocess_blendshapes(data, timestamps, srate=30):
@@ -178,8 +165,9 @@ def preprocess_blendshapes(data, timestamps, srate=30):
             if sigma > 1e-8:
                 blendshapes[:, ch] = (blendshapes[:, ch] - mu) / sigma
 
-    # Clamp extreme outliers
-    blendshapes = np.clip(blendshapes, -10, 10)
+    # No clipping here — blendshapes are [0,1] originally, so large z-scores
+    # represent real high-activation events (laughs, smiles). PCA downstream
+    # regularizes the distribution; PCA-level clip at ±10 remains as safety net.
 
     # Append activity channel (ch 53): causal RMS deviation from trailing 30s mean
     effective_hz = len(blendshapes) / max(timestamps[-1] - timestamps[0], 1.0)
@@ -594,13 +582,8 @@ def extract_blendshapes_v2(blendshapes, valid, ts, n_components=15,
     # Project all frames (including invalid, for continuity)
     projected = (bl_raw - mean) @ Vt[:n_components].T  # (N, n_components)
 
-    # Z-score each component
-    for c in range(n_components):
-        vals = projected[valid_mask, c]
-        if len(vals) > 10:
-            mu, sigma = vals.mean(), vals.std()
-            if sigma > 1e-8:
-                projected[:, c] = (projected[:, c] - mu) / sigma
+    # No second z-scoring: input AUs are already z-scored, PCA of z-scored
+    # input produces approximately unit-variance components. Just clip.
     projected = np.clip(projected, -10, 10).astype(np.float32)
 
     # Temporal derivatives of PCA components
@@ -608,13 +591,7 @@ def extract_blendshapes_v2(blendshapes, valid, ts, n_components=15,
     derivatives = _compute_temporal_derivatives(
         projected, effective_hz, sigma_s=deriv_sigma_s)
 
-    # Z-score derivatives
-    for c in range(n_components):
-        vals = derivatives[valid_mask, c]
-        if len(vals) > 10:
-            mu, sigma = vals.mean(), vals.std()
-            if sigma > 1e-8:
-                derivatives[:, c] = (derivatives[:, c] - mu) / sigma
+    # No second z-scoring of derivatives. Just clip.
     derivatives = np.clip(derivatives, -10, 10).astype(np.float32)
 
     # Activity channel

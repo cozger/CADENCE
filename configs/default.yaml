@@ -54,6 +54,7 @@ ewls_tau_overrides:
 # Controls EWLS temporal resolution per pathway. Default = ewls.eval_rate.
 # Higher rate = finer temporal detail but more compute; lower = coarser but cheaper.
 eval_rate_overrides:
+  eeg_wavelet: 10.0        # Match wavelet output rate — overdetermined blocks at 120s
   eeg_features: 5.0       # 0.2s steps — fast neural transients
   blendshapes: 15.0        # 3x improvement over 5 Hz. Captures 100-300ms facial mimicry.
   blendshapes_v2: 15.0     # V2 key for same modality
@@ -147,8 +148,8 @@ excluded_sessions:
 wavelet:
   n_frequencies: 20
   freq_range: [2.0, 45.0]
-  n_cycles: 6
-  output_hz: 5.0
+  n_cycles: [3, 8]    # [min, max] linearly scaled across frequencies
+  output_hz: 10.0
 
 # Blendshape PCA + derivatives
 blendshapes_v2:
@@ -165,8 +166,8 @@ v2_discovery:
 # Stage 2 (EWLS on selected features)
 stage2:
   moderation:
-    enabled: false                # Disabled: coefficients not extracted/visualized yet, 2x p cost
-    moderators: ["ecg_hr", "ecg_rmssd"]
+    enabled: true                 # ECG RMSSD as moderator (source participant's autonomic state)
+    moderators: ["ecg_rmssd"]
   nonlinear:
     enabled: true
 
@@ -197,10 +198,7 @@ pathway_category:
   eeg_interbrain->blendshapes_v2: fast
   eeg_interbrain->pose_features: medium
   eeg_interbrain->ecg_features_v2: slow
-  # ECG source pathways: autonomic coupling operates on slow timescales
-  ecg_features_v2->eeg_wavelet: slow
-  ecg_features_v2->blendshapes_v2: slow
-  ecg_features_v2->pose_features: slow
+  # ECG no longer a source modality — serves as RMSSD moderator instead
   default: medium
 
 # ---------------------------------------------------------------------------

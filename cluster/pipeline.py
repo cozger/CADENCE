@@ -62,6 +62,8 @@ SBATCH_FILES = {
     'session': 'cluster/ssrde_session.sbatch',
     'corpus': 'cluster/ssrde_corpus.sbatch',
     'all_sessions': 'cluster/ssrde_all_sessions.sbatch',
+    'synthetic': 'cluster/ssrde_synthetic.sbatch',
+    'semisynthetic': 'cluster/ssrde_semisynthetic.sbatch',
 }
 DEFAULT_JOB = 'discovery'
 
@@ -525,7 +527,7 @@ def main():
 
     # submit
     p_submit = subparsers.add_parser('submit', help='Submit Slurm job (1 Duo auth)')
-    p_submit.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
+    p_submit.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions', 'synthetic', 'semisynthetic'],
                           default=DEFAULT_JOB, help='Job type')
     p_submit.add_argument('--session', default=None,
                           help='Session name (for --job session)')
@@ -557,7 +559,7 @@ def main():
 
     # run (sync + submit)
     p_run = subparsers.add_parser('run', help='Sync + submit (1 Duo auth total)')
-    p_run.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
+    p_run.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions', 'synthetic', 'semisynthetic'],
                        default=DEFAULT_JOB, help='Job type')
     p_run.add_argument('--session', default=None,
                        help='Session name (for --job session)')
@@ -576,7 +578,7 @@ def main():
 
     # all (sync + submit + poll + retrieve)
     p_all = subparsers.add_parser('all', help='Sync + submit + poll + retrieve')
-    p_all.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions'],
+    p_all.add_argument('--job', choices=['discovery', 'session', 'corpus', 'all_sessions', 'synthetic', 'semisynthetic'],
                        default=DEFAULT_JOB, help='Job type')
     p_all.add_argument('--session', default=None)
     p_all.add_argument('--output', default='results/cluster_discovery')

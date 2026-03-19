@@ -125,10 +125,15 @@ def plot_coupling_timecourse(result, save_path=None, figsize=(16, 10), dpi=150,
                     feat_dr2_clean = np.nan_to_num(feat_dr2, nan=0.0)
                     if smooth_window and smooth_window > 0:
                         feat_dr2_clean = np.convolve(feat_dr2_clean, kern, mode='same')
-                    # Feature lines: bold where pathway is significant, faded elsewhere
+                    # Use per-feature p-values if available, else pathway-level
                     c = cmap(rank / 5)
-                    feat_sig = np.where(pvalues < 0.05, feat_dr2_clean, np.nan)
-                    feat_nonsig = np.where(pvalues >= 0.05, feat_dr2_clean, np.nan)
+                    feat_pv = pvalues
+                    if (hasattr(result, 'pathway_feature_pvalues')
+                            and key in result.pathway_feature_pvalues
+                            and feat_idx in result.pathway_feature_pvalues[key]):
+                        feat_pv = result.pathway_feature_pvalues[key][feat_idx]
+                    feat_sig = np.where(feat_pv < 0.05, feat_dr2_clean, np.nan)
+                    feat_nonsig = np.where(feat_pv >= 0.05, feat_dr2_clean, np.nan)
                     ax.plot(pw_times, feat_nonsig, color=c,
                             linewidth=0.4, alpha=0.2)
                     ax.plot(pw_times, feat_sig, color=c,

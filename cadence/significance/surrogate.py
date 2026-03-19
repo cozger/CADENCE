@@ -114,7 +114,9 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
                                    n_source_cols, dr2_real,
                                    n_surrogates=20, min_shift_frac=0.1,
                                    seed=42, smooth_samples=0,
-                                   surrogate_method='circular_shift'):
+                                   surrogate_method='circular_shift',
+                                   n_basis=0, selected=None,
+                                   feat_dr2_real=None):
     """Per-timepoint p-values by circular-shifting source columns of X_augmented.
 
     Shifts only the first n_source_cols columns (basis-convolved source).
@@ -123,6 +125,10 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
 
     Both real and surrogate dR2 are smoothed identically before computing
     p-values, which reduces null variance and prevents sensitivity loss.
+
+    Optionally computes per-feature p-values when n_basis, selected, and
+    feat_dr2_real are provided. Uses beta energy decomposition from the
+    surrogate EWLS solve (beta_full already computed, zero extra EWLS cost).
 
     Args:
         solver: EWLSSolver instance.
@@ -137,19 +143,24 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
         min_shift_frac: Minimum shift as fraction of T.
         seed: Random seed.
         smooth_samples: If > 0, apply uniform smoothing before p-value computation.
-        surrogate_method: 'circular_shift' or 'fourier_phase'. Fourier phase
-            randomization destroys phase structure while preserving power spectrum,
-            providing a stronger null for autocorrelated features (e.g., delta-band
-            interbrain PLV).
+        surrogate_method: 'circular_shift' or 'fourier_phase'.
+        n_basis: Number of basis functions per feature (for per-feature decomposition).
+        selected: List of selected feature indices (for per-feature decomposition).
+        feat_dr2_real: Dict {feat_idx: (T,) dr2} from real solve.
 
     Returns:
         p_values: (T_eval,) per-timepoint p-values.
         dr2_surrogates: (n_surrogates, T_eval) surrogate dR2 timecourses.
+        feat_pvalues: Dict {feat_idx: (T,) pvalues} or None if not computing.
     """
     device = X_augmented.device
     T_eval = X_augmented.shape[0]
     p_total = X_augmented.shape[1]
     p_ar = X_restricted.shape[1]
+
+    # Per-feature p-value computation enabled?
+    compute_feat = (n_basis > 0 and selected is not None
+                    and feat_dr2_real is not None and len(selected) > 1)
 
     # Identify which columns are what
     # Layout: [source_basis(n_source_cols) | augmented | AR(p_ar)]
@@ -195,6 +206,11 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
 
     dr2_surrogates = np.zeros((n_surrogates, T_eval))
 
+    # Per-feature surrogate dR2 accumulator
+    if compute_feat:
+        feat_dr2_surr = {fi: np.zeros((n_surrogates, T_eval))
+                         for fi in selected}
+
     batch_size = min(10, n_surrogates)
     for batch_start in range(0, n_surrogates, batch_size):
         batch_end = min(batch_start + batch_size, n_surrogates)
@@ -218,9 +234,21 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
             parts.append(X_restricted)
             X_surr_full = torch.cat(parts, dim=1)
 
-            dr2_surr, _, _, _, _ = solver.solve_restricted(
+            dr2_surr, _, _, beta_surr, _ = solver.solve_restricted(
                 X_surr_full, X_restricted, y, valid)
-            dr2_surrogates[batch_start + k] = dr2_surr.cpu().numpy()
+            surr_idx = batch_start + k
+            dr2_surr_np = dr2_surr.cpu().numpy()
+            dr2_surrogates[surr_idx] = dr2_surr_np
+
+            # Per-feature energy decomposition from surrogate beta
+            if compute_feat and beta_surr is not None:
+                beta_src = beta_surr[:, :n_source_cols, :]  # (T, n_src_cols, C)
+                total_e = (beta_src ** 2).sum(dim=(1, 2)).cpu().numpy()
+                for i, fi in enumerate(selected):
+                    cs = i * n_basis
+                    ce = cs + n_basis
+                    fe = (beta_src[:, cs:ce, :] ** 2).sum(dim=(1, 2)).cpu().numpy()
+                    feat_dr2_surr[fi][surr_idx] = dr2_surr_np * (fe / (total_e + 1e-20))
 
         del shifted
         torch.cuda.empty_cache()
@@ -241,4 +269,23 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
     p_values = np.mean(dr2_surr_s >= dr2_real_s[None, :], axis=0)
     p_values = np.maximum(p_values, 1.0 / (n_surrogates + 1))
 
-    return p_values, dr2_surrogates
+    # Per-feature p-values
+    feat_pvalues = None
+    if compute_feat:
+        if smooth_samples <= 1:
+            from scipy.ndimage import uniform_filter1d
+        feat_pvalues = {}
+        for fi in selected:
+            real_f = feat_dr2_real[fi]
+            surr_f = feat_dr2_surr[fi]
+            if smooth_samples > 1:
+                real_f = uniform_filter1d(real_f, smooth_samples, mode='nearest')
+                surr_f = np.array([
+                    uniform_filter1d(surr_f[j], smooth_samples, mode='nearest')
+                    for j in range(n_surrogates)
+                ])
+            fp = np.mean(surr_f >= real_f[None, :], axis=0)
+            fp = np.maximum(fp, 1.0 / (n_surrogates + 1))
+            feat_pvalues[fi] = fp
+
+    return p_values, dr2_surrogates, feat_pvalues

@@ -26,7 +26,7 @@ import numpy as np
 from cadence.config import load_config
 from cadence.synthetic import build_synthetic_session_v2
 from cadence.coupling.estimator import CouplingEstimator
-from cadence.constants import MOD_SHORT_V2, MODALITY_ORDER_V2
+from cadence.constants import MOD_SHORT_V2, MODALITY_ORDER_V2, SYNTH_MODALITY_CONFIG_V2
 
 
 # ---------------------------------------------------------------------------
@@ -34,35 +34,33 @@ from cadence.constants import MOD_SHORT_V2, MODALITY_ORDER_V2
 # ---------------------------------------------------------------------------
 SYNTHETIC_TESTS_V2 = [
     ('A_eeg_only',
-     {'eeg_wavelet': 0.7, 'ecg_features_v2': 0.0,
-      'blendshapes_v2': 0.0, 'pose_features': 0.0},
+     {'eeg_wavelet': 0.7, 'blendshapes_v2': 0.0, 'pose_features': 0.0},
      None, ['eeg_wavelet']),
 
     ('B_bl_only',
-     {'eeg_wavelet': 0.0, 'ecg_features_v2': 0.0,
-      'blendshapes_v2': 0.7, 'pose_features': 0.0},
+     {'eeg_wavelet': 0.0, 'blendshapes_v2': 0.7, 'pose_features': 0.0},
      0.3, ['blendshapes_v2']),
 
-    ('C_ecg_only',
-     {'eeg_wavelet': 0.0, 'ecg_features_v2': 0.7,
-      'blendshapes_v2': 0.0, 'pose_features': 0.0},
-     None, ['ecg_features_v2']),
-
-    ('D_pose_only',
-     {'eeg_wavelet': 0.0, 'ecg_features_v2': 0.0,
-      'blendshapes_v2': 0.0, 'pose_features': 0.7},
+    ('C_pose_only',
+     {'eeg_wavelet': 0.0, 'blendshapes_v2': 0.0, 'pose_features': 0.7},
      0.3, ['pose_features']),
 
-    ('E_eeg_bl',
-     {'eeg_wavelet': 0.7, 'ecg_features_v2': 0.0,
-      'blendshapes_v2': 0.7, 'pose_features': 0.0},
+    ('D_eeg_bl',
+     {'eeg_wavelet': 0.7, 'blendshapes_v2': 0.7, 'pose_features': 0.0},
      0.3, ['eeg_wavelet', 'blendshapes_v2']),
 
-    ('F_null',
-     {'eeg_wavelet': 0.0, 'ecg_features_v2': 0.0,
-      'blendshapes_v2': 0.0, 'pose_features': 0.0},
+    ('E_null',
+     {'eeg_wavelet': 0.0, 'blendshapes_v2': 0.0, 'pose_features': 0.0},
      None, []),
 ]
+
+def _gen_one_session(args):
+    """Worker: generate one synthetic session (top-level for pickling)."""
+    test_name, kappa_dict, duty_override, duration = args
+    session = build_synthetic_session_v2(
+        duration, kappa_dict, seed=42, duty_cycle_override=duty_override)
+    return test_name, session
+
 
 def main():
     parser = argparse.ArgumentParser(description='CADENCE synthetic validation')
@@ -71,6 +69,8 @@ def main():
     parser.add_argument('--duration', type=int, default=600, help='Session duration (seconds)')
     parser.add_argument('--output', default='results/cadence_synthetic_v2',
                         help='Output directory')
+    parser.add_argument('--tests', default=None,
+                        help='Comma-separated test prefixes to run (e.g. A,B,C)')
     args = parser.parse_args()
 
     if args.config is None:
@@ -83,7 +83,16 @@ def main():
     if args.device:
         config['device'] = args.device
 
+    # Disable ECG moderation for synthetic tests — synthetic ECG is random
+    # Lorenz noise with no relationship to coupling, so moderation columns
+    # add pure noise that dilutes the signal.
+    config['stage2']['moderation']['enabled'] = False
+
     tests = SYNTHETIC_TESTS_V2
+    if args.tests:
+        prefixes = [p.strip() for p in args.tests.split(',')]
+        tests = [t for t in tests
+                 if any(t[0].startswith(p) for p in prefixes)]
     build_fn = build_synthetic_session_v2
     mod_order = MODALITY_ORDER_V2
     mod_short = MOD_SHORT_V2
@@ -93,9 +102,23 @@ def main():
 
     print(f"Duration: {args.duration}s", flush=True)
     print(f"Output:   {output_dir}", flush=True)
-    print(f"Modalities: {mod_order}", flush=True)
+    synth_mods = list(SYNTH_MODALITY_CONFIG_V2.keys())
+    print(f"Modalities: {synth_mods}", flush=True)
 
     estimator = CouplingEstimator(config)
+
+    # Pre-generate all sessions in parallel (CPU-bound Lorenz integration)
+    import multiprocessing as mp
+    gen_args = [(name, kd, do, args.duration) for name, kd, do, _ in tests]
+    n_workers = min(len(tests), os.cpu_count() or 1)
+    print(f"Generating {len(tests)} sessions in parallel ({n_workers} workers)...",
+          flush=True)
+    t0_gen = time.time()
+    ctx = mp.get_context('spawn')
+    with ctx.Pool(n_workers) as pool:
+        gen_results = pool.map(_gen_one_session, gen_args)
+    sessions = {name: sess for name, sess in gen_results}
+    print(f"All sessions generated in {time.time()-t0_gen:.1f}s", flush=True)
 
     results_all = []
     n_passed = 0
@@ -109,12 +132,7 @@ def main():
             print(f"  Duty cycle override: {duty_override}", flush=True)
         print(f"{'='*60}", flush=True)
 
-        # Generate synthetic session
-        t0 = time.time()
-        session = build_fn(
-            args.duration, kappa_dict, seed=42,
-            duty_cycle_override=duty_override)
-        print(f"  Generated {args.duration}s session in {time.time()-t0:.1f}s", flush=True)
+        session = sessions[test_name]
 
         # Analyze (p1->p2 only, since coupling is p1->p2)
         t0 = time.time()

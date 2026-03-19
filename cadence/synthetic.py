@@ -2,6 +2,9 @@
 
 Self-contained -- only depends on numpy/scipy, plus cadence.data.preprocessors
 for activity channel computation.
+
+Also provides semi-synthetic session generation: real features from cross-dyad
+pairs with injected coupling for honest validation with AUC sweeps.
 """
 
 import numpy as np
@@ -9,6 +12,7 @@ import numpy as np
 from cadence.constants import (
     SYNTH_MODALITY_CONFIG, COUPLING_PROFILES,
     SYNTH_MODALITY_CONFIG_V2, COUPLING_PROFILES_V2,
+    MODALITY_ORDER_V2, MODALITY_SPECS_V2,
 )
 
 
@@ -53,6 +57,85 @@ def integrate_lorenz(duration, output_hz=2.0, dt=0.005, transient=50.0, seed=42)
     out = np.array(out)
     skip = int(transient * output_hz)
     return out[skip:]
+
+
+def _integrate_lorenz_batch(n_systems, duration, output_hz, dt=0.005,
+                             transient=50.0, seed=42):
+    """Integrate multiple independent Lorenz systems in parallel.
+
+    Vectorized over n_systems using numpy — one Python loop for all systems
+    instead of n_systems sequential loops.  ~50x faster for n_systems=54.
+
+    Returns:
+        (n_samples, n_systems * 3) array of concatenated states.
+    """
+    rng = np.random.default_rng(seed)
+    sigma, rho, beta = 10.0, 28.0, 8.0 / 3.0
+    total_time = duration + transient
+    n_steps = int(total_time / dt)
+    output_every = max(1, int(1.0 / (output_hz * dt)))
+
+    # (n_systems, 3) initial states with unique perturbations
+    s = np.ones((n_systems, 3)) + rng.normal(0, 0.1, (n_systems, 3))
+    out = []
+
+    def _deriv(s):
+        x, y, z = s[:, 0], s[:, 1], s[:, 2]
+        return np.column_stack([sigma * (y - x),
+                                x * (rho - z) - y,
+                                x * y - beta * z])
+
+    for i in range(n_steps):
+        k1 = _deriv(s)
+        k2 = _deriv(s + 0.5 * dt * k1)
+        k3 = _deriv(s + 0.5 * dt * k2)
+        k4 = _deriv(s + dt * k3)
+        s = s + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        if i % output_every == 0:
+            out.append(s.reshape(-1).copy())  # flatten to (n_systems*3,)
+
+    out = np.array(out)  # (n_output, n_systems*3)
+    skip = int(transient * output_hz)
+    return out[skip:]
+
+
+def multi_lorenz_features(duration, n_channels, hz, seed):
+    """Generate full-rank features from multiple independent Lorenz systems.
+
+    Uses ceil(n_channels / 3) independent Lorenz systems integrated in
+    parallel (vectorized numpy), then projects concatenated states to
+    n_channels via a random matrix.
+
+    Result has rank ≈ n_channels with realistic chaotic autocorrelation.
+    This is the honest null model: structured temporal dynamics without
+    the rank-6 pathology of single-Lorenz or the trivially easy i.i.d. noise.
+
+    Args:
+        duration: Session length in seconds.
+        n_channels: Number of output feature channels.
+        hz: Output sampling rate.
+        seed: Base random seed.
+
+    Returns:
+        (features, n_samples) where features is (n_samples, n_channels).
+    """
+    n_systems = max(1, -(-n_channels // 3))  # ceil(n_ch / 3)
+
+    combined = _integrate_lorenz_batch(
+        n_systems, duration, output_hz=hz, seed=seed)
+    n_samples = combined.shape[0]
+
+    # Random projection to n_channels
+    rng = np.random.default_rng(seed + 5000)
+    n_states = combined.shape[1]
+    W = rng.standard_normal((n_states, n_channels)).astype(np.float32)
+    W /= np.sqrt(n_states)
+
+    features = (combined @ W).astype(np.float32)
+
+    mu = features.mean(axis=0, keepdims=True)
+    sd = features.std(axis=0, keepdims=True) + 1e-8
+    return np.clip((features - mu) / sd, -10, 10), n_samples
 
 
 def lorenz_to_features(states, n_channels, seed=0):
@@ -561,15 +644,53 @@ def build_synthetic_session_v2(duration, kappa_dict, seed=42,
         lag_samples = int(lag_s * hz)
         kappa = kappa_dict.get(mod, 0.0)
 
+        # --- Special case: EEG wavelet with coupling ---
+        # Lorenz features live in a rank-6 subspace (3 states × random projection),
+        # catastrophically violating group lasso's assumption of approximately
+        # full-rank features. Use realistic sinusoidal EEG → wavelet CWT instead.
+        if mod == 'eeg_wavelet' and kappa > 0:
+            from cadence.data.wavelet_features import extract_wavelet_features
+
+            wav_session = build_synthetic_wavelet_session(
+                duration, coupling_freq=6.5, coupling_roi='frontal',
+                coupling_lag_s=lag_s, kappa=kappa,
+                seed=seed + mod_idx * 100 + 3000)
+
+            ts_256 = wav_session['p1_eeg_ts']
+            gate_256 = wav_session['coupling_gates']['eeg_wavelet']
+
+            for p in ['p1', 'p2']:
+                raw_eeg = wav_session[f'{p}_eeg']
+                eeg_ts = wav_session[f'{p}_eeg_ts']
+                eeg_valid = wav_session[f'{p}_eeg_valid']
+
+                features, valid_out, t_out = extract_wavelet_features(
+                    raw_eeg, eeg_valid, eeg_ts, srate=256, output_hz=hz)
+
+                session[f'{p}_{mod}'] = features
+                session[f'{p}_{mod}_ts'] = t_out
+                session[f'{p}_{mod}_valid'] = valid_out
+
+            # Downsample coupling gate from 256 Hz to feature rate
+            feat_ts = session[f'p1_{mod}_ts']
+            gate_feat = np.interp(feat_ts, ts_256, gate_256)
+            session['coupling_gates'][mod] = gate_feat.astype(np.float32)
+            continue
+
         seed_p1 = seed + mod_idx * 100
         seed_p2 = seed + mod_idx * 100 + 1000
-        states_p1 = integrate_lorenz(duration, output_hz=hz, seed=seed_p1)
-        states_p2 = integrate_lorenz(duration, output_hz=hz, seed=seed_p2)
-        n_samples = min(len(states_p1), len(states_p2))
-        states_p1, states_p2 = states_p1[:n_samples], states_p2[:n_samples]
 
-        feat_p1 = lorenz_to_features(states_p1, base_ch, seed=seed_p1 + 50)
-        feat_p2_indep = lorenz_to_features(states_p2, base_ch, seed=seed_p2 + 50)
+        # Multi-Lorenz features: ceil(n_ch/3) independent Lorenz systems
+        # projected to n_channels → full rank with realistic autocorrelation.
+        # Used for BOTH coupled and uncoupled modalities — honest null model
+        # with structured temporal dynamics (not trivial i.i.d. noise).
+        feat_p1, n_p1 = multi_lorenz_features(
+            duration, base_ch, hz, seed_p1)
+        feat_p2_indep, n_p2 = multi_lorenz_features(
+            duration, base_ch, hz, seed_p2)
+        n_samples = min(n_p1, n_p2)
+        feat_p1 = feat_p1[:n_samples]
+        feat_p2_indep = feat_p2_indep[:n_samples]
 
         # Activity event generation — INDEPENDENT for each participant
         profile = COUPLING_PROFILES_V2[mod]
@@ -728,3 +849,570 @@ def plan_corpus_v2(n_coupled=50, n_null=20, base_seed=7000):
         ))
 
     return specs
+
+
+# =========================================================================
+# Semi-synthetic validation: real features from cross-dyad pairs
+# =========================================================================
+
+def _bin_validity(ts, valid, n_seconds):
+    """Bin a validity mask into per-second fractions (vectorized)."""
+    sec_valid = np.zeros(n_seconds, dtype=np.float32)
+    sec_count = np.zeros(n_seconds, dtype=np.float32)
+    sec_idx = np.clip(ts.astype(int), 0, n_seconds - 1)
+    np.add.at(sec_count, sec_idx, 1)
+    np.add.at(sec_valid, sec_idx, valid.astype(np.float32))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.where(sec_count > 0, sec_valid / sec_count, 0.0)
+
+
+# Default: only require the coupling target modalities
+_DEFAULT_REQUIRED_MODS = ['eeg_wavelet', 'blendshapes_v2', 'pose_features']
+
+
+def find_valid_window(session, min_duration=1800, min_valid_frac=0.80,
+                       required_mods=None, verbose=False):
+    """Find the best continuous window where required modalities have valid data.
+
+    Only checks the modalities listed in required_mods (default: the three
+    coupling targets).  ECG and interbrain are NOT required — they're not
+    coupling targets and often have gaps in real sessions.
+
+    Args:
+        session: Session dict with V2 modality data.
+        min_duration: Minimum window length in seconds.
+        min_valid_frac: Minimum fraction of valid samples per modality.
+        required_mods: List of modality names to check.  Defaults to
+            eeg_wavelet, blendshapes_v2, pose_features.
+        verbose: If True, print per-modality diagnostics.
+
+    Returns:
+        (t_start, t_end) in seconds, or None if no valid window found.
+    """
+    if required_mods is None:
+        required_mods = _DEFAULT_REQUIRED_MODS
+
+    duration = session.get('duration', 0)
+    if duration < min_duration:
+        if verbose:
+            print(f"    Duration {duration:.0f}s < {min_duration}s", flush=True)
+        return None
+
+    n_seconds = int(duration)
+    # Track per-modality validity for diagnostics
+    mod_validity = []   # (label, frac_array) pairs
+    mod_labels = []
+
+    for mod in required_mods:
+        for p in ['p1', 'p2']:
+            ts_key = f'{p}_{mod}_ts'
+            valid_key = f'{p}_{mod}_valid'
+            if ts_key not in session:
+                if verbose:
+                    print(f"    {p}_{mod}: MISSING", flush=True)
+                continue
+            ts = session[ts_key]
+            valid = session.get(valid_key, np.ones(len(ts), dtype=bool))
+            if valid.ndim > 1:
+                valid = valid.all(axis=1)
+
+            frac = _bin_validity(ts, valid, n_seconds)
+            mod_validity.append(frac)
+            label = f'{p}_{mod}'
+            mod_labels.append(label)
+
+            if verbose:
+                mean_frac = frac[frac > 0].mean() if (frac > 0).any() else 0
+                n_good = np.sum(frac >= min_valid_frac)
+                print(f"    {label}: mean_valid={mean_frac:.2f}, "
+                      f"{n_good}/{n_seconds}s above {min_valid_frac}",
+                      flush=True)
+
+    if not mod_validity:
+        if verbose:
+            print("    No required modalities found", flush=True)
+        return None
+
+    # Per-second: all required modalities above threshold
+    all_valid = np.ones(n_seconds, dtype=bool)
+    for frac in mod_validity:
+        all_valid &= (frac >= min_valid_frac)
+
+    # Find longest contiguous valid run >= min_duration
+    diff = np.diff(all_valid.astype(np.int8), prepend=0, append=0)
+    starts = np.where(diff == 1)[0]
+    ends = np.where(diff == -1)[0]
+
+    best_start, best_end = None, None
+    best_len = 0
+    for s, e in zip(starts, ends):
+        run_len = e - s
+        if run_len >= min_duration and run_len > best_len:
+            best_start, best_end = s, e
+            best_len = run_len
+
+    if best_start is None:
+        if verbose:
+            total_good = int(all_valid.sum())
+            # Find the bottleneck modality
+            bottleneck = None
+            bottleneck_good = n_seconds
+            for label, frac in zip(mod_labels, mod_validity):
+                n_good = int(np.sum(frac >= min_valid_frac))
+                if n_good < bottleneck_good:
+                    bottleneck_good = n_good
+                    bottleneck = label
+            print(f"    No {min_duration}s window "
+                  f"(max overlap={total_good}s, "
+                  f"bottleneck={bottleneck} "
+                  f"with {bottleneck_good}s valid)", flush=True)
+        return None
+
+    t_end = min(best_start + min_duration, best_end)
+    return (float(best_start), float(t_end))
+
+
+def _resample_2d(data, ts_src, ts_dst):
+    """Vectorized resample of (N_src, C) array onto ts_dst grid.
+
+    Uses fractional index interpolation: compute where each dst timestamp
+    falls in the src grid, then do weighted average of the two bracketing
+    samples.  Pure numpy, no Python loop over channels.
+
+    Args:
+        data: (N_src, C) float32 array.
+        ts_src: (N_src,) monotonically increasing timestamps.
+        ts_dst: (N_dst,) target timestamps.
+
+    Returns:
+        (N_dst, C) float32 array.
+    """
+    n_src = len(ts_src)
+    # Compute fractional indices into ts_src for each ts_dst value
+    idx_float = np.interp(ts_dst, ts_src,
+                           np.arange(n_src, dtype=np.float64))
+    idx_lo = np.clip(idx_float.astype(np.intp), 0, n_src - 2)
+    idx_hi = idx_lo + 1
+    frac = (idx_float - idx_lo).astype(np.float32)[:, None]  # (N_dst, 1)
+    return ((1 - frac) * data[idx_lo] + frac * data[idx_hi]).astype(np.float32)
+
+
+def build_semisynthetic_base(session_a, session_b, t_start, t_end):
+    """Build a null (kappa=0) base session with interbrain pre-computed.
+
+    Slices all V2 modalities from the same time window, resamples P2 onto
+    P1's time grid, and computes interbrain from cross-dyad EEG (GPU CWT).
+
+    This is expensive (interbrain CWT) so should be called once per pair.
+    Use inject_coupling_modality() to cheaply create coupled variants.
+
+    Args:
+        session_a: Real session (P1 features from here).
+        session_b: Real session (P2 features from here).
+        t_start, t_end: Time window in seconds.
+
+    Returns:
+        Session dict with all modalities at kappa=0 and interbrain computed.
+    """
+    kappa_dict = {mod: 0.0 for mod in MODALITY_ORDER_V2}
+    session = {
+        'duration': float(t_end - t_start),
+        'p1_role': 'therapist',
+        'p2_role': 'patient',
+        'role_mapping': {'therapist': 'p1', 'patient': 'p2'},
+        'coupling_gates': {},
+        'kappa_dict': kappa_dict,
+    }
+
+    for mod in MODALITY_ORDER_V2:
+        p1_data_key = f'p1_{mod}'
+        p2_data_key = f'p2_{mod}'
+
+        if p1_data_key not in session_a or p2_data_key not in session_b:
+            continue
+
+        p1_ts = session_a[f'p1_{mod}_ts']
+        p2_ts = session_b[f'p2_{mod}_ts']
+
+        p1_mask = (p1_ts >= t_start) & (p1_ts < t_end)
+        p2_mask = (p2_ts >= t_start) & (p2_ts < t_end)
+
+        feat_p1 = session_a[p1_data_key][p1_mask].copy()
+        feat_p2 = session_b[p2_data_key][p2_mask].copy()
+        ts_p1 = p1_ts[p1_mask] - t_start
+        ts_p2 = p2_ts[p2_mask] - t_start
+
+        p1_valid_full = session_a.get(
+            f'p1_{mod}_valid',
+            np.ones(len(session_a[p1_data_key]), dtype=bool))
+        p2_valid_full = session_b.get(
+            f'p2_{mod}_valid',
+            np.ones(len(session_b[p2_data_key]), dtype=bool))
+        valid_p1 = p1_valid_full[p1_mask].copy()
+        valid_p2 = p2_valid_full[p2_mask].copy()
+
+        # Resample P2 to match P1's time grid if lengths differ
+        n_samples = len(feat_p1)
+        if len(feat_p2) != n_samples and len(ts_p2) >= 2:
+            if feat_p2.ndim > 1:
+                feat_p2 = _resample_2d(feat_p2, ts_p2, ts_p1)
+            else:
+                feat_p2 = np.interp(
+                    ts_p1, ts_p2, feat_p2).astype(np.float32)
+            idx = np.clip(
+                np.searchsorted(ts_p2, ts_p1), 0, len(valid_p2) - 1)
+            valid_p2 = valid_p2[idx]
+            ts_p2 = ts_p1.copy()
+
+        session[f'p1_{mod}'] = feat_p1.astype(np.float32)
+        session[f'p1_{mod}_ts'] = ts_p1
+        session[f'p1_{mod}_valid'] = valid_p1
+        session[f'p2_{mod}'] = feat_p2.astype(np.float32)
+        session[f'p2_{mod}_ts'] = ts_p2
+        session[f'p2_{mod}_valid'] = valid_p2
+
+    # Copy PCA loadings
+    for p in ['p1', 'p2']:
+        src_session = session_a if p == 'p1' else session_b
+        loadings_key = f'{p}_blendshapes_v2_pca_loadings'
+        if loadings_key in src_session:
+            session[loadings_key] = src_session[loadings_key]
+
+    # Interbrain: compute ONCE from cross-dyad EEG (expensive GPU CWT)
+    p1_eeg_key = 'p1_eeg'
+    p2_eeg_key = 'p2_eeg'
+    if p1_eeg_key in session_a and p2_eeg_key in session_b:
+        p1_eeg_ts = session_a[f'{p1_eeg_key}_ts']
+        p2_eeg_ts = session_b[f'{p2_eeg_key}_ts']
+
+        p1_mask = (p1_eeg_ts >= t_start) & (p1_eeg_ts < t_end)
+        p2_mask = (p2_eeg_ts >= t_start) & (p2_eeg_ts < t_end)
+
+        eeg_p1 = session_a[p1_eeg_key][p1_mask]
+        eeg_p2 = session_b[p2_eeg_key][p2_mask]
+        eeg_ts_p1 = p1_eeg_ts[p1_mask] - t_start
+        eeg_ts_p2 = p2_eeg_ts[p2_mask] - t_start
+
+        eeg_valid_p1 = session_a.get(
+            f'{p1_eeg_key}_valid',
+            np.ones_like(eeg_p1, dtype=bool))
+        eeg_valid_p2 = session_b.get(
+            f'{p2_eeg_key}_valid',
+            np.ones_like(eeg_p2, dtype=bool))
+        if eeg_valid_p1.shape[0] == len(session_a[p1_eeg_key]):
+            eeg_valid_p1 = eeg_valid_p1[p1_mask]
+        if eeg_valid_p2.shape[0] == len(session_b[p2_eeg_key]):
+            eeg_valid_p2 = eeg_valid_p2[p2_mask]
+
+        try:
+            from cadence.data.interbrain_features import (
+                extract_interbrain_features,
+            )
+            ib_feats, ib_valid, ib_ts = extract_interbrain_features(
+                eeg_p1, eeg_p2, eeg_valid_p1, eeg_valid_p2,
+                eeg_ts_p1, eeg_ts_p2)
+            session['eeg_interbrain'] = ib_feats
+            session['eeg_interbrain_ts'] = ib_ts
+            session['eeg_interbrain_valid'] = ib_valid
+        except Exception as e:
+            print(f"  Warning: interbrain computation failed: {e}",
+                  flush=True)
+
+    return session
+
+
+def _get_coupled_indices(mod):
+    """Return channel indices for sparse coupling injection.
+
+    Aligned with the pre-grouping structure so coupled channels
+    concentrate signal within discovery groups rather than spreading
+    it across all groups.
+
+    EEG wavelet: theta-alpha band (freq indices 5-9, ~4-12 Hz),
+      frontal + posterior ROIs, both real and imaginary components.
+      → 20 channels concentrated in 4 pre-group clusters.
+
+    Blendshapes v2: first 4 PCA components.  Derivatives are NOT
+      in this list — they are recomputed from coupled PCA after
+      injection (chain rule: d(coupled)/dt carries coupling too).
+
+    Pose: head (0-2) + torso (18-19) = 2 body segments, so
+      discovery's intersection test can find ≥2 independent groups.
+    """
+    if mod == 'eeg_wavelet':
+        from cadence.constants import (
+            EEG_WAVELET_N_FREQS, EEG_WAVELET_N_ROIS,
+        )
+        n_freq = EEG_WAVELET_N_FREQS   # 20
+        n_roi = EEG_WAVELET_N_ROIS     # 4
+        indices = []
+        for comp in range(2):           # real, imag
+            for freq in range(5, 10):   # ~4-12 Hz theta-alpha
+                for roi in [0, 3]:      # frontal, posterior
+                    col = comp * (n_freq * n_roi) + freq * n_roi + roi
+                    indices.append(col)
+        return indices  # 20 channels (12.5%)
+
+    elif mod == 'blendshapes_v2':
+        return list(range(4))  # PCA 0-3; derivatives recomputed after
+
+    elif mod == 'pose_features':
+        return [0, 1, 2, 18, 19]  # head (0-2) + torso (18-19)
+
+    else:
+        from cadence.constants import SYNTH_MODALITY_CONFIG_V2
+        cfg = SYNTH_MODALITY_CONFIG_V2.get(mod, {})
+        n = cfg.get('n_coupled', 5)
+        n_ch = MODALITY_SPECS_V2.get(mod, (n, 1))[0]
+        return list(range(min(n, n_ch)))
+
+
+def _recompute_bl_derivatives(feat_p2, hz):
+    """Recompute blendshape derivative channels from (possibly coupled) PCA.
+
+    In real coupling, d(coupled_PCA)/dt also shows coupling (chain rule).
+    This ensures derivative channels carry the coupling signal too,
+    matching the pre-grouping structure that pairs PCA_i with PCA_i_dt.
+    """
+    from cadence.data.preprocessors import _compute_temporal_derivatives
+    n_pca = 15
+    pca_part = feat_p2[:, :n_pca]
+    deriv = _compute_temporal_derivatives(pca_part, hz, sigma_s=0.5)
+    mu_d = deriv.mean(axis=0, keepdims=True)
+    sd_d = deriv.std(axis=0, keepdims=True) + 1e-8
+    feat_p2[:, n_pca:2 * n_pca] = np.clip(
+        (deriv - mu_d) / sd_d, -10, 10).astype(np.float32)
+
+
+def inject_coupling_modality(base_session, target_mod, kappa,
+                              lag_s=2.0, seed=42):
+    """Create a coupled session from a pre-built base (fast, CPU-only).
+
+    Shallow-copies the base session and replaces only the target modality's
+    P2 data with a coupled version.  Coupling is injected into channels
+    selected by _get_coupled_indices() to align with the pre-grouping
+    structure of the doubly-sparse discovery pipeline.
+
+    For blendshapes, derivatives are recomputed from the coupled PCA so
+    both PCA and derivative clusters carry the coupling signal.
+
+    Args:
+        base_session: Session dict from build_semisynthetic_base().
+        target_mod: V2 modality name to inject coupling into.
+        kappa: Coupling strength (0 returns base unmodified).
+        lag_s: Coupling lag in seconds.
+        seed: Random seed for coupling gate.
+
+    Returns:
+        Session dict ready for analyze_session().
+    """
+    if kappa <= 0:
+        session = dict(base_session)
+        kappa_dict = {mod: 0.0 for mod in MODALITY_ORDER_V2}
+        session['kappa_dict'] = kappa_dict
+        session['coupling_gates'] = {}
+        return session
+
+    session = dict(base_session)
+    kappa_dict = {mod: 0.0 for mod in MODALITY_ORDER_V2}
+    kappa_dict[target_mod] = kappa
+    session['kappa_dict'] = kappa_dict
+    session['coupling_gates'] = {}
+
+    p1_key = f'p1_{target_mod}'
+    p2_key = f'p2_{target_mod}'
+    if p1_key not in session or p2_key not in session:
+        return session
+
+    feat_p1 = session[p1_key]
+    feat_p2_orig = session[p2_key]
+    n_samples = len(feat_p1)
+
+    mod_idx = MODALITY_ORDER_V2.index(target_mod)
+    hz = MODALITY_SPECS_V2[target_mod][1]
+    lag_samples = int(lag_s * hz)
+    profile = COUPLING_PROFILES_V2[target_mod]
+
+    coupled_idx = _get_coupled_indices(target_mod)
+
+    gate = generate_coupling_gate(
+        n_samples, hz, profile,
+        seed=seed + mod_idx * 100 + 5000)
+    session['coupling_gates'][target_mod] = gate
+
+    alpha_t = kappa * gate
+    p1_lagged = np.roll(feat_p1, lag_samples, axis=0)
+    p1_lagged[:lag_samples] = 0
+
+    a = alpha_t[:, None]
+    noise_scale = np.sqrt(np.maximum(1 - a**2, 0.0))
+    feat_p2 = feat_p2_orig.copy()
+    feat_p2[lag_samples:, coupled_idx] = (
+        a[lag_samples:] * p1_lagged[lag_samples:, coupled_idx]
+        + noise_scale[lag_samples:]
+        * feat_p2_orig[lag_samples:, coupled_idx])
+
+    # Blendshapes: recompute derivatives from coupled PCA (chain rule)
+    if target_mod == 'blendshapes_v2':
+        _recompute_bl_derivatives(feat_p2, hz)
+
+    # Re-normalize
+    mu = feat_p2.mean(axis=0, keepdims=True)
+    sd = feat_p2.std(axis=0, keepdims=True) + 1e-8
+    session[p2_key] = np.clip(
+        (feat_p2 - mu) / sd, -10, 10).astype(np.float32)
+
+    return session
+
+
+def inject_coupling_all(base_session, kappa, lag_s=2.0, seed=42):
+    """Inject coupling into ALL target modalities at the same kappa.
+
+    Like inject_coupling_modality but injects into eeg_wavelet,
+    blendshapes_v2, and pose_features simultaneously.  ECG is left
+    uncoupled (too slow for 5s max lag).
+
+    Args:
+        base_session: Session dict from build_semisynthetic_base().
+        kappa: Coupling strength.
+        lag_s: Coupling lag.
+        seed: Random seed.
+
+    Returns:
+        Session dict with coupling in all target modalities.
+    """
+    target_mods = ['eeg_wavelet', 'blendshapes_v2', 'pose_features']
+
+    if kappa <= 0:
+        session = dict(base_session)
+        session['kappa_dict'] = {mod: 0.0 for mod in MODALITY_ORDER_V2}
+        session['coupling_gates'] = {}
+        return session
+
+    session = dict(base_session)
+    kappa_dict = {mod: 0.0 for mod in MODALITY_ORDER_V2}
+    session['coupling_gates'] = {}
+
+    for target_mod in target_mods:
+        kappa_dict[target_mod] = kappa
+        p1_key = f'p1_{target_mod}'
+        p2_key = f'p2_{target_mod}'
+        if p1_key not in session or p2_key not in session:
+            continue
+
+        feat_p1 = session[p1_key]
+        feat_p2_orig = base_session[p2_key]
+        n_samples = len(feat_p1)
+
+        mod_idx = MODALITY_ORDER_V2.index(target_mod)
+        hz = MODALITY_SPECS_V2[target_mod][1]
+        lag_samples = int(lag_s * hz)
+        profile = COUPLING_PROFILES_V2[target_mod]
+
+        coupled_idx = _get_coupled_indices(target_mod)
+
+        gate = generate_coupling_gate(
+            n_samples, hz, profile,
+            seed=seed + mod_idx * 100 + 5000)
+        session['coupling_gates'][target_mod] = gate
+
+        alpha_t = kappa * gate
+        p1_lagged = np.roll(feat_p1, lag_samples, axis=0)
+        p1_lagged[:lag_samples] = 0
+
+        a = alpha_t[:, None]
+        noise_scale = np.sqrt(np.maximum(1 - a**2, 0.0))
+        feat_p2 = feat_p2_orig.copy()
+        feat_p2[lag_samples:, coupled_idx] = (
+            a[lag_samples:] * p1_lagged[lag_samples:, coupled_idx]
+            + noise_scale[lag_samples:]
+            * feat_p2_orig[lag_samples:, coupled_idx])
+
+        if target_mod == 'blendshapes_v2':
+            _recompute_bl_derivatives(feat_p2, hz)
+
+        mu = feat_p2.mean(axis=0, keepdims=True)
+        sd = feat_p2.std(axis=0, keepdims=True) + 1e-8
+        session[p2_key] = np.clip(
+            (feat_p2 - mu) / sd, -10, 10).astype(np.float32)
+
+    session['kappa_dict'] = kappa_dict
+    return session
+
+
+# Keep the old API as a convenience wrapper
+def build_semisynthetic_session(session_a, session_b,
+                                kappa_dict, t_start, t_end,
+                                lag_s=2.0, seed=42):
+    """Build session from cross-dyad features with injected coupling.
+
+    Convenience wrapper around build_semisynthetic_base() +
+    inject_coupling_modality().  For sweeps over kappa/modality, prefer
+    calling those two functions directly to avoid recomputing interbrain.
+
+    Args:
+        session_a: Real session (P1 features from here).
+        session_b: Real session (P2 features from here).
+        kappa_dict: {modality: kappa} -- 0 = uncoupled.
+        t_start, t_end: Time window in seconds.
+        lag_s: Coupling lag in seconds.
+        seed: Random seed for coupling gate.
+
+    Returns:
+        Session dict for CouplingEstimator.analyze_session().
+    """
+    base = build_semisynthetic_base(session_a, session_b, t_start, t_end)
+
+    coupled_mods = [m for m, k in kappa_dict.items() if k > 0]
+    if not coupled_mods:
+        return base
+
+    # Apply coupling for each modality
+    session = dict(base)
+    session['coupling_gates'] = {}
+    session['kappa_dict'] = dict(kappa_dict)
+
+    for target_mod in coupled_mods:
+        kappa = kappa_dict[target_mod]
+        mod_idx = MODALITY_ORDER_V2.index(target_mod) \
+            if target_mod in MODALITY_ORDER_V2 else 0
+        p1_key = f'p1_{target_mod}'
+        p2_key = f'p2_{target_mod}'
+        if p1_key not in session or p2_key not in session:
+            continue
+
+        feat_p1 = session[p1_key]
+        feat_p2_orig = base[p2_key]
+        n_samples = len(feat_p1)
+
+        hz = MODALITY_SPECS_V2[target_mod][1]
+        lag_samples = int(lag_s * hz)
+        profile = COUPLING_PROFILES_V2[target_mod]
+
+        coupled_idx = _get_coupled_indices(target_mod)
+
+        gate = generate_coupling_gate(
+            n_samples, hz, profile,
+            seed=seed + mod_idx * 100 + 5000)
+        session['coupling_gates'][target_mod] = gate
+
+        alpha_t = kappa * gate
+        p1_lagged = np.roll(feat_p1, lag_samples, axis=0)
+        p1_lagged[:lag_samples] = 0
+        a = alpha_t[:, None]
+        noise_scale = np.sqrt(np.maximum(1 - a**2, 0.0))
+        feat_p2 = feat_p2_orig.copy()
+        feat_p2[lag_samples:, coupled_idx] = (
+            a[lag_samples:] * p1_lagged[lag_samples:, coupled_idx]
+            + noise_scale[lag_samples:]
+            * feat_p2_orig[lag_samples:, coupled_idx])
+
+        if target_mod == 'blendshapes_v2':
+            _recompute_bl_derivatives(feat_p2, hz)
+
+        mu = feat_p2.mean(axis=0, keepdims=True)
+        sd = feat_p2.std(axis=0, keepdims=True) + 1e-8
+        session[p2_key] = np.clip(
+            (feat_p2 - mu) / sd, -10, 10).astype(np.float32)
+
+    return session

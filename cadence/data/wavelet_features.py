@@ -128,8 +128,10 @@ def extract_wavelet_features(eeg, eeg_valid, eeg_ts, srate=256, output_hz=5.0,
     features, valid_out = _align_to_output_grid(
         feat_real_dec, feat_imag_dec, valid_dec, ts_dec, t_out)
 
-    # Step 6: Z-score per session
-    features = _zscore_features(features, valid_out)
+    # Step 6: Clip only (no second z-scoring — input EEG is already z-scored,
+    # wavelet transform preserves relative scaling)
+    features = np.clip(features, -10, 10).astype(np.float32)
+    features[~valid_out] = 0.0
 
     return features, valid_out, t_out
 
@@ -200,12 +202,18 @@ def _morlet_wavelet_bank(center_freqs, srate, n_cycles=6):
         wavelets_imag: list of (L_k,) float32 arrays — imaginary parts
         wavelet_lengths: list of int — kernel lengths
     """
+    # Resolve n_cycles: [min, max] for linear scaling across frequencies, or scalar
+    if isinstance(n_cycles, (list, tuple)) and len(n_cycles) == 2:
+        n_cycles = np.linspace(n_cycles[0], n_cycles[1], len(center_freqs))
+    else:
+        n_cycles = np.full(len(center_freqs), float(n_cycles))
+
     wavelets_real = []
     wavelets_imag = []
     wavelet_lengths = []
 
-    for freq in center_freqs:
-        sigma = n_cycles / (2.0 * np.pi * freq)
+    for fi, freq in enumerate(center_freqs):
+        sigma = n_cycles[fi] / (2.0 * np.pi * freq)
         # Wavelet duration: +-4 sigma (captures >99.99% of energy)
         half_len = int(np.ceil(4.0 * sigma * srate))
         t = np.arange(-half_len, half_len + 1) / srate  # symmetric time vector

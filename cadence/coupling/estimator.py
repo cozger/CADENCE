@@ -85,6 +85,9 @@ class CouplingResult:
     # Per-feature dr2 decomposition: pathway -> {feat_idx: dr2_timecourse}
     pathway_feature_dr2: Dict[Tuple[str, str], Dict[int, np.ndarray]] = field(default_factory=dict)
 
+    # Per-feature per-timepoint p-values: pathway -> {feat_idx: (T,) pvalues}
+    pathway_feature_pvalues: Dict[Tuple[str, str], Dict[int, np.ndarray]] = field(default_factory=dict)
+
     # Source x Target feature decomposition: pathway -> {(src_feat_idx, tgt_ch_idx): (T,) dr2}
     # Only top-N pairs stored to keep NPZ manageable.
     pathway_src_tgt_dr2: Dict[Tuple[str, str], Dict[Tuple[int, int], np.ndarray]] = field(default_factory=dict)
@@ -988,7 +991,13 @@ class CouplingEstimator:
         # Fixed lambda_fraction often selects too many features on null data
         # (inflating FPR). Binary search for target selection rate is more robust.
         lambda_max = solver._compute_lambda_max(X_sel_v, y_resid, valid=None)
-        target_sel_frac = 0.10  # target: ~10% of features selected per subsample
+        # Selection budget: target 25% of features per subsample so each
+        # coupled feature has high enough per-subsample probability (~70-80%)
+        # to cross the 60% stability threshold.  At 10%, coupled features in
+        # modalities with 20+ prescreened groups only reach ~50% per-subsample,
+        # making stability selection underpowered.  FPR stays controlled:
+        # P(Bin(50, 0.25) >= 30) < 0.001.
+        target_sel_frac = 0.25
         lam_lo = 0.01 * lambda_max
         lam_hi = lambda_max
         for _ in range(10):
@@ -1465,6 +1474,8 @@ class CouplingEstimator:
 
             lambda_max = solver._compute_lambda_max(
                 X_sel_v, y_resid_c, valid=None)
+            # Per-target block selection: keep 0.10 (not 0.25) because the
+            # per-target union across C_tgt channels inflates the stable set.
             target_sel_frac = 0.10
             lam_lo = 0.01 * lambda_max
             lam_hi = lambda_max
@@ -1960,7 +1971,13 @@ class CouplingEstimator:
         # dilution is the problem. Low-dim targets (ECG 7ch, EEG 10ch) don't
         # suffer dilution and per-target union inflates FPs via multiple testing.
         behavioral_tgt_mods = {'blendshapes_v2', 'pose_features', 'blendshapes'}
-        use_per_target = tgt_mod in behavioral_tgt_mods
+        # Per-target mode for cross-modal pathways into behavioral targets
+        # (e.g., EEG→BL where coupling targets specific PCA components).
+        # Same-modality pathways use single-output (Frobenius norm) because
+        # coupling affects many target channels simultaneously, and the
+        # per-target union across 15-41 channels inflates stable/block sets.
+        use_per_target = (tgt_mod in behavioral_tgt_mods
+                          and src_mod != tgt_mod)
 
         # --- Step 1: Pre-group correlated features ---
         pregroup_enabled = ds_cfg.get('pregroup', {}).get('enabled', True)
@@ -3356,7 +3373,7 @@ class CouplingEstimator:
             if use_moderation and moderator_names:
                 moderator_signals = self._get_moderator_signals(
                     tgt_signal, tgt_ts, tgt_mod, eval_times,
-                    target_sigs, moderator_names)
+                    source_sigs, moderator_names)
 
                 if moderator_signals is not None:
                     X_source = X_base[:, :n_source_cols]
@@ -3486,7 +3503,15 @@ class CouplingEstimator:
                         else:
                             surr_solver = solver
 
-                        tp_pvalues_raw, tp_dr2_null = \
+                        # Prepare per-feature dR2 at surrogate rate
+                        feat_dr2_s = None
+                        if key in result.pathway_feature_dr2 and n_sel > 1:
+                            feat_dr2_s = {
+                                fi: arr[::step] if step > 1 else arr
+                                for fi, arr in result.pathway_feature_dr2[key].items()
+                            }
+
+                        tp_pvalues_raw, tp_dr2_null, feat_pv_raw = \
                             surrogate_pvalues_from_design(
                                 surr_solver, X_aug_s, X_res_s,
                                 y_s, valid_s, n_source_cols, dr2_s,
@@ -3494,7 +3519,10 @@ class CouplingEstimator:
                                 min_shift_frac=0.1,
                                 seed=tp_seed,
                                 smooth_samples=smooth_s,
-                                surrogate_method=surr_method)
+                                surrogate_method=surr_method,
+                                n_basis=n_basis,
+                                selected=list(selected),
+                                feat_dr2_real=feat_dr2_s)
 
                         # Interpolate back to full eval rate if subsampled
                         if step > 1:
@@ -3507,6 +3535,17 @@ class CouplingEstimator:
                             tp_pvalues = tp_pvalues_raw
 
                         result.pathway_pvalues[key] = tp_pvalues
+
+                        # Store per-feature p-values
+                        if feat_pv_raw is not None:
+                            if step > 1:
+                                feat_pv_interp = {}
+                                for fi, fp in feat_pv_raw.items():
+                                    feat_pv_interp[fi] = np.interp(
+                                        t_full, t_sub, fp)
+                                result.pathway_feature_pvalues[key] = feat_pv_interp
+                            else:
+                                result.pathway_feature_pvalues[key] = feat_pv_raw
                     except Exception as tp_e:
                         _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
                              f"timepoint p-values failed ({tp_e})")
@@ -3537,7 +3576,7 @@ class CouplingEstimator:
                         tgt_signal, tgt_ts, tgt_valid,
                         basis, n_basis, n_sel, n_source_cols,
                         eval_times, eval_rate, tau, lam_ridge,
-                        free_vram, result, target_sigs,
+                        free_vram, result, source_sigs,
                         use_nonlinear=use_nonlinear,
                         use_moderation=use_moderation,
                         moderator_names=moderator_names,
@@ -3563,7 +3602,7 @@ class CouplingEstimator:
                           tgt_signal, tgt_ts, tgt_valid,
                           basis, n_basis, n_sel, n_source_cols,
                           eval_times, eval_rate, tau, lam_ridge,
-                          free_vram, result, target_sigs,
+                          free_vram, result, source_sigs,
                           use_nonlinear=False, use_moderation=False,
                           moderator_names=None, force_sequential=False,
                           selected=None, tp_enabled=False,
@@ -3589,12 +3628,12 @@ class CouplingEstimator:
             n_moderators = len(moderator_names)
             n_aug_source += n_source_cols * n_moderators
 
-        # Pre-compute moderator signals once (they don't depend on target chunks)
+        # Pre-compute moderator signals once (source participant's ECG RMSSD)
         moderator_signals = None
         if use_moderation and moderator_names:
             moderator_signals = self._get_moderator_signals(
                 tgt_signal, tgt_ts, tgt_mod, eval_times,
-                target_sigs, moderator_names)
+                source_sigs, moderator_names)
 
         # Determine group size: find largest C_g where EWLS fits in memory
         # p = n_aug_source + ar_order * C_g
@@ -3817,7 +3856,7 @@ class CouplingEstimator:
                             force_sequential=True,
                         )
 
-                    tp_pvalues_raw, tp_dr2_null = \
+                    tp_pvalues_raw, tp_dr2_null, _ = \
                         surrogate_pvalues_from_design(
                             surr_solver, X_aug_s, X_res_s,
                             y_s, valid_s, _surr_n_source, dr2_s,
@@ -3853,22 +3892,26 @@ class CouplingEstimator:
                   f"ALL chunks failed")
 
     def _get_moderator_signals(self, tgt_signal, tgt_ts, tgt_mod,
-                                eval_times, target_sigs, moderator_names):
+                                eval_times, source_sigs, moderator_names):
         """Extract cardiac moderator signals for moderation terms.
+
+        Uses the SOURCE participant's ECG (RMSSD/HR) as the moderator:
+        the source's autonomic state modulates how strongly their own
+        features couple to the target participant.
 
         Returns list of (T_eval,) tensors on device, or None if unavailable.
         """
-        # Look for ECG features in target signals
+        # Look for ECG features in SOURCE signals
         ecg_mod = None
         for mod_name in ['ecg_features_v2', 'ecg_features']:
-            if mod_name in target_sigs:
+            if mod_name in source_sigs:
                 ecg_mod = mod_name
                 break
 
         if ecg_mod is None:
             return None
 
-        ecg_signal, ecg_ts, ecg_valid = target_sigs[ecg_mod]
+        ecg_signal, ecg_ts, ecg_valid = source_sigs[ecg_mod]
         moderators = []
 
         for mod_name in moderator_names:

@@ -93,12 +93,10 @@ Raw (N, 19) @ 256 Hz
 ### 2.2 ECG Preprocessing
 
 ```
-Raw (N, 1) @ irregular ~130 Hz
-  -> Interpolate to uniform 130 Hz grid       -> Regular time series
-  -> Detect gaps (dt > 3x sample period)      -> Mark as invalid
+Raw (N, 1) @ 130 Hz (Polar H10, dejittered by pyxdf on load)
   -> Bandpass 0.5-40 Hz (4th-order Butter.)   -> Cardiac frequency range
-  -> Z-score (valid samples only)             -> Standardized
-  -> Validity: per-sample boolean mask
+  -> Z-score                                   -> Standardized
+  -> Validity: all-true (uniform grid from pyxdf dejittering)
 ```
 
 ### 2.3 Blendshape Preprocessing

@@ -246,7 +246,7 @@ for _comp in ['cos', 'sin']:
 # ---------------------------------------------------------------------------
 
 MODALITY_SPECS_V2 = {
-    'eeg_wavelet':     (160, 5.0),
+    'eeg_wavelet':     (160, 10.0),
     'eeg_interbrain':  (160, 5.0),
     'ecg_features_v2': (7, 2.0),
     'blendshapes_v2':  (31, 30.0),
@@ -292,11 +292,11 @@ ECG_FEATURE_NAMES_V2 = [
 
 # V2 synthetic config
 SYNTH_MODALITY_CONFIG_V2 = {
-    'eeg_wavelet':     {'n_ch': 160, 'hz': 5.0,  'lag_s': 2.0, 'base_ch': 160, 'n_coupled': 20},
+    'eeg_wavelet':     {'n_ch': 160, 'hz': 10.0, 'lag_s': 2.0, 'base_ch': 160, 'n_coupled': 20},
     'ecg_features_v2': {'n_ch': 7,   'hz': 2.0,  'lag_s': 2.0, 'base_ch': 7,   'n_coupled': 7},
-    'blendshapes_v2':  {'n_ch': 31,  'hz': 30.0, 'lag_s': 2.0, 'base_ch': 30,  'n_coupled': 10,
+    'blendshapes_v2':  {'n_ch': 31,  'hz': 30.0, 'lag_s': 2.0, 'base_ch': 30,  'n_coupled': 4,
                         'has_derivatives': True, 'n_pca': 15},
-    'pose_features':   {'n_ch': 41,  'hz': 12.0, 'lag_s': 2.0, 'base_ch': 40,  'n_coupled': 10},
+    'pose_features':   {'n_ch': 41,  'hz': 12.0, 'lag_s': 2.0, 'base_ch': 40,  'n_coupled': 5},
 }
 
 COUPLING_PROFILES_V2 = {
@@ -312,8 +312,8 @@ COUPLING_PROFILES_V2 = {
     },
     'blendshapes_v2': {
         'duty_cycle': 0.25,
-        'event_range_s': (0.5, 10),
-        'ramp_s': 0.3,
+        'event_range_s': (3, 15),
+        'ramp_s': 1.0,
     },
     'pose_features': {
         'duty_cycle': 0.25,

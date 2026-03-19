@@ -110,16 +110,23 @@ def get_pathway_n_predictors(source_mod, n_basis, ar_order, target_mod):
 def get_modality_pathways_v2():
     """Get all v2 modality-level pathways for one direction.
 
-    Includes participant-owned modalities (eeg_wavelet, ecg_features_v2,
-    blendshapes_v2, pose_features) as both source and target, plus
+    Includes participant-owned modalities (eeg_wavelet, blendshapes_v2,
+    pose_features) as sources and all four modalities as targets, plus
     eeg_interbrain as source-only.
+
+    ECG is excluded as a source modality — autonomic state is modeled
+    as an RMSSD moderator that modulates coupling strength. ECG remains
+    as a target (other modalities can still predict ECG changes).
 
     Returns:
         list of (source_mod, target_mod) tuples.
     """
+    # Source modalities: exclude ecg_features_v2
+    source_mods = [m for m in MODALITY_ORDER_V2 if m != 'ecg_features_v2']
+
     pathways = []
-    # Standard participant-owned pathways (4x4 = 16)
-    for src in MODALITY_ORDER_V2:
+    # Source modalities (excluding ECG) -> all targets (3x4 = 12)
+    for src in source_mods:
         for tgt in MODALITY_ORDER_V2:
             pathways.append((src, tgt))
     # Inter-brain as source -> all participant targets

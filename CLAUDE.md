@@ -86,7 +86,7 @@ Shares MCCT's `session_cache/` directory. Reads cached `.npz` + `.json` session 
 
 ## Modalities (V2)
 
-- EEG wavelet: 160ch @ 5Hz (2 components × 20 freqs × 4 ROIs)
+- EEG wavelet: 160ch @ 10Hz (2 components × 20 freqs × 4 ROIs)
 - EEG interbrain: 120ch @ 5Hz (cross-brain PLV, delta excluded by default)
 - ECG features: 7ch @ 2Hz (HRV)
 - Blendshapes v2: 31ch @ 30Hz (15 PCA + 15 derivatives + activity)

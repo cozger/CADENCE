@@ -115,8 +115,8 @@ DEFAULTS = {
     'wavelet': {
         'n_frequencies': 20,
         'freq_range': [2.0, 45.0],
-        'n_cycles': 6,
-        'output_hz': 5.0,
+        'n_cycles': [3, 8],
+        'output_hz': 10.0,
     },
     'blendshapes_v2': {
         'n_pca_components': 15,

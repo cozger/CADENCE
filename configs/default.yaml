@@ -108,9 +108,12 @@ significance:
   fdr_correction: bh
   max_pathway_p: 0.8            # skip Stage 2 for pathways with session-level p > this
   session_level:
-    binomial_alpha: 0.01
-    ttest_alpha: 0.01
     min_dr2: 0.001
+    hmm:
+      episode_duration_s: 60.0
+      min_coupling_fraction: 0.03
+      max_em_iter: 20
+      em_tol: 1.0e-6
   # Per-timepoint significance (Stage 2 surrogate threshold)
   timepoint:
     enabled: true
@@ -119,6 +122,8 @@ significance:
     smooth_sec: 30
     seed: 42
     surrogate_eval_rate: 1.0   # Hz — surrogates run at this rate (lower = faster)
+    gpd_pool_half: 50
+    gpd_threshold_quantile: 0.9
 
 # Interbrain feature configuration
 interbrain:

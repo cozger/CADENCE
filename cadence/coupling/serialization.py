@@ -58,6 +58,7 @@ def save_result(result, path, session_name='', runtime_s=0.0,
         'pathway_dr2', 'pathway_r2_full', 'pathway_r2_restricted',
         'pathway_kernels', 'pathway_pvalues', 'pathway_f_stat',
         'feature_dr2', 'feature_kernels', 'pathway_times',
+        'pathway_coupling_posterior',
     ]
     for field_name in array_dicts:
         d = getattr(result, field_name, {})
@@ -79,6 +80,17 @@ def save_result(result, path, session_name='', runtime_s=0.0,
             vals.append(v)
         data['pathway_significant/_keys'] = np.array(keys, dtype=object)
         data['pathway_significant/_vals'] = np.array(vals, dtype=bool)
+
+    # pathway_null_stats: Dict[Tuple, Dict[str, float]]
+    null_stats = getattr(result, 'pathway_null_stats', {})
+    if null_stats:
+        keys = []
+        for k, v in null_stats.items():
+            ks = _key_str(k)
+            keys.append(ks)
+            data[f'null_stats/{ks}_mu_0'] = np.array([v.get('mu_0', 0.0)])
+            data[f'null_stats/{ks}_sigma_0'] = np.array([v.get('sigma_0', 1.0)])
+        data['null_stats/_keys'] = np.array(keys, dtype=object)
 
     # pathway_feature_dr2: Dict[Tuple, Dict[int, ndarray]]
     if hasattr(result, 'pathway_feature_dr2') and result.pathway_feature_dr2:
@@ -264,6 +276,23 @@ def load_result(path):
         result.pathway_significant = {
             _str_key(str(k)): bool(v) for k, v in zip(keys, vals)
         }
+
+    # pathway_null_stats
+    result.pathway_null_stats = {}
+    if 'null_stats/_keys' in raw:
+        for ks in raw['null_stats/_keys']:
+            ks = str(ks)
+            k = _str_key(ks)
+            mu_key = f'null_stats/{ks}_mu_0'
+            sig_key = f'null_stats/{ks}_sigma_0'
+            result.pathway_null_stats[k] = {
+                'mu_0': float(raw[mu_key][0]) if mu_key in raw else 0.0,
+                'sigma_0': float(raw[sig_key][0]) if sig_key in raw else 1.0,
+            }
+
+    # pathway_coupling_posterior (loaded via array_dicts above)
+    if not hasattr(result, 'pathway_coupling_posterior'):
+        result.pathway_coupling_posterior = {}
 
     # pathway_feature_dr2
     if 'pathway_feature_dr2/_pw_keys' in raw:

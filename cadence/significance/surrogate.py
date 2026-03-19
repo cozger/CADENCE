@@ -116,7 +116,9 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
                                    seed=42, smooth_samples=0,
                                    surrogate_method='circular_shift',
                                    n_basis=0, selected=None,
-                                   feat_dr2_real=None):
+                                   feat_dr2_real=None,
+                                   gpd_pool_half=50,
+                                   gpd_threshold_quantile=0.9):
     """Per-timepoint p-values by circular-shifting source columns of X_augmented.
 
     Shifts only the first n_source_cols columns (basis-convolved source).
@@ -265,9 +267,11 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
         dr2_real_s = dr2_real
         dr2_surr_s = dr2_surrogates
 
-    # Per-timepoint p-values: fraction of surrogates >= real
-    p_values = np.mean(dr2_surr_s >= dr2_real_s[None, :], axis=0)
-    p_values = np.maximum(p_values, 1.0 / (n_surrogates + 1))
+    # Per-timepoint p-values via GPD tail fitting on pooled surrogates
+    from cadence.significance.gpd_pvalues import gpd_tail_pvalues
+    p_values = gpd_tail_pvalues(dr2_real_s, dr2_surr_s,
+                                pool_half=gpd_pool_half,
+                                threshold_quantile=gpd_threshold_quantile)
 
     # Per-feature p-values
     feat_pvalues = None
@@ -284,8 +288,9 @@ def surrogate_pvalues_from_design(solver, X_augmented, X_restricted, y, valid,
                     uniform_filter1d(surr_f[j], smooth_samples, mode='nearest')
                     for j in range(n_surrogates)
                 ])
-            fp = np.mean(surr_f >= real_f[None, :], axis=0)
-            fp = np.maximum(fp, 1.0 / (n_surrogates + 1))
+            fp = gpd_tail_pvalues(real_f, surr_f,
+                                  pool_half=gpd_pool_half,
+                                  threshold_quantile=gpd_threshold_quantile)
             feat_pvalues[fi] = fp
 
     return p_values, dr2_surrogates, feat_pvalues

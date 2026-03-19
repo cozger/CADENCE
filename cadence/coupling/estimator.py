@@ -95,6 +95,12 @@ class CouplingResult:
     # Auxiliary data for interpretation (e.g., PCA loadings)
     aux: Dict[str, np.ndarray] = field(default_factory=dict)
 
+    # Surrogate null statistics per pathway (for HMM detection)
+    pathway_null_stats: Dict[Tuple[str, str], Dict[str, float]] = field(default_factory=dict)
+
+    # HMM coupling posterior per pathway
+    pathway_coupling_posterior: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
+
     # Summary statistics
     overall_dr2: Optional[np.ndarray] = None  # average across pathways
     n_significant_pathways: int = 0
@@ -381,6 +387,25 @@ class CouplingEstimator:
                 if mean_dr2_val < threshold:
                     result.pathway_significant[key] = False
                     result.n_significant_pathways -= 1
+
+        # Post-Stage-2 HMM: final arbiter for pathway_significant
+        from cadence.significance.detection import detect_coupling_hmm
+        hmm_cfg = sig_cfg.get('session_level', {}).get('hmm', {})
+        hmm_cfg['min_dr2'] = min_dr2
+        eval_rate_overrides = self.config.get('eval_rate_overrides', {})
+
+        for key in result.pathway_dr2:
+            if key not in result.pathway_pvalues:
+                continue
+            dr2_arr = result.pathway_dr2[key]
+            null_stats = result.pathway_null_stats.get(key)
+            pw_eval_rate = eval_rate_overrides.get(key[0], eval_rate)
+            detected, details = detect_coupling_hmm(
+                dr2_arr, null_stats, pw_eval_rate, hmm_cfg)
+            result.pathway_significant[key] = detected
+            if 'coupling_posterior' in details:
+                result.pathway_coupling_posterior[key] = details['coupling_posterior']
+        result.n_significant_pathways = sum(result.pathway_significant.values())
 
         # Overall dR2
         if result.pathway_dr2:
@@ -2283,6 +2308,7 @@ class CouplingEstimator:
         lam = self.config['ewls']['lambda_ridge']
         ds_cfg = self.config.get('doubly_sparse', {})
         use_surrogate_fallback = ds_cfg.get('surrogate_fallback', True)
+        max_pathway_p = sig_cfg.get('max_pathway_p', 1.0)
 
         eval_times = np.arange(0, duration, 1.0 / eval_rate)
         raw_pvalues = {}
@@ -2325,19 +2351,25 @@ class CouplingEstimator:
             _log(f"  Screen {src_mod}->{tgt_mod}: PASS [doubly-sparse, shift-calibrated] "
                   f"(n_features={n_sel}, pathway_p={pw_p:.4f}, feat_p={best_feat_p:.4f})")
 
-        # --- Surrogate fallback for non-doubly-sparse pathways ---
-        # Only run fallback for pathways where doubly-sparse was NOT applicable
-        # (i.e., selection_method != 'doubly_sparse'). If doubly-sparse ran and
-        # explicitly rejected a pathway, respect that decision.
+        # --- Surrogate fallback ---
+        # Run for pathways where:
+        # 1. Doubly-sparse was NOT used (legacy pathways), OR
+        # 2. Doubly-sparse ran but found 0 features AND pathway_p < max_pathway_p
+        #    (episodic coupling can pass surrogate test but fail block selection)
         if use_surrogate_fallback and ds_cfg.get('enabled', True):
             all_pathway_keys = set(discovery.selected_features.keys())
             ds_found = set(ds_keys)
-            # Pathways where doubly-sparse was NOT used (legacy pathways with
-            # empty selections that might have sustained coupling)
-            ds_empty = [k for k in all_pathway_keys - ds_found
-                        if discovery.selection_method.get(k, 'legacy') != 'doubly_sparse'
-                        and not discovery.selected_features.get(k, [])]
-            # Re-run these with legacy surrogate screening
+            # Legacy pathways (doubly-sparse not applicable)
+            ds_legacy = [k for k in all_pathway_keys - ds_found
+                         if discovery.selection_method.get(k, 'legacy') != 'doubly_sparse'
+                         and not discovery.selected_features.get(k, [])]
+            # Doubly-sparse pathways that found 0 features but have low pathway_p
+            ds_rejected = [k for k in all_pathway_keys
+                           if discovery.selection_method.get(k) == 'doubly_sparse'
+                           and not discovery.selected_features.get(k, [])
+                           and discovery.block_pathway_pvalue.get(k, 1.0) < max_pathway_p]
+            ds_empty = ds_legacy + ds_rejected
+            # Re-run these with surrogate screening
             for key in ds_empty:
                 src_mod, tgt_mod = key
                 if src_mod not in source_sigs or tgt_mod not in target_sigs:
@@ -3511,6 +3543,11 @@ class CouplingEstimator:
                                 for fi, arr in result.pathway_feature_dr2[key].items()
                             }
 
+                        # GPD config for continuous p-values
+                        tp_cfg = self.config['significance'].get('timepoint', {})
+                        gpd_ph = tp_cfg.get('gpd_pool_half', 50)
+                        gpd_tq = tp_cfg.get('gpd_threshold_quantile', 0.9)
+
                         tp_pvalues_raw, tp_dr2_null, feat_pv_raw = \
                             surrogate_pvalues_from_design(
                                 surr_solver, X_aug_s, X_res_s,
@@ -3522,7 +3559,15 @@ class CouplingEstimator:
                                 surrogate_method=surr_method,
                                 n_basis=n_basis,
                                 selected=list(selected),
-                                feat_dr2_real=feat_dr2_s)
+                                feat_dr2_real=feat_dr2_s,
+                                gpd_pool_half=gpd_ph,
+                                gpd_threshold_quantile=gpd_tq)
+
+                        # Store null stats for HMM detection
+                        result.pathway_null_stats[key] = {
+                            'mu_0': float(np.mean(tp_dr2_null)),
+                            'sigma_0': float(np.std(tp_dr2_null)),
+                        }
 
                         # Interpolate back to full eval rate if subsampled
                         if step > 1:
@@ -3856,6 +3901,11 @@ class CouplingEstimator:
                             force_sequential=True,
                         )
 
+                    # GPD config for continuous p-values
+                    tp_cfg = self.config['significance'].get('timepoint', {})
+                    gpd_ph = tp_cfg.get('gpd_pool_half', 50)
+                    gpd_tq = tp_cfg.get('gpd_threshold_quantile', 0.9)
+
                     tp_pvalues_raw, tp_dr2_null, _ = \
                         surrogate_pvalues_from_design(
                             surr_solver, X_aug_s, X_res_s,
@@ -3864,7 +3914,15 @@ class CouplingEstimator:
                             min_shift_frac=0.1,
                             seed=tp_seed,
                             smooth_samples=smooth_s,
-                            surrogate_method=surr_method)
+                            surrogate_method=surr_method,
+                            gpd_pool_half=gpd_ph,
+                            gpd_threshold_quantile=gpd_tq)
+
+                    # Store null stats for HMM detection
+                    result.pathway_null_stats[key] = {
+                        'mu_0': float(np.mean(tp_dr2_null)),
+                        'sigma_0': float(np.std(tp_dr2_null)),
+                    }
 
                     if step > 1:
                         T_full = len(dr2_avg)

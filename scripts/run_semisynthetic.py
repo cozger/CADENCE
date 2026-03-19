@@ -39,7 +39,7 @@ from cadence.synthetic import (
     find_valid_window, build_semisynthetic_base,
     inject_coupling_modality, inject_coupling_all,
 )
-from cadence.constants import MODALITY_ORDER_V2, MOD_SHORT_V2
+from cadence.constants import MODALITY_ORDER_V2, MOD_SHORT_V2, MODALITY_SPECS_V2
 
 
 # Target modality configs: each injects coupling into ONE modality
@@ -47,6 +47,76 @@ TARGET_MODS = ['eeg_wavelet', 'blendshapes_v2', 'pose_features']
 
 # Same-modality pathway keys for AUC
 SAME_MOD_PATHWAYS = {mod: (mod, mod) for mod in TARGET_MODS}
+
+
+def compute_timing_metrics(coupling_gate, coupling_posterior, gate_hz,
+                           eval_times, threshold=0.5):
+    """Compare HMM coupling posterior against known injection gate.
+
+    Args:
+        coupling_gate: (N_gate,) known gate in [0,1] at gate_hz.
+        coupling_posterior: (T_eval,) HMM posterior P(coupled) at eval_times.
+        gate_hz: Sampling rate of the coupling gate.
+        eval_times: (T_eval,) timestamps of the posterior.
+        threshold: Binarization threshold for both gate and posterior.
+
+    Returns:
+        dict with timing metrics.
+    """
+    if coupling_gate is None or coupling_posterior is None:
+        return {}
+    if len(coupling_posterior) < 10:
+        return {}
+
+    # Resample gate to eval_times
+    gate_times = np.arange(len(coupling_gate)) / gate_hz
+    gate_resampled = np.interp(eval_times, gate_times, coupling_gate)
+
+    # Binarize
+    gate_on = gate_resampled > threshold
+    post_on = coupling_posterior > threshold
+
+    n = len(eval_times)
+    if n == 0:
+        return {}
+
+    # Hit rate: fraction of gate-on timepoints where posterior is also on
+    n_gate_on = np.sum(gate_on)
+    n_post_on = np.sum(post_on)
+
+    if n_gate_on > 0:
+        hit_rate = float(np.sum(gate_on & post_on) / n_gate_on)
+    else:
+        hit_rate = float('nan')
+
+    # False alarm rate: fraction of gate-off timepoints where posterior is on
+    n_gate_off = n - n_gate_on
+    if n_gate_off > 0:
+        false_alarm = float(np.sum(~gate_on & post_on) / n_gate_off)
+    else:
+        false_alarm = float('nan')
+
+    # IoU (intersection over union)
+    intersection = np.sum(gate_on & post_on)
+    union = np.sum(gate_on | post_on)
+    iou = float(intersection / union) if union > 0 else 0.0
+
+    # Temporal correlation (Pearson r between continuous signals)
+    if np.std(gate_resampled) > 1e-10 and np.std(coupling_posterior) > 1e-10:
+        corr = float(np.corrcoef(gate_resampled, coupling_posterior)[0, 1])
+    else:
+        corr = 0.0
+
+    return {
+        'hit_rate': hit_rate,
+        'false_alarm': false_alarm,
+        'iou': iou,
+        'temporal_corr': corr,
+        'n_gate_on': int(n_gate_on),
+        'n_post_on': int(n_post_on),
+        'gate_duty': float(n_gate_on / n) if n > 0 else 0.0,
+        'post_duty': float(n_post_on / n) if n > 0 else 0.0,
+    }
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -383,31 +453,66 @@ def main():
                 # Score ALL pathways targeting the injected modality
                 # (not just same-source). Any src→target_mod pathway
                 # can detect the injected coupling.
+                # Get coupling gate for timing analysis
+                coupling_gate = semi_session.get(
+                    'coupling_gates', {}).get(target_mod)
+                gate_hz = MODALITY_SPECS_V2[target_mod][1] if \
+                    target_mod in MODALITY_SPECS_V2 else 10.0
+
+                # Score ALL pathways targeting the injected modality
                 best_p = 1.0
                 best_det = False
                 best_dr2 = 0.0
                 best_key = None
-                pw_details = []
+                n_targeting = 0
+                n_detected = 0
+                pw_timing = {}
                 for key, det_info in summary.items():
                     s_mod, t_mod = key
                     if t_mod != target_mod:
                         continue
+                    # Skip interbrain→eeg_wavelet (structural confound:
+                    # PLV contains target EEG by construction)
+                    if s_mod == 'eeg_interbrain' and 'eeg' in t_mod:
+                        continue
+                    n_targeting += 1
                     p = det_info.get('p_value', 1.0)
                     d = det_info.get('detected', False)
                     dr2 = det_info.get('mean_dr2', 0.0)
+                    if d:
+                        n_detected += 1
                     s_short = MOD_SHORT_V2.get(s_mod, s_mod)
                     t_short = MOD_SHORT_V2.get(t_mod, t_mod)
                     status = 'DETECTED' if d else ''
-                    pw_details.append(
-                        f"    {s_short}->{t_short}: p={p:.4f} "
-                        f"dR2={dr2:.6f} {status}")
+
+                    # Timing accuracy
+                    timing = {}
+                    posterior = getattr(result, 'pathway_coupling_posterior',
+                                        {}).get(key)
+                    pw_times = getattr(result, 'pathway_times',
+                                        {}).get(key, result.times)
+                    if posterior is not None and coupling_gate is not None:
+                        timing = compute_timing_metrics(
+                            coupling_gate, posterior, gate_hz, pw_times)
+                        pw_timing[f"{s_short}->{t_short}"] = timing
+                        timing_str = (f" hit={timing.get('hit_rate',0):.0%}"
+                                      f" fa={timing.get('false_alarm',0):.0%}"
+                                      f" IoU={timing.get('iou',0):.2f}"
+                                      f" r={timing.get('temporal_corr',0):.2f}")
+                    else:
+                        timing_str = ""
+
+                    print(f"    {s_short}->{t_short}: p={p:.4f} "
+                          f"dR2={dr2:.6f} {status}{timing_str}",
+                          flush=True)
+
                     if p < best_p:
                         best_p = p
                         best_det = d
                         best_dr2 = dr2
                         best_key = key
 
-                # Also check same-mod if no targeting pathways found
+                # Fallback to same-mod if nothing found
                 if best_key is None:
                     same_key = SAME_MOD_PATHWAYS[target_mod]
                     if same_key in summary:
@@ -423,16 +528,17 @@ def main():
                 roc_data[target_mod]['labels'].append(label)
                 roc_data[target_mod]['scores'].append(p_val)
 
-                # Print all targeting pathways
-                for line in pw_details:
-                    print(line, flush=True)
+                # Summary line
+                hit_frac = (f"{n_detected}/{n_targeting}"
+                            if n_targeting > 0 else "0/0")
                 if best_key:
                     bk_short = (f"{MOD_SHORT_V2.get(best_key[0], best_key[0])}"
                                 f"->{MOD_SHORT_V2.get(best_key[1], best_key[1])}")
-                    print(f"    Best: {bk_short} p={p_val:.4f} ({dt:.1f}s)",
+                    print(f"    => Hit {hit_frac} pathways | "
+                          f"best={bk_short} p={p_val:.4f} ({dt:.1f}s)",
                           flush=True)
                 else:
-                    print(f"    No pathways targeting {short} ({dt:.1f}s)",
+                    print(f"    => No pathways targeting {short} ({dt:.1f}s)",
                           flush=True)
 
                 all_results.append({
@@ -446,6 +552,9 @@ def main():
                     'mean_dr2': mean_dr2,
                     'best_pathway': (f"{best_key[0]}->{best_key[1]}"
                                      if best_key else 'none'),
+                    'n_targeting': n_targeting,
+                    'n_detected': n_detected,
+                    'timing': pw_timing,
                     'analysis_time_s': dt,
                 })
 

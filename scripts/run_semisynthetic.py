@@ -27,6 +27,9 @@ import time
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
+print("=== CADENCE V3 Semisynthetic (GPD + HMM + stability_hmm fallback) ===",
+      flush=True)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np

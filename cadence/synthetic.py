@@ -1269,6 +1269,55 @@ def inject_coupling_modality(base_session, target_mod, kappa,
     return session
 
 
+def inject_eeg_coupling_spatial(p1_eeg, p2_eeg, gate, kappa,
+                                 center_ch=2, decay_sigma=0.5,
+                                 lag_samp=8):
+    """Inject spatially-decaying broadband EEG coupling.
+
+    Models a focal cortical source: the center electrode gets full kappa,
+    neighbors get Gaussian-decayed kappa based on scalp distance.
+
+    Mixing model per channel:
+      p2[t, ch] = alpha_ch[t] * p1[t-lag, ch] + sqrt(1-alpha_ch²) * p2[t, ch]
+      where alpha_ch[t] = kappa_ch * gate[t]
+
+    Args:
+        p1_eeg, p2_eeg: (T, 14) raw EEG at 256 Hz, z-scored.
+        gate: (T,) coupling gate in [0, 1].
+        kappa: peak coupling strength at center electrode.
+        center_ch: electrode index (0-13) for the focal source.
+        decay_sigma: Gaussian decay width in distance units (default 0.5).
+            Larger → wider spatial spread.
+        lag_samp: coupling lag in samples (default 8 ≈ 30ms at 256 Hz).
+
+    Returns:
+        p2_coupled: (T, 14) with spatially-decaying coupling.
+        kappa_per_ch: (14,) effective peak kappa per channel.
+    """
+    from cadence.constants import EPOC_DISTANCE
+
+    T, C = p1_eeg.shape
+    dist = EPOC_DISTANCE[center_ch]  # (14,)
+
+    # Gaussian spatial decay
+    kappa_per_ch = kappa * np.exp(-dist ** 2 / (2 * decay_sigma ** 2))
+    kappa_per_ch[kappa_per_ch < 0.01] = 0.0  # threshold negligible coupling
+
+    # Lagged P1
+    p1_lagged = np.roll(p1_eeg, lag_samp, axis=0)
+    p1_lagged[:lag_samp] = 0
+
+    p2_coupled = p2_eeg.copy()
+    for ch in range(C):
+        if kappa_per_ch[ch] <= 0:
+            continue
+        alpha = kappa_per_ch[ch] * gate
+        noise_scale = np.sqrt(np.maximum(1 - alpha ** 2, 0.0))
+        p2_coupled[:, ch] = alpha * p1_lagged[:, ch] + noise_scale * p2_eeg[:, ch]
+
+    return p2_coupled, kappa_per_ch
+
+
 def inject_coupling_all(base_session, kappa, lag_s=2.0, seed=42):
     """Inject coupling into ALL target modalities at the same kappa.
 

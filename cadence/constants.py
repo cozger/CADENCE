@@ -83,6 +83,17 @@ BLENDSHAPE_SEGMENT_MAP = {
 }
 BL_SEGMENT_NAMES = list(BLENDSHAPE_SEGMENT_MAP.keys())
 
+# Semantic AU groups for coupling analysis (raw 52-AU mode)
+BLENDSHAPE_COUPLING_GROUPS = {
+    'smile':  [43, 44, 6, 7],      # mouthSmileL/R + cheekSquintL/R
+    'brow':   [0, 1, 2, 3, 4],     # browDownL/R, browInnerUp, browOuterUpL/R
+    'speech': [22, 23, 24, 25,     # jaw
+               26, 31, 37, 39, 40,  # mouth_form
+               32, 33, 34, 35, 36, 38, 41, 42, 45, 46, 47, 48],  # mouth_move
+}
+# Default coupled AUs for semisynthetic: browInnerUp + cheekSquintL/R + mouthSmileL/R
+BLENDSHAPE_MIMICRY_AUS = [2, 6, 7, 43, 44]
+
 # Reverse map: AU channel index -> segment name (for PCA interpretation)
 _BL_CH_TO_SEGMENT = {}
 for _seg_name, _ch_list in BLENDSHAPE_SEGMENT_MAP.items():
@@ -205,6 +216,40 @@ EEG_ROIS = {
 }
 
 EEG_ROI_NAMES = list(EEG_ROIS.keys())
+
+# Channel names in index order (matches preprocess_eeg cols 3-16)
+EPOC_CHANNEL_NAMES = [
+    'AF3', 'F7', 'F3', 'FC5', 'T7', 'P7', 'O1',
+    'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4',
+]
+
+# 2D scalp-projected positions (x=left/right, y=anterior/posterior)
+# Derived from standard 10-20 angular coordinates on a unit circle
+EPOC_2D_POS = _np.array([
+    [-0.31,  0.95],  # AF3
+    [-0.81,  0.59],  # F7
+    [-0.39,  0.69],  # F3
+    [-0.67,  0.35],  # FC5
+    [-1.00,  0.00],  # T7
+    [-0.81, -0.59],  # P7
+    [-0.31, -0.95],  # O1
+    [ 0.31, -0.95],  # O2
+    [ 0.81, -0.59],  # P8
+    [ 1.00,  0.00],  # T8
+    [ 0.67,  0.35],  # FC6
+    [ 0.39,  0.69],  # F4
+    [ 0.81,  0.59],  # F8
+    [ 0.31,  0.95],  # AF4
+], dtype=_np.float64)
+
+# Pairwise Euclidean distance matrix (14 x 14)
+EPOC_DISTANCE = _np.sqrt(
+    ((_EPOC_2D := EPOC_2D_POS[:, None] - EPOC_2D_POS[None, :]) ** 2
+     ).sum(axis=2))
+
+# Adjacency: True for nearest 10-20 neighbors (distance < 0.65)
+EPOC_ADJACENCY = EPOC_DISTANCE < 0.65
+_np.fill_diagonal(EPOC_ADJACENCY, False)  # no self-adjacency
 
 # ---------------------------------------------------------------------------
 # Wavelet center frequencies (20 log-spaced from 2-45 Hz)

@@ -456,6 +456,94 @@ def _min_event_filter(mask, min_samples):
     return result
 
 
+def _fill_gaps(mask, max_gap_samples):
+    """Fill False gaps shorter than max_gap_samples between True runs."""
+    result = mask.copy()
+    diff = np.diff(mask.astype(np.int8), prepend=0, append=0)
+    starts = np.where(diff == 1)[0]
+    ends = np.where(diff == -1)[0]
+    # Gaps are between end[i] and start[i+1]
+    for i in range(len(ends) - 1):
+        gap = starts[i + 1] - ends[i]
+        if gap < max_gap_samples:
+            result[ends[i]:starts[i + 1]] = True
+    return result
+
+
+def _roi_average_signals(signals, roi_map):
+    """Average EEG channels within ROIs to create virtual super-channels.
+
+    Args:
+        signals: (T, C) numpy array — raw EEG at native rate.
+        roi_map: dict mapping ROI names to lists of channel indices.
+
+    Returns:
+        roi_signals: (T, n_rois) numpy array — ROI-averaged signals.
+    """
+    T = signals.shape[0]
+    roi_names = list(roi_map.keys())
+    n_rois = len(roi_names)
+    roi_signals = np.zeros((T, n_rois), dtype=np.float32)
+    for ri, name in enumerate(roi_names):
+        ch_idx = roi_map[name]
+        roi_signals[:, ri] = signals[:, ch_idx].mean(axis=1)
+    return roi_signals
+
+
+def _spatial_cluster_filter(mask, per_channel_z, adjacency,
+                            min_cluster=2, z_min=0.5):
+    """Remove detections without spatially contiguous channel support.
+
+    For each flagged window, checks that at least `min_cluster` spatially
+    adjacent channels have z > z_min. Eliminates false alarms from
+    isolated noise channels.
+
+    Args:
+        mask: (n_win,) boolean detection mask.
+        per_channel_z: (C, n_win) per-channel z-scores.
+        adjacency: (C, C) boolean adjacency matrix.
+        min_cluster: minimum number of adjacent above-threshold channels.
+        z_min: minimum per-channel z to count as active.
+
+    Returns:
+        filtered_mask: (n_win,) boolean with isolated detections removed.
+    """
+    C, n_win = per_channel_z.shape
+    result = mask.copy()
+
+    for w in np.where(mask)[0]:
+        active = per_channel_z[:, w] > z_min  # channels above threshold
+        if active.sum() < min_cluster:
+            result[w] = False
+            continue
+
+        # Check spatial contiguity via BFS on adjacency subgraph
+        active_idx = np.where(active)[0]
+        visited = set()
+        max_cluster = 0
+        for start in active_idx:
+            if start in visited:
+                continue
+            # BFS from this node
+            queue = [start]
+            cluster_size = 0
+            while queue:
+                node = queue.pop(0)
+                if node in visited:
+                    continue
+                visited.add(node)
+                cluster_size += 1
+                for neighbor in active_idx:
+                    if neighbor not in visited and adjacency[node, neighbor]:
+                        queue.append(neighbor)
+            max_cluster = max(max_cluster, cluster_size)
+
+        if max_cluster < min_cluster:
+            result[w] = False
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Full temporal localization pipeline
 # ---------------------------------------------------------------------------
@@ -599,3 +687,560 @@ def masked_feature_breakdown(dr2_perchannel, coherence_mask,
         dr2_inactive = np.nanmean(dr2_perchannel[:, ~mask_bool], axis=1)
 
     return dr2_active, dr2_inactive, dr2_active - dr2_inactive
+
+
+# ---------------------------------------------------------------------------
+# wPLI (weighted Phase Lag Index) temporal localization
+# ---------------------------------------------------------------------------
+
+def _coherence_windowed(W_p1, W_p2, win_samp, stride_samp, metric='csd'):
+    """Compute windowed coherence per channel per frequency from CWT.
+
+    Processes frequencies in chunks to stay within VRAM. The unfold
+    operation on (C, T) with large T and win_samp can exceed 16 GB
+    for broadband (30+ freq) analysis at 256 Hz.
+
+    Supports metrics: 'wpli', 'csd', 'plv', 'envelope', 'combined'.
+
+    Args:
+        W_p1: (C, T, F) complex tensor — P1 wavelet coefficients.
+        W_p2: (C, T, F) complex tensor — P2 wavelet coefficients.
+        win_samp: window length in samples.
+        stride_samp: stride between windows in samples.
+        metric: coherence metric string.
+
+    Returns:
+        coh: (C, F, n_win) float tensor — coherence per channel per frequency.
+        centers: (n_win,) long tensor — window center indices.
+    """
+    C, T, F_n = W_p1.shape
+    device = W_p1.device
+
+    # Estimate n_win for pre-allocation
+    n_win = max(1, (T - win_samp) // stride_samp + 1)
+    coh = torch.zeros(C, F_n, n_win, device=device)
+
+    # Process per-frequency to control VRAM (unfold of (C, T) is manageable)
+    for fi in range(F_n):
+        w1 = W_p1[:, :, fi]  # (C, T) complex
+        w2 = W_p2[:, :, fi]
+
+        if metric == 'wpli':
+            im = (w1 * w2.conj()).imag  # (C, T)
+            im_w = im.unfold(1, win_samp, stride_samp)  # (C, n_win, W)
+            num = im_w.mean(dim=-1).abs()
+            den = im_w.abs().mean(dim=-1).clamp(min=1e-10)
+            coh[:, fi, :] = num / den
+
+        elif metric == 'csd':
+            sxy = w1 * w2.conj()
+            sr = sxy.real.unfold(1, win_samp, stride_samp)
+            si = sxy.imag.unfold(1, win_samp, stride_samp)
+            coh[:, fi, :] = torch.sqrt(sr.mean(-1)**2 + si.mean(-1)**2)
+
+        elif metric == 'plv':
+            sxy = w1 * w2.conj()
+            sxy_n = sxy / sxy.abs().clamp(min=1e-10)
+            sr = sxy_n.real.unfold(1, win_samp, stride_samp)
+            si = sxy_n.imag.unfold(1, win_samp, stride_samp)
+            coh[:, fi, :] = torch.sqrt(sr.mean(-1)**2 + si.mean(-1)**2)
+
+        elif metric == 'envelope':
+            e1 = w1.abs().unfold(1, win_samp, stride_samp)  # (C, n_win, W)
+            e2 = w2.abs().unfold(1, win_samp, stride_samp)
+            e1c = e1 - e1.mean(-1, keepdim=True)
+            e2c = e2 - e2.mean(-1, keepdim=True)
+            cov = (e1c * e2c).mean(-1)
+            std_p = (e1c.pow(2).mean(-1) * e2c.pow(2).mean(-1)
+                     ).sqrt().clamp(min=1e-10)
+            coh[:, fi, :] = cov / std_p
+
+        elif metric == 'combined':
+            # PLV
+            sxy = w1 * w2.conj()
+            sxy_n = sxy / sxy.abs().clamp(min=1e-10)
+            sr = sxy_n.real.unfold(1, win_samp, stride_samp)
+            si = sxy_n.imag.unfold(1, win_samp, stride_samp)
+            plv = torch.sqrt(sr.mean(-1)**2 + si.mean(-1)**2)
+            del sr, si, sxy_n
+
+            # Envelope correlation
+            e1 = w1.abs().unfold(1, win_samp, stride_samp)
+            e2 = w2.abs().unfold(1, win_samp, stride_samp)
+            e1c = e1 - e1.mean(-1, keepdim=True)
+            e2c = e2 - e2.mean(-1, keepdim=True)
+            cov = (e1c * e2c).mean(-1)
+            std_p = (e1c.pow(2).mean(-1) * e2c.pow(2).mean(-1)
+                     ).sqrt().clamp(min=1e-10)
+            env = cov / std_p
+            del e1, e2, e1c, e2c
+
+            coh[:, fi, :] = (plv + (env + 1) / 2) / 2
+
+        else:
+            raise ValueError(f"Unknown metric: {metric}")
+
+    starts = torch.arange(0, T - win_samp + 1, stride_samp,
+                          device=device, dtype=torch.long)
+    centers = starts + win_samp // 2
+
+    return coh, centers
+
+
+def _coherence_surrogates(x1, x2, fs, center_freqs, n_surrogates=100,
+                          win_samp=512, stride_samp=128,
+                          n_cycles=5, min_shift_frac=0.1, seed=42,
+                          metric='csd', device=None):
+    """Compute real + surrogate per-channel coherence via circular-shift surrogates.
+
+    P2's CWT is computed once and reused across all surrogates.
+
+    Args:
+        x1, x2: (C, N) float32 tensors on device — P1 and P2 signals.
+        fs: sampling rate in Hz.
+        center_freqs: (F,) array of center frequencies in Hz.
+        n_surrogates: number of circular-shift surrogates.
+        win_samp: window length in samples.
+        stride_samp: stride in samples.
+        n_cycles: Morlet wavelet cycles.
+        min_shift_frac: minimum circular shift as fraction of N.
+        seed: random seed.
+        metric: 'wpli', 'csd', or 'plv'.
+        device: torch device.
+
+    Returns:
+        coh_real: (C, F, n_win) real coherence.
+        coh_surr: (K, C, F, n_win) surrogate coherence.
+        centers: (n_win,) window center indices.
+    """
+    if device is None:
+        device = x1.device
+
+    N = x1.shape[1]
+    K = n_surrogates
+
+    # P2 CWT: computed once
+    W_p2 = _morlet_cwt(x2, fs, center_freqs, n_cycles=n_cycles,
+                       device=device)  # (C, N, F)
+
+    # Real coherence
+    W_p1 = _morlet_cwt(x1, fs, center_freqs, n_cycles=n_cycles,
+                       device=device)  # (C, N, F)
+    coh_real, centers = _coherence_windowed(W_p1, W_p2, win_samp, stride_samp,
+                                            metric=metric)
+    del W_p1
+
+    C, F_n, n_win = coh_real.shape
+
+    # Generate circular shifts
+    min_shift = max(1, int(min_shift_frac * N))
+    max_shift = N - min_shift
+    if min_shift >= max_shift:
+        min_shift, max_shift = 1, N - 1
+
+    gen = torch.Generator(device='cpu')
+    gen.manual_seed(seed)
+    shifts = torch.randint(min_shift, max_shift + 1, (K,), generator=gen)
+
+    # Surrogate coherence
+    coh_surr = torch.zeros(K, C, F_n, n_win, device=device)
+
+    for k in range(K):
+        x1_shifted = torch.roll(x1, int(shifts[k].item()), dims=1)
+        W_p1_k = _morlet_cwt(x1_shifted, fs, center_freqs,
+                             n_cycles=n_cycles, device=device)
+        coh_surr[k], _ = _coherence_windowed(W_p1_k, W_p2,
+                                              win_samp, stride_samp,
+                                              metric=metric)
+        del W_p1_k
+
+    del W_p2
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    return coh_real, coh_surr, centers
+
+
+def wpli_temporal_localization(p1_signal, p2_signal, fs,
+                               channels=None, center_freqs=None,
+                               n_surrogates=100,
+                               window_s=2.0, stride_s=0.5,
+                               n_cycles=5, z_threshold=None,
+                               target_fa=0.05, min_event_s=2.0,
+                               metric='csd', seed=42, device=None,
+                               **kwargs):
+    """Full wavelet coherence temporal localization pipeline.
+
+    Pipeline:
+      1. Morlet CWT at specified frequencies for both participants
+      2. Per-channel windowed coherence (metric selectable)
+      3. Surrogate calibration via K circular shifts
+      4. Per-channel z-scoring against surrogate distribution
+      5. Aggregate across channels and frequencies → z_agg timecourse
+      6. Threshold → binary coupling mask
+
+    Args:
+        p1_signal, p2_signal: (T, C) numpy arrays at native rate.
+        fs: sampling rate in Hz.
+        channels: list of channel indices to use (None = all).
+        center_freqs: (F,) array of center frequencies in Hz.
+            Default: 5 log-spaced frequencies from 4-8 Hz (theta).
+        n_surrogates: number of circular-shift surrogates (default 100).
+        window_s: window length in seconds (default 2.0).
+        stride_s: stride between windows in seconds (default 0.5).
+        n_cycles: Morlet wavelet cycles. Scalar for fixed, or [min, max]
+            for frequency-scaled cycles (linearly interpolated across
+            center_freqs — standard for EEG time-frequency analysis).
+            Default 5 (fixed).
+        z_threshold: fixed z-score threshold (None = calibrate from surrogates).
+        target_fa: target false alarm rate for threshold calibration (default 0.05).
+        min_event_s: minimum event duration in seconds (default 2.0).
+        metric: coherence metric — 'csd' (default), 'wpli', or 'plv'.
+        seed: random seed.
+        device: torch device.
+
+    Returns:
+        mask: (n_win,) boolean coupling mask.
+        z_agg: (n_win,) aggregated z-score across channels.
+        per_channel_z: (C_sel, n_win) per-channel z-scores.
+        diagnostics: dict with pipeline metadata.
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    T_raw, C_all = p1_signal.shape
+
+    # Default: theta band (4-8 Hz)
+    if center_freqs is None:
+        center_freqs = np.logspace(np.log10(4.0), np.log10(8.0), 5)
+
+    # Channel selection
+    if channels is None:
+        channels = list(range(C_all))
+    C_sel = len(channels)
+
+    # Convert window/stride to samples
+    win_samp = int(window_s * fs)
+    stride_samp = int(stride_s * fs)
+
+    # Resolve n_cycles: [min, max] → per-frequency linear scaling
+    if isinstance(n_cycles, (list, tuple)) and len(n_cycles) == 2:
+        n_cycles_arr = np.linspace(n_cycles[0], n_cycles[1],
+                                    len(center_freqs))
+    else:
+        n_cycles_arr = n_cycles  # scalar, passed through to _morlet_cwt
+
+    # Optional ROI averaging: reduces 14 correlated channels to 4 independent ROIs
+    roi_map = kwargs.get('roi_map', None)
+    if roi_map is not None:
+        p1_signal = _roi_average_signals(p1_signal, roi_map)
+        p2_signal = _roi_average_signals(p2_signal, roi_map)
+        channels = list(range(p1_signal.shape[1]))
+        C_sel = len(channels)
+
+    # Extract selected channels and transpose to (C, T)
+    x1 = torch.as_tensor(
+        np.ascontiguousarray(p1_signal[:, channels].T),
+        dtype=torch.float32, device=device)  # (C_sel, T)
+    x2 = torch.as_tensor(
+        np.ascontiguousarray(p2_signal[:, channels].T),
+        dtype=torch.float32, device=device)
+
+    # Compute real + surrogate coherence
+    coh_real, coh_surr, centers = _coherence_surrogates(
+        x1, x2, fs, center_freqs,
+        n_surrogates=n_surrogates,
+        win_samp=win_samp, stride_samp=stride_samp,
+        n_cycles=n_cycles_arr, metric=metric, seed=seed, device=device)
+    # coh_real: (C_sel, F, n_win)
+    # coh_surr: (K, C_sel, F, n_win)
+
+    # Z-score per (channel, frequency) then aggregate across both
+    coh_real_np = coh_real.cpu().numpy()    # (C_sel, F, n_win)
+    coh_surr_np = coh_surr.cpu().numpy()    # (K, C_sel, F, n_win)
+    centers_np = centers.cpu().numpy()
+    n_win = coh_real_np.shape[2]
+    F_n = coh_real_np.shape[1]
+
+    del coh_real, coh_surr, x1, x2
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    # Aggregation mode: 'pooled' (aggregate first, z-score once) or
+    # 'stouffer' (z-score per pair, then Stouffer combination)
+    aggregation = kwargs.get('aggregation', 'pooled')
+
+    if aggregation == 'pooled':
+        # Pool coherence across channels and frequencies first,
+        # then z-score the aggregate against surrogate aggregates.
+        # More powerful because the single z-score uses K surrogate
+        # samples of the SAME aggregate statistic.
+        agg_weights = kwargs.get('aggregation_weights', 'equal')
+        if agg_weights == 'snr':
+            # SNR-weighted: upweight channels with stronger surrogate contrast
+            ch_real = coh_real_np.mean(axis=(1, 2))         # (C,) session-avg per ch
+            ch_surr = coh_surr_np.mean(axis=(0, 2, 3))     # (C,) null avg per ch
+            w = np.maximum(ch_real - ch_surr, 0.0)          # (C,) positive contrast
+            w /= (w.sum() + 1e-10)                          # normalize
+            coh_agg_real = (coh_real_np * w[:, None, None]).sum(0).mean(0)
+            coh_agg_surr = (coh_surr_np * w[None, :, None, None]).sum(1).mean(1)
+        else:
+            coh_agg_real = coh_real_np.mean(axis=(0, 1))    # (n_win,)
+            coh_agg_surr = coh_surr_np.mean(axis=(1, 2))    # (K, n_win)
+
+        surr_mean_agg = coh_agg_surr.mean(axis=0)       # (n_win,)
+        surr_std_agg = np.maximum(coh_agg_surr.std(axis=0), 1e-10)
+
+        z_agg = (coh_agg_real - surr_mean_agg) / surr_std_agg  # (n_win,)
+        z_agg_surr = (coh_agg_surr - surr_mean_agg[None]) / surr_std_agg[None]
+
+        # Per-channel z for diagnostics (still compute per-cf)
+        surr_mean_cf = coh_surr_np.mean(axis=0)
+        surr_std_cf = np.maximum(coh_surr_np.std(axis=0), 1e-8)
+        per_channel_z = ((coh_real_np - surr_mean_cf) / surr_std_cf).mean(axis=1)
+
+    else:  # stouffer
+        surr_mean = coh_surr_np.mean(axis=0)
+        surr_std = np.maximum(coh_surr_np.std(axis=0), 1e-8)
+
+        z_per_cf = (coh_real_np - surr_mean) / surr_std
+        surr_z_cf = (coh_surr_np - surr_mean[None]) / surr_std[None]
+
+        per_channel_z = z_per_cf.mean(axis=1)
+        surr_z_ch = surr_z_cf.mean(axis=2)
+
+        z_agg = per_channel_z.mean(axis=0) * np.sqrt(C_sel)
+        z_agg_surr = surr_z_ch.mean(axis=1) * np.sqrt(C_sel)
+
+    # Temporal smoothing of z-scores (accumulates evidence across windows)
+    smooth_s = kwargs.get('smooth_s', 0.0)
+    if smooth_s > 0:
+        from scipy.ndimage import uniform_filter1d
+        smooth_win = max(1, int(smooth_s / stride_s))
+        z_agg = uniform_filter1d(z_agg, smooth_win)
+        z_agg_surr = uniform_filter1d(z_agg_surr, smooth_win, axis=1)
+
+    # Threshold calibration from surrogates
+    adaptive = kwargs.get('adaptive_threshold', False)
+    if z_threshold is None:
+        per_win_thresh = np.percentile(z_agg_surr, 100 * (1 - target_fa),
+                                        axis=0)  # (n_win,)
+        if adaptive:
+            # Per-window threshold: adapts to local noise level
+            z_threshold_arr = np.maximum(per_win_thresh, 1.0)
+            z_threshold = float(np.median(z_threshold_arr))  # for diagnostics
+        else:
+            z_threshold = max(float(np.median(per_win_thresh)), 1.0)
+
+    # Binary mask with minimum event filter
+    if adaptive and isinstance(z_threshold_arr, np.ndarray):
+        mask = z_agg > z_threshold_arr
+    else:
+        mask = z_agg > z_threshold
+    # Morphological post-processing: fill gaps then remove short events
+    max_gap_s = kwargs.get('max_gap_s', 0.0)
+    if max_gap_s > 0:
+        gap_samples = max(1, int(max_gap_s / stride_s))
+        mask = _fill_gaps(mask, gap_samples)
+    min_samples = max(1, int(min_event_s / stride_s))
+    if min_samples > 1:
+        mask = _min_event_filter(mask, min_samples)
+
+    # Spatial cluster filter: require spatially contiguous channel support
+    spatial_adj = kwargs.get('spatial_adjacency', None)
+    min_spatial = kwargs.get('min_spatial_cluster', 0)
+    if spatial_adj is not None and min_spatial >= 2:
+        mask = _spatial_cluster_filter(
+            mask, per_channel_z, spatial_adj,
+            min_cluster=min_spatial, z_min=0.5)
+
+    # Window center times in seconds
+    win_times = centers_np / fs
+
+    coupling_frac = float(np.mean(mask))
+
+    diagnostics = {
+        'method': 'wpli_v1',
+        'device': str(device),
+        'n_channels': C_sel,
+        'n_freqs': len(center_freqs),
+        'n_windows': n_win,
+        'n_surrogates': n_surrogates,
+        'fs': fs,
+        'window_s': window_s,
+        'stride_s': stride_s,
+        'n_cycles': n_cycles,
+        'center_freqs': center_freqs.tolist(),
+        'z_threshold': float(z_threshold),
+        'coupling_fraction': coupling_frac,
+        'z_agg_mean': float(np.mean(z_agg)),
+        'z_agg_max': float(np.max(z_agg)),
+        'z_agg_p95': float(np.percentile(z_agg, 95)),
+        'per_channel_z_mean': float(np.mean(per_channel_z)),
+        'win_times': win_times,
+    }
+
+    return mask, z_agg, per_channel_z, diagnostics
+
+
+# ---------------------------------------------------------------------------
+# Cross-correlation temporal localization (time-domain, no spectral decomp)
+# ---------------------------------------------------------------------------
+
+def xcorr_temporal_localization(p1_signal, p2_signal, fs,
+                                channels=None, max_lag_s=0.1,
+                                smooth_s=1.0, n_surrogates=100,
+                                target_fa=0.05, min_event_s=5.0,
+                                seed=42, device=None):
+    """Cross-correlation temporal localization: multiply, smooth, threshold.
+
+    Computes lagged cross-product between P1 and P2, smooths with Gaussian
+    kernel, and thresholds against circular-shift surrogates. No spectral
+    decomposition, no HMM — direct time-domain detection.
+
+    For the mixing model p2 = kappa*p1_lagged + noise, the cross-product
+    at the correct lag is the sufficient statistic. Smoothing accumulates
+    evidence over time. The effective DOF is N * 2BW/fs per channel,
+    giving ~16× more power than spectral coherence methods.
+
+    Args:
+        p1_signal, p2_signal: (T, C) numpy arrays at native rate (256 Hz).
+        fs: sampling rate in Hz.
+        channels: list of channel indices (None = all).
+        max_lag_s: maximum lag to search in seconds (default 0.1 = 100ms).
+        smooth_s: Gaussian smoothing sigma in seconds (default 1.0).
+        n_surrogates: circular-shift surrogates (default 100).
+        target_fa: target false alarm rate (default 0.05).
+        min_event_s: minimum detection duration in seconds (default 5.0).
+        seed: random seed.
+        device: torch device.
+
+    Returns:
+        mask: (T,) boolean coupling mask at native rate.
+        cc_agg: (T,) aggregated cross-correlation timecourse.
+        cc_per_channel: (C_sel, T) per-channel smoothed cross-product.
+        diagnostics: dict with metadata.
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    T, C_all = p1_signal.shape
+    if channels is None:
+        channels = list(range(C_all))
+    C_sel = len(channels)
+    max_lag_samp = max(1, int(max_lag_s * fs))
+
+    # Move to GPU
+    x1 = torch.as_tensor(
+        np.ascontiguousarray(p1_signal[:, channels].T),
+        dtype=torch.float32, device=device)  # (C, T)
+    x2 = torch.as_tensor(
+        np.ascontiguousarray(p2_signal[:, channels].T),
+        dtype=torch.float32, device=device)
+
+    # Build Gaussian smoothing kernel once
+    if smooth_s > 0:
+        sigma_samp = smooth_s * fs
+        half = int(np.ceil(3.0 * sigma_samp))
+        k = torch.arange(-half, half + 1, device=device, dtype=torch.float32)
+        kernel = torch.exp(-k ** 2 / (2 * sigma_samp ** 2))
+        kernel = kernel / kernel.sum()
+        smooth_kernel = kernel.reshape(1, 1, len(kernel))
+        smooth_pad = len(kernel) // 2
+    else:
+        smooth_kernel = None
+
+    def _smooth(x):
+        """Gaussian smooth (C, T) tensor along T."""
+        if smooth_kernel is None:
+            return x
+        x_pad = F.pad(x.unsqueeze(1), (smooth_pad, smooth_pad), mode='reflect')
+        return F.conv1d(x_pad, smooth_kernel).squeeze(1)
+
+    def _compute_cc(s1, s2):
+        """Fixed-lag cross-product, smoothed. Returns (C, T)."""
+        C, N = s1.shape
+        if max_lag_samp == 0:
+            cp = s1 * s2
+        else:
+            # Average cross-product across a small range of lags
+            # (captures coupling even if lag estimate is slightly off)
+            cp = torch.zeros(C, N, device=device)
+            n_lags = 0
+            for lag in range(max(0, max_lag_samp - 3),
+                             max_lag_samp + 4):  # ±3 samples around target
+                tmp = torch.zeros(C, N, device=device)
+                if lag == 0:
+                    tmp = s1 * s2
+                else:
+                    tmp[:, lag:] = s1[:, :-lag] * s2[:, lag:]
+                cp += tmp
+                n_lags += 1
+            cp /= n_lags
+        return _smooth(cp)
+
+    # Real cross-correlation
+    cc_real = _compute_cc(x1, x2)  # (C, T)
+    cc_agg_real = cc_real.mean(dim=0)  # (T,) — average across channels
+
+    # Surrogate cross-correlations
+    min_shift = max(1, int(0.1 * T))
+    max_shift = T - min_shift
+    gen = torch.Generator(device='cpu')
+    gen.manual_seed(seed)
+    shifts = torch.randint(min_shift, max_shift + 1, (n_surrogates,),
+                           generator=gen)
+
+    cc_surr_agg = torch.zeros(n_surrogates, T, device=device)
+    for k in range(n_surrogates):
+        x1_shifted = torch.roll(x1, int(shifts[k].item()), dims=1)
+        cc_k = _compute_cc(x1_shifted, x2)
+        cc_surr_agg[k] = cc_k.mean(dim=0)
+
+    # Move to CPU
+    cc_agg_np = cc_agg_real.cpu().numpy()
+    cc_surr_np = cc_surr_agg.cpu().numpy()
+    cc_per_ch = cc_real.cpu().numpy()
+
+    del x1, x2, cc_real, cc_agg_real, cc_surr_agg
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    # Z-score against surrogates (pooled)
+    surr_mean = cc_surr_np.mean(axis=0)
+    surr_std = np.maximum(cc_surr_np.std(axis=0), 1e-10)
+    z_agg = (cc_agg_np - surr_mean) / surr_std
+
+    # Threshold from surrogates
+    z_surr = (cc_surr_np - surr_mean[None]) / surr_std[None]
+    per_win_thresh = np.percentile(z_surr, 100 * (1 - target_fa), axis=0)
+    z_threshold = max(float(np.median(per_win_thresh)), 1.0)
+
+    # Direct threshold on smoothed cross-product (BL agent finding)
+    mask = z_agg > z_threshold
+    min_samp = max(1, int(min_event_s * fs))
+    # Decimate mask for event filtering then upsample
+    dec = max(1, int(fs / 4))  # 4 Hz for event filtering
+    mask_dec = mask[::dec]
+    mask_dec = _min_event_filter(mask_dec, max(1, int(min_event_s * 4)))
+    mask_up = np.repeat(mask_dec, dec)[:T]
+    mask = mask_up
+
+    win_times = np.arange(T) / fs
+
+    diagnostics = {
+        'method': 'xcorr_v1',
+        'device': str(device),
+        'n_channels': C_sel,
+        'max_lag_samp': max_lag_samp,
+        'smooth_s': smooth_s,
+        'n_surrogates': n_surrogates,
+        'fs': fs,
+        'z_threshold': float(z_threshold),
+        'coupling_fraction': float(mask.mean()),
+        'z_agg_mean': float(z_agg.mean()),
+        'z_agg_max': float(z_agg.max()),
+        'win_times': win_times,
+    }
+
+    return mask, z_agg, cc_per_ch, diagnostics

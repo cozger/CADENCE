@@ -1,0 +1,302 @@
+{
+  "conditions_found": [
+    "meditate_K",
+    "conv_2"
+  ],
+  "n_intervals": 2,
+  "threshold_method": "median",
+  "pathways": {
+    "BL->BL": {
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3626,
+        "duration_s": 725.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_2": {
+        "label": "Conversation 2",
+        "n_timepoints": 1860,
+        "duration_s": 371.79999999999995,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 3529,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 9015,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    },
+    "EEGib->Pose": {
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3626,
+        "duration_s": 725.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_2": {
+        "label": "Conversation 2",
+        "n_timepoints": 1860,
+        "duration_s": 371.79999999999995,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 3529,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 9015,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    },
+    "EEGw->BL": {
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3626,
+        "duration_s": 725.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_2": {
+        "label": "Conversation 2",
+        "n_timepoints": 1860,
+        "duration_s": 371.79999999999995,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 3529,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 9015,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    },
+    "EEGw->Pose": {
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3626,
+        "duration_s": 725.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_2": {
+        "label": "Conversation 2",
+        "n_timepoints": 1860,
+        "duration_s": 371.79999999999995,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 3529,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 9015,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    }
+  },
+  "modality_summary": {
+    "Overall": {
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3626,
+        "duration_s": 725.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_2": {
+        "label": "Conversation 2",
+        "n_timepoints": 1860,
+        "duration_s": 371.79999999999995,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 3529,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 9015,
+        "duration_s": 1802.8000000000002,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    }
+  }
+}

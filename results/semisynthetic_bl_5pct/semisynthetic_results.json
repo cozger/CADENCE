@@ -1,0 +1,156 @@
+{
+  "n_pairs": 1,
+  "kappa_levels": [
+    0.0,
+    0.2,
+    0.4
+  ],
+  "auc": {
+    "blendshapes_v2": 1.0
+  },
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.03992015968063872,
+      "detected": true,
+      "mean_dr2": 0.042453937232494354,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {},
+      "analysis_time_s": 749.9248218536377
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.023952095808383235,
+      "detected": true,
+      "mean_dr2": 0.041925571858882904,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.8614298323036187,
+          "false_alarm": 0.8832631766170629,
+          "iou": 0.06088204104547439,
+          "temporal_corr": -0.013390761901185618,
+          "n_gate_on": 1133,
+          "n_post_on": 15874,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.8818888888888889
+        },
+        "Pose->BL": {
+          "hit_rate": 0.8102383053839365,
+          "false_alarm": 0.8128890733384716,
+          "iou": 0.06184316895715441,
+          "temporal_corr": -0.01723805702117179,
+          "n_gate_on": 1133,
+          "n_post_on": 14629,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.8127222222222222
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.9814651368049426,
+          "false_alarm": 0.8204185688029881,
+          "iou": 0.07427693540845635,
+          "temporal_corr": 0.10109709478533892,
+          "n_gate_on": 1133,
+          "n_post_on": 14950,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.8305555555555556
+        }
+      },
+      "analysis_time_s": 700.509822845459
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.4,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.023952095808383235,
+      "detected": true,
+      "mean_dr2": 0.041404325515031815,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.8148788927335641,
+          "false_alarm": 0.847720256471147,
+          "iou": 0.06103012633624878,
+          "temporal_corr": -0.026304201168569196,
+          "n_gate_on": 1156,
+          "n_post_on": 15221,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.8456111111111111
+        },
+        "Pose->BL": {
+          "hit_rate": 0.4870242214532872,
+          "false_alarm": 0.7055924958442176,
+          "iou": 0.04317153592515911,
+          "temporal_corr": -0.11877014797514526,
+          "n_gate_on": 1156,
+          "n_post_on": 12448,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.6915555555555556
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.8226643598615917,
+          "false_alarm": 0.8248040845404891,
+          "iou": 0.06319356767891554,
+          "temporal_corr": 0.02174229749850286,
+          "n_gate_on": 1156,
+          "n_post_on": 14844,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.8246666666666667
+        },
+        "EEGw->BL": {
+          "hit_rate": 0.6730103806228374,
+          "false_alarm": 0.5777131322726193,
+          "iou": 0.07146137595297143,
+          "temporal_corr": 0.05102533006299725,
+          "n_gate_on": 1156,
+          "n_post_on": 10509,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.5838333333333333
+        }
+      },
+      "analysis_time_s": 814.5121853351593
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1,
+        1
+      ],
+      "scores": [
+        0.03992015968063872,
+        0.023952095808383235,
+        0.023952095808383235
+      ],
+      "auc": 1.0
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

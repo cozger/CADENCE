@@ -1,0 +1,100 @@
+{
+  "n_analyses": 2,
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.6,
+      "target_mod": "eeg_wavelet",
+      "label": 1,
+      "p_value": 0.8702536879498943,
+      "detected": false,
+      "mean_dr2": -0.02239043451845646,
+      "best_pathway": "pose_features->eeg_wavelet",
+      "n_targeting": 1,
+      "n_detected": 0,
+      "timing": {
+        "Pose->EEGw": {
+          "hit_rate": 0.1338656646312823,
+          "false_alarm": 0.1313716842038939,
+          "iou": 0.06763170384432843,
+          "temporal_corr": 0.0027444727372784084,
+          "n_gate_on": 2129,
+          "n_post_on": 2370,
+          "gate_duty": 0.11827777777777777,
+          "post_duty": 0.13166666666666665
+        }
+      },
+      "analysis_time_s": 1158.8059537410736
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.6,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.8196737890426752,
+      "detected": false,
+      "mean_dr2": 0.05178989842534065,
+      "best_pathway": "pose_features->blendshapes_v2",
+      "n_targeting": 2,
+      "n_detected": 0,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.18925126320624713,
+          "false_alarm": 0.1631247251941961,
+          "iou": 0.12522796352583587,
+          "temporal_corr": 0.034556411282683455,
+          "n_gate_on": 4354,
+          "n_post_on": 3050,
+          "gate_duty": 0.24188888888888888,
+          "post_duty": 0.16944444444444445
+        },
+        "Pose->BL": {
+          "hit_rate": 0.17891593936610015,
+          "false_alarm": 0.17441008354096438,
+          "iou": 0.11568161568161568,
+          "temporal_corr": 0.007037174644148295,
+          "n_gate_on": 4354,
+          "n_post_on": 3159,
+          "gate_duty": 0.24188888888888888,
+          "post_duty": 0.1755
+        }
+      },
+      "analysis_time_s": 932.8496007919312
+    }
+  ],
+  "roc_data": {
+    "eeg_wavelet": {
+      "labels": [
+        1
+      ],
+      "scores": [
+        0.8702536879498943
+      ]
+    },
+    "blendshapes_v2": {
+      "labels": [
+        1
+      ],
+      "scores": [
+        0.8196737890426752
+      ]
+    },
+    "pose_features": {
+      "labels": [],
+      "scores": []
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

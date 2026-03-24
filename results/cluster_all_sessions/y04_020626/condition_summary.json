@@ -1,0 +1,157 @@
+{
+  "conditions_found": [
+    "baseline",
+    "conv_1",
+    "meditate_K"
+  ],
+  "n_intervals": 3,
+  "threshold_method": "median",
+  "pathways": {
+    "BL->Pose": {
+      "baseline": {
+        "label": "Baseline",
+        "n_timepoints": 1570,
+        "duration_s": 313.8,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_1": {
+        "label": "Conversation 1",
+        "n_timepoints": 10158,
+        "duration_s": 2031.3999999999999,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3443,
+        "duration_s": 688.3999999999999,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 156,
+        "duration_s": 345.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 11884,
+        "duration_s": 2376.6,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    }
+  },
+  "modality_summary": {
+    "Overall": {
+      "baseline": {
+        "label": "Baseline",
+        "n_timepoints": 1570,
+        "duration_s": 313.8,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "conv_1": {
+        "label": "Conversation 1",
+        "n_timepoints": 10158,
+        "duration_s": 2031.3999999999999,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "meditate_K": {
+        "label": "Meditation (Kindness)",
+        "n_timepoints": 3443,
+        "duration_s": 688.3999999999999,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "uncategorized": {
+        "label": "Uncategorized",
+        "n_timepoints": 156,
+        "duration_s": 345.0,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      },
+      "all": {
+        "label": "All",
+        "n_timepoints": 11884,
+        "duration_s": 2376.6,
+        "sync_pct": 0.0,
+        "t_leads_pct": 0.0,
+        "p_leads_pct": 0.0,
+        "none_pct": 100.0,
+        "mean_dr2_tp": 0.0,
+        "mean_dr2_pt": 0.0,
+        "peak_dr2_tp": 0.0,
+        "peak_dr2_pt": 0.0,
+        "coupling_pct": 0.0
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "direction": "patient_to_therapist",
+  "session": "y24_022526",
+  "n_significant": 0,
+  "duration_s": 1802.8922761285212,
+  "analysis_time_s": 126.14516389369965,
+  "pathway_summary": {
+    "EEGw->Pose": {
+      "mean_dr2": -0.7040601372718811,
+      "significant": false
+    },
+    "EEGw->BL": {
+      "mean_dr2": -0.7827929854393005,
+      "significant": false
+    },
+    "BL->BL": {
+      "mean_dr2": -0.3752259910106659,
+      "significant": false
+    },
+    "EEGib->Pose": {
+      "mean_dr2": -0.43690478801727295,
+      "significant": false
+    }
+  },
+  "detection": {
+    "eeg_wavelet->pose_features": {
+      "detected": false,
+      "sig_rate": 0.35252357182473654,
+      "n_sig": 3178,
+      "n_total": 9015,
+      "binom_p": 0.0,
+      "mean_dr2": -0.7040601372718811,
+      "t_stat": -63.46335220336914,
+      "t_p": 1.0
+    },
+    "eeg_wavelet->blendshapes_v2": {
+      "detected": false,
+      "sig_rate": 0.08286189683860233,
+      "n_sig": 747,
+      "n_total": 9015,
+      "binom_p": 1.2252448345781214e-39,
+      "mean_dr2": -0.7827929854393005,
+      "t_stat": -75.34288024902344,
+      "t_p": 1.0
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "detected": false,
+      "sig_rate": 0.3853577371048253,
+      "n_sig": 3474,
+      "n_total": 9015,
+      "binom_p": 0.0,
+      "mean_dr2": -0.3752259910106659,
+      "t_stat": -46.41868209838867,
+      "t_p": 1.0
+    },
+    "eeg_interbrain->pose_features": {
+      "detected": false,
+      "sig_rate": 0.4815307820299501,
+      "n_sig": 4341,
+      "n_total": 9015,
+      "binom_p": 0.0,
+      "mean_dr2": -0.43690478801727295,
+      "t_stat": -39.8693962097168,
+      "t_p": 1.0
+    }
+  }
+}

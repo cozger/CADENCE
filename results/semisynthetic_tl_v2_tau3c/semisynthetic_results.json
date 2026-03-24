@@ -1,0 +1,170 @@
+{
+  "n_pairs": 1,
+  "kappa_levels": [
+    0.0,
+    0.2,
+    0.4
+  ],
+  "auc": {
+    "blendshapes_v2": 1.0
+  },
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.03992015968063872,
+      "detected": true,
+      "mean_dr2": 0.10169041901826859,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {},
+      "analysis_time_s": 964.6253361701965
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "combined",
+      "label": 0,
+      "analysis_time_s": 1005.2295472621918
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.00998003992015968,
+      "detected": true,
+      "mean_dr2": 0.09985971450805664,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.03305608871827682,
+          "false_alarm": 0.031928480204342274,
+          "iou": 0.030308955807587017,
+          "temporal_corr": 0.005921835962892054,
+          "n_gate_on": 4689,
+          "n_post_on": 580,
+          "gate_duty": 0.2605,
+          "post_duty": 0.03222222222222222
+        },
+        "Pose->BL": {
+          "hit_rate": 0.18426103646833014,
+          "false_alarm": 0.1862369468860341,
+          "iou": 0.12053571428571429,
+          "temporal_corr": -0.0021464851652538476,
+          "n_gate_on": 4689,
+          "n_post_on": 3343,
+          "gate_duty": 0.2605,
+          "post_duty": 0.18572222222222223
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.32842823629771806,
+          "false_alarm": 0.3265720081135903,
+          "iou": 0.17042939353696326,
+          "temporal_corr": 0.00042107407720481097,
+          "n_gate_on": 4689,
+          "n_post_on": 5887,
+          "gate_duty": 0.2605,
+          "post_duty": 0.32705555555555554
+        }
+      },
+      "analysis_time_s": 907.3883738517761
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "combined",
+      "label": 1,
+      "analysis_time_s": 795.6670019626617
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.4,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.001996007984031936,
+      "detected": true,
+      "mean_dr2": 0.09697487950325012,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.027447023208879918,
+          "false_alarm": 0.025910310463779226,
+          "iou": 0.025694313243907047,
+          "temporal_corr": 0.00499466630082585,
+          "n_gate_on": 4955,
+          "n_post_on": 474,
+          "gate_duty": 0.2752777777777778,
+          "post_duty": 0.026333333333333334
+        },
+        "Pose->BL": {
+          "hit_rate": 0.21715438950554994,
+          "false_alarm": 0.2157148332694519,
+          "iou": 0.1384991633414854,
+          "temporal_corr": 0.0022818884384424184,
+          "n_gate_on": 4955,
+          "n_post_on": 3890,
+          "gate_duty": 0.2752777777777778,
+          "post_duty": 0.21611111111111111
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.3126135216952573,
+          "false_alarm": 0.3467995400536604,
+          "iou": 0.16341386222175336,
+          "temporal_corr": -0.035670208377017676,
+          "n_gate_on": 4955,
+          "n_post_on": 6073,
+          "gate_duty": 0.2752777777777778,
+          "post_duty": 0.3373888888888889
+        }
+      },
+      "analysis_time_s": 894.7850887775421
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.4,
+      "target_mod": "combined",
+      "label": 1,
+      "analysis_time_s": 744.8572771549225
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1,
+        1
+      ],
+      "scores": [
+        0.03992015968063872,
+        0.00998003992015968,
+        0.001996007984031936
+      ],
+      "auc": 1.0
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

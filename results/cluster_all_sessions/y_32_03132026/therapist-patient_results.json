@@ -1,0 +1,53 @@
+{
+  "direction": "therapist_to_patient",
+  "session": "y_32_03132026",
+  "n_significant": 3,
+  "duration_s": 3069.25126520684,
+  "analysis_time_s": 140.831334233284,
+  "pathway_summary": {
+    "ECG->BL": {
+      "mean_dr2": 0.07838058471679688,
+      "significant": true
+    },
+    "BL->Pose": {
+      "mean_dr2": 0.14602316915988922,
+      "significant": true
+    },
+    "BL->BL": {
+      "mean_dr2": 0.16725680232048035,
+      "significant": true
+    }
+  },
+  "detection": {
+    "ecg_features_v2->blendshapes_v2": {
+      "detected": true,
+      "sig_rate": 0.6252687821724116,
+      "n_sig": 9596,
+      "n_total": 15347,
+      "binom_p": 0.0,
+      "mean_dr2": 0.07838058471679688,
+      "t_stat": 34.0434684753418,
+      "t_p": 0.0
+    },
+    "blendshapes_v2->pose_features": {
+      "detected": true,
+      "sig_rate": 0.9614908451163093,
+      "n_sig": 14756,
+      "n_total": 15347,
+      "binom_p": 0.0,
+      "mean_dr2": 0.14602316915988922,
+      "t_stat": 117.6342544555664,
+      "t_p": 0.0
+    },
+    "blendshapes_v2->blendshapes_v2": {
+      "detected": true,
+      "sig_rate": 0.935557437935753,
+      "n_sig": 14358,
+      "n_total": 15347,
+      "binom_p": 0.0,
+      "mean_dr2": 0.16725680232048035,
+      "t_stat": 89.58573150634766,
+      "t_p": 0.0
+    }
+  }
+}

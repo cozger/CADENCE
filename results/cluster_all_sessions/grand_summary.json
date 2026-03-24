@@ -1,0 +1,1282 @@
+[
+  {
+    "session": "y01_021726",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 3,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.007592983543872833,
+        "significant": true
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0033461996354162693,
+        "significant": true
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.27335473895072937,
+        "significant": true
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y01_021726",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 2,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.1423206627368927,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.02424468658864498,
+        "significant": true
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y04_020626",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": -0.5342020392417908,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y04_020626",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y05_02192026",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 3,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.000891600560862571,
+        "significant": true
+      },
+      "EEGw->ECG": {
+        "mean_dr2": -0.04588828980922699,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.1611015796661377,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.006974498741328716,
+        "significant": true
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y05_02192026",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 3,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.15019166469573975,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.16533511877059937,
+        "significant": true
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.019309820607304573,
+        "significant": true
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y11_022526",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y11_022526",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y24_022526",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": -0.7827929854393005,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": -0.7040601372718811,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": -0.3752259910106659,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": -0.43690478801727295,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y24_022526",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_06",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 1,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.18210168182849884,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_06",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 3,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.18710574507713318,
+        "significant": true
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.06000898405909538,
+        "significant": true
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.130953848361969,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_17",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 1,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.19010794162750244,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_17",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 0,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_32_03132026",
+    "direction": "patient_to_therapist",
+    "p_direction": "p1_to_p2",
+    "n_significant": 1,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.15260498225688934,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  },
+  {
+    "session": "y_32_03132026",
+    "direction": "therapist_to_patient",
+    "p_direction": "p2_to_p1",
+    "n_significant": 3,
+    "pathways": {
+      "EEGw->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGw->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "ECG->BL": {
+        "mean_dr2": 0.07838058471679688,
+        "significant": true
+      },
+      "ECG->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "BL->BL": {
+        "mean_dr2": 0.16725680232048035,
+        "significant": true
+      },
+      "BL->Pose": {
+        "mean_dr2": 0.14602316915988922,
+        "significant": true
+      },
+      "Pose->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "Pose->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->EEGw": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->ECG": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->BL": {
+        "mean_dr2": 0.0,
+        "significant": false
+      },
+      "EEGib->Pose": {
+        "mean_dr2": 0.0,
+        "significant": false
+      }
+    }
+  }
+]

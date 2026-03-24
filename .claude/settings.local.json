@@ -48,7 +48,12 @@
       "WebFetch(domain:tridao.me)",
       "WebFetch(domain:subhadipmitra.com)",
       "WebFetch(domain:arxiv.org)",
-      "WebFetch(domain:karthick.ai)"
+      "WebFetch(domain:karthick.ai)",
+      "WebFetch(domain:docs.scipy.org)",
+      "WebFetch(domain:mne.tools)",
+      "WebFetch(domain:cris.maastrichtuniversity.nl)",
+      "WebFetch(domain:pubmed.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:elifesciences.org)"
     ]
   }
 }

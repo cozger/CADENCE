@@ -1,0 +1,1109 @@
+[
+  {
+    "session": "y01_021726",
+    "duration_s": 2725.4177060378715,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 13623,
+          "duration_s": 2724.4,
+          "n_channels": 160,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.2923,
+          "dynamics_cv": 0.331,
+          "acf_1s": -0.17,
+          "acf_5s": -0.002,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 5451,
+          "duration_s": 2725.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5479,
+          "dynamics_cv": 0.603,
+          "acf_1s": 0.754,
+          "acf_5s": 0.395,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 109082,
+          "duration_s": 2725.4,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.02,
+          "activity_var": 0.3851,
+          "dynamics_cv": 0.413,
+          "acf_1s": 0.391,
+          "acf_5s": 0.216,
+          "tracking_smoothness": 37653.5
+        },
+        "Pose features": {
+          "n_samples": 27781,
+          "duration_s": 2725.3,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.1,
+          "activity_var": 0.1873,
+          "dynamics_cv": 0.62,
+          "acf_1s": 0.79,
+          "acf_5s": 0.749,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 13623,
+          "duration_s": 2724.4,
+          "n_channels": 160,
+          "valid_rate": 0.9999,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3176,
+          "dynamics_cv": 0.401,
+          "acf_1s": -0.233,
+          "acf_5s": -0.032,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 5451,
+          "duration_s": 2725.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.4753,
+          "dynamics_cv": 0.693,
+          "acf_1s": 0.835,
+          "acf_5s": 0.441,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 115633,
+          "duration_s": 2725.4,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.02,
+          "activity_var": 0.4387,
+          "dynamics_cv": 0.488,
+          "acf_1s": 0.413,
+          "acf_5s": 0.131,
+          "tracking_smoothness": 30308.1
+        },
+        "Pose features": {
+          "n_samples": 32785,
+          "duration_s": 2725.4,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.08,
+          "activity_var": 0.309,
+          "dynamics_cv": 0.493,
+          "acf_1s": 0.773,
+          "acf_5s": 0.687,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0446,
+      "ECG features": 0.1785,
+      "Blendshapes v2": 0.0361,
+      "Pose features": 0.3365
+    },
+    "interbrain": {
+      "n_samples": 13623,
+      "n_channels": 160,
+      "duration_s": 2724.4,
+      "valid_rate": 0.9999
+    },
+    "effective_duration_s": 2725.1,
+    "flags": [
+      [
+        "INFO",
+        "Pose features P1-P2 corr=0.337 (high \u2014 check for artifact)"
+      ]
+    ],
+    "grade": "GOOD"
+  },
+  {
+    "session": "y04_020626",
+    "duration_s": 2376.7624660215806,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 11879,
+          "duration_s": 2375.6,
+          "n_channels": 160,
+          "valid_rate": 0.9993,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3636,
+          "dynamics_cv": 0.297,
+          "acf_1s": -0.169,
+          "acf_5s": -0.016,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 4754,
+          "duration_s": 2376.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.4554,
+          "dynamics_cv": 0.633,
+          "acf_1s": 0.855,
+          "acf_5s": 0.423,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 78011,
+          "duration_s": 2030.0,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0921,
+          "n_gaps": 1,
+          "max_gap_s": 187.04,
+          "activity_var": 0.3839,
+          "dynamics_cv": 0.772,
+          "acf_1s": 0.316,
+          "acf_5s": 0.139,
+          "tracking_smoothness": 36376.0
+        },
+        "Pose features": {
+          "n_samples": 9366,
+          "duration_s": 2376.8,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.7983,
+          "n_gaps": 83,
+          "max_gap_s": 734.76,
+          "activity_var": 0.5627,
+          "dynamics_cv": 1.168,
+          "acf_1s": 0.376,
+          "acf_5s": 0.211,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 11879,
+          "duration_s": 2375.6,
+          "n_channels": 160,
+          "valid_rate": 0.999,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.4061,
+          "dynamics_cv": 0.345,
+          "acf_1s": -0.133,
+          "acf_5s": -0.012,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 4754,
+          "duration_s": 2376.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5082,
+          "dynamics_cv": 0.842,
+          "acf_1s": 0.801,
+          "acf_5s": 0.357,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 103038,
+          "duration_s": 2376.8,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.02,
+          "activity_var": 0.4203,
+          "dynamics_cv": 0.664,
+          "acf_1s": 0.424,
+          "acf_5s": 0.18,
+          "tracking_smoothness": 31352.8
+        },
+        "Pose features": {
+          "n_samples": 51029,
+          "duration_s": 2376.7,
+          "n_channels": 41,
+          "valid_rate": 0.9998,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.05,
+          "activity_var": 0.1824,
+          "dynamics_cv": 0.722,
+          "acf_1s": 0.917,
+          "acf_5s": 0.869,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0515,
+      "ECG features": 0.1245,
+      "Blendshapes v2": 0.0666,
+      "Pose features": 0.1174
+    },
+    "interbrain": {
+      "n_samples": 11879,
+      "n_channels": 160,
+      "duration_s": 2375.6,
+      "valid_rate": 0.9982
+    },
+    "effective_duration_s": 479.4,
+    "flags": [
+      [
+        "CRITICAL",
+        "p1 Pose: 79.8% gap fraction (>10%)"
+      ],
+      [
+        "WARNING",
+        "p1 BL: 9.2% gap fraction (>3%)"
+      ],
+      [
+        "CRITICAL",
+        "Effective duration 8.0 min (<20 min)"
+      ]
+    ],
+    "grade": "POOR"
+  },
+  {
+    "session": "y05_02192026",
+    "duration_s": 3355.028697879985,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 16771,
+          "duration_s": 3354.0,
+          "n_channels": 160,
+          "valid_rate": 0.9967,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.2837,
+          "dynamics_cv": 0.305,
+          "acf_1s": -0.165,
+          "acf_5s": 0.031,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6711,
+          "duration_s": 3355.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5153,
+          "dynamics_cv": 0.628,
+          "acf_1s": 0.825,
+          "acf_5s": 0.421,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 108287,
+          "duration_s": 3355.0,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.411,
+          "dynamics_cv": 0.35,
+          "acf_1s": 0.182,
+          "acf_5s": 0.148,
+          "tracking_smoothness": 26531.8
+        },
+        "Pose features": {
+          "n_samples": 40588,
+          "duration_s": 3355.0,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.08,
+          "activity_var": 0.1865,
+          "dynamics_cv": 0.537,
+          "acf_1s": 0.778,
+          "acf_5s": 0.698,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 16771,
+          "duration_s": 3354.0,
+          "n_channels": 160,
+          "valid_rate": 0.9999,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3546,
+          "dynamics_cv": 0.319,
+          "acf_1s": -0.167,
+          "acf_5s": -0.037,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6711,
+          "duration_s": 3355.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.4795,
+          "dynamics_cv": 0.683,
+          "acf_1s": 0.817,
+          "acf_5s": 0.457,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 128173,
+          "duration_s": 3355.0,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4005,
+          "dynamics_cv": 0.308,
+          "acf_1s": 0.188,
+          "acf_5s": 0.116,
+          "tracking_smoothness": 30207.4
+        },
+        "Pose features": {
+          "n_samples": 45745,
+          "duration_s": 3355.0,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.07,
+          "activity_var": 0.3046,
+          "dynamics_cv": 0.515,
+          "acf_1s": 0.675,
+          "acf_5s": 0.584,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0408,
+      "ECG features": 0.2295,
+      "Blendshapes v2": 0.0427,
+      "Pose features": 0.1816
+    },
+    "interbrain": {
+      "n_samples": 16771,
+      "n_channels": 160,
+      "duration_s": 3354.0,
+      "valid_rate": 0.9976
+    },
+    "effective_duration_s": 3344.0,
+    "flags": [],
+    "grade": "GOOD"
+  },
+  {
+    "session": "y11_022526",
+    "duration_s": 2451.6138498394284,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 12254,
+          "duration_s": 2450.6,
+          "n_channels": 160,
+          "valid_rate": 0.997,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3449,
+          "dynamics_cv": 0.376,
+          "acf_1s": -0.197,
+          "acf_5s": 0.007,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 77297,
+          "duration_s": 2451.6,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.2134,
+          "n_gaps": 33,
+          "max_gap_s": 137.13,
+          "activity_var": 0.3982,
+          "dynamics_cv": 0.576,
+          "acf_1s": 0.206,
+          "acf_5s": 0.184,
+          "tracking_smoothness": 37747.7
+        },
+        "Pose features": {
+          "n_samples": 31216,
+          "duration_s": 2451.6,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.1748,
+          "n_gaps": 6,
+          "max_gap_s": 122.76,
+          "activity_var": 0.2456,
+          "dynamics_cv": 0.748,
+          "acf_1s": 0.756,
+          "acf_5s": 0.606,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 12254,
+          "duration_s": 2450.6,
+          "n_channels": 160,
+          "valid_rate": 0.9999,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.4657,
+          "dynamics_cv": 0.456,
+          "acf_1s": -0.114,
+          "acf_5s": -0.014,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 96135,
+          "duration_s": 2451.6,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4246,
+          "dynamics_cv": 0.793,
+          "acf_1s": 0.346,
+          "acf_5s": 0.062,
+          "tracking_smoothness": 32632.3
+        },
+        "Pose features": {
+          "n_samples": 39216,
+          "duration_s": 2451.6,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.06,
+          "activity_var": 0.2538,
+          "dynamics_cv": 0.388,
+          "acf_1s": 0.672,
+          "acf_5s": 0.574,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0364,
+      "Blendshapes v2": 0.1087,
+      "Pose features": 0.3254
+    },
+    "interbrain": {
+      "n_samples": 12254,
+      "n_channels": 160,
+      "duration_s": 2450.6,
+      "valid_rate": 0.997
+    },
+    "effective_duration_s": 1928.4,
+    "flags": [
+      [
+        "CRITICAL",
+        "p1 Pose: 17.5% gap fraction (>10%)"
+      ],
+      [
+        "CRITICAL",
+        "p1 BL: 21.3% gap fraction (>10%)"
+      ],
+      [
+        "INFO",
+        "p1 ECG features: MISSING"
+      ],
+      [
+        "INFO",
+        "p2 ECG features: MISSING"
+      ],
+      [
+        "WARNING",
+        "Effective duration 32.1 min (<40 min)"
+      ],
+      [
+        "INFO",
+        "Pose features P1-P2 corr=0.325 (high \u2014 check for artifact)"
+      ]
+    ],
+    "grade": "POOR"
+  },
+  {
+    "session": "y24_022526",
+    "duration_s": 1802.8922761285212,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 9010,
+          "duration_s": 1801.8,
+          "n_channels": 160,
+          "valid_rate": 0.9993,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.4194,
+          "dynamics_cv": 0.525,
+          "acf_1s": -0.192,
+          "acf_5s": -0.057,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 34472,
+          "duration_s": 1802.9,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.5329,
+          "n_gaps": 2,
+          "max_gap_s": 882.79,
+          "activity_var": 0.4341,
+          "dynamics_cv": 0.21,
+          "acf_1s": 0.01,
+          "acf_5s": 0.078,
+          "tracking_smoothness": 34942.4
+        },
+        "Pose features": {
+          "n_samples": 13528,
+          "duration_s": 1802.8,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.5278,
+          "n_gaps": 1,
+          "max_gap_s": 951.55,
+          "activity_var": 0.3739,
+          "dynamics_cv": 0.335,
+          "acf_1s": 0.468,
+          "acf_5s": 0.379,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 9010,
+          "duration_s": 1801.8,
+          "n_channels": 160,
+          "valid_rate": 0.9943,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3418,
+          "dynamics_cv": 0.588,
+          "acf_1s": -0.186,
+          "acf_5s": -0.044,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 74142,
+          "duration_s": 1683.3,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.02,
+          "activity_var": 0.3913,
+          "dynamics_cv": 0.572,
+          "acf_1s": 0.274,
+          "acf_5s": 0.096,
+          "tracking_smoothness": 38290.1
+        },
+        "Pose features": {
+          "n_samples": 101181,
+          "duration_s": 1419.3,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.01,
+          "activity_var": 0.2254,
+          "dynamics_cv": 0.628,
+          "acf_1s": 0.763,
+          "acf_5s": 0.612,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0416,
+      "Blendshapes v2": 0.1115,
+      "Pose features": 0.0849
+    },
+    "interbrain": {
+      "n_samples": 9010,
+      "n_channels": 160,
+      "duration_s": 1801.8,
+      "valid_rate": 0.9923
+    },
+    "effective_duration_s": 842.1,
+    "flags": [
+      [
+        "CRITICAL",
+        "p1 Pose: 52.8% gap fraction (>10%)"
+      ],
+      [
+        "CRITICAL",
+        "p1 BL: 53.3% gap fraction (>10%)"
+      ],
+      [
+        "INFO",
+        "p1 ECG features: MISSING"
+      ],
+      [
+        "INFO",
+        "p2 ECG features: MISSING"
+      ],
+      [
+        "CRITICAL",
+        "Effective duration 14.0 min (<20 min)"
+      ]
+    ],
+    "grade": "POOR"
+  },
+  {
+    "session": "y_06",
+    "duration_s": 3012.642043138774,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 15059,
+          "duration_s": 3011.6,
+          "n_channels": 160,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.2853,
+          "dynamics_cv": 0.378,
+          "acf_1s": -0.166,
+          "acf_5s": 0.009,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6026,
+          "duration_s": 3012.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5505,
+          "dynamics_cv": 0.592,
+          "acf_1s": 0.799,
+          "acf_5s": 0.261,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 114835,
+          "duration_s": 3012.6,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0402,
+          "n_gaps": 125,
+          "max_gap_s": 58.37,
+          "activity_var": 0.3581,
+          "dynamics_cv": 0.574,
+          "acf_1s": 0.359,
+          "acf_5s": 0.077,
+          "tracking_smoothness": 29054.6
+        },
+        "Pose features": {
+          "n_samples": 43454,
+          "duration_s": 3012.6,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.023,
+          "n_gaps": 2,
+          "max_gap_s": 52.68,
+          "activity_var": 0.2138,
+          "dynamics_cv": 0.784,
+          "acf_1s": 0.901,
+          "acf_5s": 0.824,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 15059,
+          "duration_s": 3011.6,
+          "n_channels": 160,
+          "valid_rate": 0.9994,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3574,
+          "dynamics_cv": 0.501,
+          "acf_1s": -0.152,
+          "acf_5s": -0.002,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6026,
+          "duration_s": 3012.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.344,
+          "dynamics_cv": 0.512,
+          "acf_1s": 0.768,
+          "acf_5s": 0.274,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 114429,
+          "duration_s": 3012.6,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4119,
+          "dynamics_cv": 0.55,
+          "acf_1s": 0.304,
+          "acf_5s": 0.118,
+          "tracking_smoothness": 28658.8
+        },
+        "Pose features": {
+          "n_samples": 34875,
+          "duration_s": 3012.6,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.09,
+          "activity_var": 0.2673,
+          "dynamics_cv": 0.349,
+          "acf_1s": 0.539,
+          "acf_5s": 0.452,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0297,
+      "ECG features": 0.3,
+      "Blendshapes v2": 0.0536,
+      "Pose features": 0.1788
+    },
+    "interbrain": {
+      "n_samples": 15059,
+      "n_channels": 160,
+      "duration_s": 3011.6,
+      "valid_rate": 0.9995
+    },
+    "effective_duration_s": 2891.5,
+    "flags": [
+      [
+        "WARNING",
+        "p1 BL: 4.0% gap fraction (>3%)"
+      ]
+    ],
+    "grade": "MARGINAL"
+  },
+  {
+    "session": "y_17",
+    "duration_s": 2664.5371718694223,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 13318,
+          "duration_s": 2663.4,
+          "n_channels": 160,
+          "valid_rate": 0.9973,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.363,
+          "dynamics_cv": 0.461,
+          "acf_1s": -0.17,
+          "acf_5s": 0.038,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 5330,
+          "duration_s": 2664.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5663,
+          "dynamics_cv": 0.792,
+          "acf_1s": 0.86,
+          "acf_5s": 0.46,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 102818,
+          "duration_s": 2664.5,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4199,
+          "dynamics_cv": 0.419,
+          "acf_1s": 0.418,
+          "acf_5s": 0.271,
+          "tracking_smoothness": 30609.4
+        },
+        "Pose features": {
+          "n_samples": 32768,
+          "duration_s": 2664.4,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.08,
+          "activity_var": 0.1937,
+          "dynamics_cv": 0.434,
+          "acf_1s": 0.789,
+          "acf_5s": 0.743,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 13318,
+          "duration_s": 2663.4,
+          "n_channels": 160,
+          "valid_rate": 0.9998,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.4215,
+          "dynamics_cv": 0.411,
+          "acf_1s": -0.181,
+          "acf_5s": -0.026,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 5330,
+          "duration_s": 2664.5,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.4704,
+          "dynamics_cv": 0.537,
+          "acf_1s": 0.831,
+          "acf_5s": 0.438,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 109058,
+          "duration_s": 2664.5,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.02,
+          "activity_var": 0.4088,
+          "dynamics_cv": 0.549,
+          "acf_1s": 0.361,
+          "acf_5s": 0.124,
+          "tracking_smoothness": 30605.4
+        },
+        "Pose features": {
+          "n_samples": 30975,
+          "duration_s": 2664.5,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.09,
+          "activity_var": 0.3253,
+          "dynamics_cv": 0.36,
+          "acf_1s": 0.629,
+          "acf_5s": 0.506,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0552,
+      "ECG features": 0.2082,
+      "Blendshapes v2": 0.0743,
+      "Pose features": 0.0717
+    },
+    "interbrain": {
+      "n_samples": 13318,
+      "n_channels": 160,
+      "duration_s": 2663.4,
+      "valid_rate": 0.9987
+    },
+    "effective_duration_s": 2657.3,
+    "flags": [],
+    "grade": "GOOD"
+  },
+  {
+    "session": "y_32_03132026",
+    "duration_s": 3069.25126520684,
+    "participants": {
+      "p1": {
+        "EEG wavelet": {
+          "n_samples": 15342,
+          "duration_s": 3068.2,
+          "n_channels": 160,
+          "valid_rate": 0.9992,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.3866,
+          "dynamics_cv": 0.372,
+          "acf_1s": -0.131,
+          "acf_5s": -0.027,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6139,
+          "duration_s": 3069.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.5822,
+          "dynamics_cv": 0.887,
+          "acf_1s": 0.808,
+          "acf_5s": 0.507,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 110958,
+          "duration_s": 3069.2,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4253,
+          "dynamics_cv": 0.464,
+          "acf_1s": 0.129,
+          "acf_5s": 0.059,
+          "tracking_smoothness": 32586.4
+        },
+        "Pose features": {
+          "n_samples": 28808,
+          "duration_s": 3069.1,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.11,
+          "activity_var": 0.1848,
+          "dynamics_cv": 0.382,
+          "acf_1s": 0.862,
+          "acf_5s": 0.834,
+          "tracking_smoothness": null
+        }
+      },
+      "p2": {
+        "EEG wavelet": {
+          "n_samples": 15342,
+          "duration_s": 3068.2,
+          "n_channels": 160,
+          "valid_rate": 0.9967,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.2,
+          "activity_var": 0.4654,
+          "dynamics_cv": 0.375,
+          "acf_1s": -0.164,
+          "acf_5s": -0.017,
+          "tracking_smoothness": null
+        },
+        "ECG features": {
+          "n_samples": 6139,
+          "duration_s": 3069.0,
+          "n_channels": 7,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.5,
+          "activity_var": 0.4627,
+          "dynamics_cv": 0.686,
+          "acf_1s": 0.788,
+          "acf_5s": 0.366,
+          "tracking_smoothness": null
+        },
+        "Blendshapes v2": {
+          "n_samples": 112002,
+          "duration_s": 3069.2,
+          "n_channels": 31,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.03,
+          "activity_var": 0.4444,
+          "dynamics_cv": 0.474,
+          "acf_1s": 0.283,
+          "acf_5s": 0.097,
+          "tracking_smoothness": 25063.9
+        },
+        "Pose features": {
+          "n_samples": 26644,
+          "duration_s": 3069.1,
+          "n_channels": 41,
+          "valid_rate": 1.0,
+          "gap_frac": 0.0,
+          "n_gaps": 0,
+          "max_gap_s": 0.12,
+          "activity_var": 0.3168,
+          "dynamics_cv": 0.528,
+          "acf_1s": 0.54,
+          "acf_5s": 0.401,
+          "tracking_smoothness": null
+        }
+      }
+    },
+    "cross_participant": {
+      "EEG wavelet": 0.0373,
+      "ECG features": 0.1569,
+      "Blendshapes v2": 0.0602,
+      "Pose features": 0.1874
+    },
+    "interbrain": {
+      "n_samples": 15342,
+      "n_channels": 160,
+      "duration_s": 3068.2,
+      "valid_rate": 0.9976
+    },
+    "effective_duration_s": 3059.1,
+    "flags": [],
+    "grade": "GOOD"
+  }
+]

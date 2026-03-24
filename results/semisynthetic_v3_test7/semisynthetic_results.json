@@ -1,0 +1,132 @@
+{
+  "n_pairs": 1,
+  "kappa_levels": [
+    0.0,
+    0.6
+  ],
+  "auc": {
+    "eeg_wavelet": 0.5,
+    "blendshapes_v2": 1.0,
+    "pose_features": 1.0
+  },
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "eeg_wavelet",
+      "label": 0,
+      "p_value": 1.0,
+      "detected": false,
+      "mean_dr2": 0.0,
+      "cross_fp": [],
+      "analysis_time_s": 171.42475724220276
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.8684649326811825,
+      "detected": false,
+      "mean_dr2": 0.018651703372597694,
+      "cross_fp": [],
+      "analysis_time_s": 176.9326136112213
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "pose_features",
+      "label": 0,
+      "p_value": 1.0,
+      "detected": false,
+      "mean_dr2": 0.0,
+      "cross_fp": [],
+      "analysis_time_s": 196.74246430397034
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.6,
+      "target_mod": "eeg_wavelet",
+      "label": 1,
+      "p_value": 1.0,
+      "detected": false,
+      "mean_dr2": 0.0,
+      "cross_fp": [],
+      "analysis_time_s": 183.60242891311646
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.6,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.8289233882651021,
+      "detected": false,
+      "mean_dr2": 0.031141886487603188,
+      "cross_fp": [],
+      "analysis_time_s": 163.94915628433228
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.6,
+      "target_mod": "pose_features",
+      "label": 1,
+      "p_value": 0.8653544597564481,
+      "detected": false,
+      "mean_dr2": 0.04253123700618744,
+      "cross_fp": [],
+      "analysis_time_s": 219.81245732307434
+    }
+  ],
+  "roc_data": {
+    "eeg_wavelet": {
+      "labels": [
+        0,
+        1
+      ],
+      "scores": [
+        1.0,
+        1.0
+      ],
+      "auc": 0.5
+    },
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1
+      ],
+      "scores": [
+        0.8684649326811825,
+        0.8289233882651021
+      ],
+      "auc": 1.0
+    },
+    "pose_features": {
+      "labels": [
+        0,
+        1
+      ],
+      "scores": [
+        1.0,
+        0.8653544597564481
+      ],
+      "auc": 1.0
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "n_pairs": 1,
+  "kappa_levels": [
+    0.4
+  ],
+  "auc": {
+    "blendshapes_v2": NaN
+  },
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.4,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.003992015968063872,
+      "detected": false,
+      "mean_dr2": 0.0,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 0,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.4035486806187443,
+          "false_alarm": 0.3830478440637921,
+          "iou": 0.10750646412411119,
+          "temporal_corr": 0.017386711577637645,
+          "n_gate_on": 6594,
+          "n_post_on": 20819,
+          "gate_duty": 0.12211563391236713,
+          "post_duty": 0.3855513167154339
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.48587055606198726,
+          "false_alarm": 0.4286979627989371,
+          "iou": 0.11884057971014493,
+          "temporal_corr": 0.04516945985867949,
+          "n_gate_on": 2194,
+          "n_post_on": 7842,
+          "gate_duty": 0.1218888888888889,
+          "post_duty": 0.43566666666666665
+        },
+        "Pose->BL": {
+          "hit_rate": 0.04238833181403829,
+          "false_alarm": 0.04232569910160699,
+          "iou": 0.03248340901152637,
+          "temporal_corr": -5.08734579810223e-05,
+          "n_gate_on": 2194,
+          "n_post_on": 762,
+          "gate_duty": 0.1218888888888889,
+          "post_duty": 0.042333333333333334
+        }
+      },
+      "analysis_time_s": 349.7750458717346
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        1
+      ],
+      "scores": [
+        0.003992015968063872
+      ],
+      "auc": NaN
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

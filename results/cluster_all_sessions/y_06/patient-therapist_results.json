@@ -1,0 +1,25 @@
+{
+  "direction": "patient_to_therapist",
+  "session": "y_06",
+  "n_significant": 1,
+  "duration_s": 3012.642043138774,
+  "analysis_time_s": 160.1862930059433,
+  "pathway_summary": {
+    "BL->BL": {
+      "mean_dr2": 0.18210168182849884,
+      "significant": true
+    }
+  },
+  "detection": {
+    "blendshapes_v2->blendshapes_v2": {
+      "detected": true,
+      "sig_rate": 0.9994025491237387,
+      "n_sig": 15055,
+      "n_total": 15064,
+      "binom_p": 0.0,
+      "mean_dr2": 0.18210168182849884,
+      "t_stat": 140.92800903320312,
+      "t_p": 0.0
+    }
+  }
+}

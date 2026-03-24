@@ -1,0 +1,87 @@
+{
+  "n_analyses": 3,
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.03992015968063872,
+      "detected": true,
+      "mean_dr2": 0.10169041901826859,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {},
+      "analysis_time_s": 919.3489420413971
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "combined",
+      "label": 0,
+      "analysis_time_s": 1010.9057779312134
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.00998003992015968,
+      "detected": true,
+      "mean_dr2": 0.09985971450805664,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 2,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.03305608871827682,
+          "false_alarm": 0.031928480204342274,
+          "iou": 0.030308955807587017,
+          "temporal_corr": 0.005921835962892054,
+          "n_gate_on": 4689,
+          "n_post_on": 580,
+          "gate_duty": 0.2605,
+          "post_duty": 0.03222222222222222
+        },
+        "Pose->BL": {
+          "hit_rate": 0.0,
+          "false_alarm": 0.0,
+          "iou": 0.0,
+          "temporal_corr": 0.0,
+          "n_gate_on": 4689,
+          "n_post_on": 0,
+          "gate_duty": 0.2605,
+          "post_duty": 0.0
+        }
+      },
+      "analysis_time_s": 667.1070063114166
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1
+      ],
+      "scores": [
+        0.03992015968063872,
+        0.00998003992015968
+      ]
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

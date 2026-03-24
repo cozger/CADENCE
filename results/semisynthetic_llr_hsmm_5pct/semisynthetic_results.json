@@ -1,0 +1,163 @@
+{
+  "n_analyses": 5,
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.03992015968063872,
+      "detected": true,
+      "mean_dr2": 0.042453937232494354,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {},
+      "analysis_time_s": 728.0616083145142
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "combined",
+      "label": 0,
+      "analysis_time_s": 816.7769827842712
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.023952095808383235,
+      "detected": true,
+      "mean_dr2": 0.041925571858882904,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.7961165048543689,
+          "false_alarm": 0.7837789767000652,
+          "iou": 0.0628440047376855,
+          "temporal_corr": 0.02846525504084937,
+          "n_gate_on": 1133,
+          "n_post_on": 14122,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.7845555555555556
+        },
+        "Pose->BL": {
+          "hit_rate": 0.5692850838481907,
+          "false_alarm": 0.4750103752890259,
+          "iou": 0.07053034445051941,
+          "temporal_corr": 0.053836211300113644,
+          "n_gate_on": 1133,
+          "n_post_on": 8657,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.48094444444444445
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.47749338040600176,
+          "false_alarm": 0.4195766882077429,
+          "iou": 0.0658952496954933,
+          "temporal_corr": 0.02737839436635008,
+          "n_gate_on": 1133,
+          "n_post_on": 7618,
+          "gate_duty": 0.06294444444444444,
+          "post_duty": 0.4232222222222222
+        }
+      },
+      "analysis_time_s": 674.7528731822968
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "combined",
+      "label": 1,
+      "analysis_time_s": 571.7842350006104
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.4,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.023952095808383235,
+      "detected": true,
+      "mean_dr2": 0.041404325515031815,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.7837370242214533,
+          "false_alarm": 0.783246259795773,
+          "iou": 0.0631402885218482,
+          "temporal_corr": 0.009436292840378004,
+          "n_gate_on": 1156,
+          "n_post_on": 14099,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.7832777777777777
+        },
+        "Pose->BL": {
+          "hit_rate": 0.40484429065743943,
+          "false_alarm": 0.43540726668249824,
+          "iou": 0.05512367491166078,
+          "temporal_corr": -0.013778652402191236,
+          "n_gate_on": 1156,
+          "n_post_on": 7802,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.43344444444444447
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.4342560553633218,
+          "false_alarm": 0.389871764426502,
+          "iou": 0.06500064741680694,
+          "temporal_corr": 0.02227489223754478,
+          "n_gate_on": 1156,
+          "n_post_on": 7069,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.3927222222222222
+        },
+        "EEGw->BL": {
+          "hit_rate": 0.6730103806228374,
+          "false_alarm": 0.5777131322726193,
+          "iou": 0.07146137595297143,
+          "temporal_corr": 0.0510091065280332,
+          "n_gate_on": 1156,
+          "n_post_on": 10509,
+          "gate_duty": 0.06422222222222222,
+          "post_duty": 0.5838333333333333
+        }
+      },
+      "analysis_time_s": 906.1485364437103
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1,
+        1
+      ],
+      "scores": [
+        0.03992015968063872,
+        0.023952095808383235,
+        0.023952095808383235
+      ]
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "n_analyses": 4,
+  "analyses": [
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "blendshapes_v2",
+      "label": 0,
+      "p_value": 0.03992015968063872,
+      "detected": true,
+      "mean_dr2": 0.2547706365585327,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 4,
+      "n_detected": 1,
+      "timing": {},
+      "analysis_time_s": 1066.6451497077942
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.0,
+      "target_mod": "combined",
+      "label": 0,
+      "analysis_time_s": 873.177820444107
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "blendshapes_v2",
+      "label": 1,
+      "p_value": 0.00998003992015968,
+      "detected": true,
+      "mean_dr2": 0.2529843747615814,
+      "best_pathway": "blendshapes_v2->blendshapes_v2",
+      "n_targeting": 3,
+      "n_detected": 1,
+      "timing": {
+        "BL->BL": {
+          "hit_rate": 0.023885689912561313,
+          "false_alarm": 0.022688002404026745,
+          "iou": 0.02244039270687237,
+          "temporal_corr": 0.0074265965601546255,
+          "n_gate_on": 4689,
+          "n_post_on": 414,
+          "gate_duty": 0.2605,
+          "post_duty": 0.023
+        },
+        "Pose->BL": {
+          "hit_rate": 0.18404777137982511,
+          "false_alarm": 0.1861618210502592,
+          "iou": 0.12041300404632342,
+          "temporal_corr": -0.0021602356647834157,
+          "n_gate_on": 4689,
+          "n_post_on": 3341,
+          "gate_duty": 0.2605,
+          "post_duty": 0.18561111111111112
+        },
+        "EEGib->BL": {
+          "hit_rate": 0.32842823629771806,
+          "false_alarm": 0.32679738562091504,
+          "iou": 0.1703728288527492,
+          "temporal_corr": 0.0003915650721857368,
+          "n_gate_on": 4689,
+          "n_post_on": 5890,
+          "gate_duty": 0.2605,
+          "post_duty": 0.32722222222222225
+        }
+      },
+      "analysis_time_s": 1030.579330921173
+    },
+    {
+      "pair_idx": 0,
+      "pair": "y_32_03132026_x_y01_021726",
+      "kappa": 0.2,
+      "target_mod": "combined",
+      "label": 1,
+      "analysis_time_s": 648.0281248092651
+    }
+  ],
+  "roc_data": {
+    "blendshapes_v2": {
+      "labels": [
+        0,
+        1
+      ],
+      "scores": [
+        0.03992015968063872,
+        0.00998003992015968
+      ]
+    }
+  },
+  "pairs": [
+    {
+      "pair_idx": 0,
+      "p1_session": "y_32_03132026",
+      "p2_session": "y01_021726",
+      "window": [
+        434.0,
+        2234.0
+      ]
+    }
+  ]
+}

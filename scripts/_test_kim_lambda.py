@@ -110,10 +110,19 @@ def get_warmstart_b(y_mc):
     return b, y_res, sigma2
 
 
-def run_hmm(y_res, sigma2, b_fixed, p_stay):
-    """Fixed-b HMM forward-backward."""
+def run_hmm(y_res, sigma2, b_fixed, p_stay=0.99, p01=None, p11=None,
+            null_correction=False):
+    """Fixed-b HMM forward-backward with optional null-corrected likelihood.
+
+    If null_correction=True, regime 1's F includes the expected prediction
+    energy under null: F1 = sigma2 + (h@b)^2. This penalizes regime 1
+    for adding prediction noise when coupling isn't active.
+    """
     C, T = y_res.shape
-    A_tr = np.array([[p_stay, 1-p_stay], [1-p_stay, p_stay]])
+    if p01 is not None and p11 is not None:
+        A_tr = np.array([[1-p01, p01], [1-p11, p11]])
+    else:
+        A_tr = np.array([[p_stay, 1-p_stay], [1-p_stay, p_stay]])
     xi_filt = np.zeros((T, 2)); xi_filt[0] = [0.5, 0.5]
     b_zero = np.linalg.norm(b_fixed) < 1e-10
 
@@ -121,13 +130,18 @@ def run_hmm(y_res, sigma2, b_fixed, p_stay):
         xi_pred = A_tr.T @ xi_filt[t-1]; xi_pred = np.maximum(xi_pred, 1e-10)
         ll = np.zeros(2)
         for c in range(C):
-            yt = y_res[c, t]; F = sigma2[c]
-            ll[0] += -0.5 * (np.log(2*np.pi*F) + yt**2/F)
+            yt = y_res[c, t]; F0 = sigma2[c]
+            ll[0] += -0.5 * (np.log(2*np.pi*F0) + yt**2/F0)
             if active[c] and not b_zero:
                 pred = lam[c] * (X_src[c, t] @ b_fixed)
-                ll[1] += -0.5 * (np.log(2*np.pi*F) + (yt-pred)**2/F)
+                if null_correction:
+                    # F1 includes expected prediction energy under null
+                    F1 = sigma2[c] + pred**2
+                else:
+                    F1 = sigma2[c]
+                ll[1] += -0.5 * (np.log(2*np.pi*F1) + (yt-pred)**2/F1)
             else:
-                ll[1] += -0.5 * (np.log(2*np.pi*F) + yt**2/F)
+                ll[1] += -0.5 * (np.log(2*np.pi*F0) + yt**2/F0)
         lj = ll + np.log(xi_pred); lj -= lj.max()
         j = np.exp(lj); xi_filt[t] = j / max(j.sum(), 1e-20)
 
@@ -147,17 +161,148 @@ b_c, yres_c, sig2_c = get_warmstart_b(tgt_coupled.T)
 print(f"  ||b|| = {np.linalg.norm(b_c):.4f}\n", flush=True)
 
 # Sweep p_stay
-p_stay_values = [0.90, 0.95, 0.98, 0.99, 0.995, 0.999]
+# Sweep asymmetric transitions: p01 (enter coupling) vs p11 (stay coupled)
+p01_values = [0.001, 0.005, 0.01, 0.02, 0.05]  # probability of entering regime 1
+p11_values = [0.90, 0.95, 0.99]  # probability of staying in regime 1
 
-print(f"{'p_stay':>7} | {'frac':>5} {'hit':>5} {'fa':>5} {'IoU':>5}", flush=True)
-print("-" * 40, flush=True)
+from joblib import Parallel, delayed
+import itertools
 
-for ps in p_stay_values:
-    post = run_hmm(yres_c, sig2_c, b_c, ps)
+def compute_ll_diff(y_res, sigma2, b_fixed):
+    """Compute per-timepoint log-likelihood difference (regime1 - regime0).
+
+    Positive = coupling prediction helps. Negative = prediction hurts.
+    Sum across active channels.
+    """
+    C, T = y_res.shape
+    ll_diff = np.zeros(T)
+    for c in range(C):
+        if not active[c]: continue
+        for t in range(T):
+            yt = y_res[c, t]; F = sigma2[c]
+            pred = lam[c] * (X_src[c, t] @ b_fixed)
+            ll0 = -0.5 * (yt**2 / F)
+            ll1 = -0.5 * ((yt - pred)**2 / F)
+            ll_diff[t] += ll1 - ll0  # positive if prediction helps
+    return ll_diff
+
+def run_one_config(nc, p01, p11, yres, sig2, b, gm):
+    """Run one HMM config, return metrics."""
+    post = run_hmm(yres, sig2, b, p01=p01, p11=p11, null_correction=nc)
     frac = float((post > 0.5).mean())
-    hit = float((gate_mask & (post > 0.5)).sum() / max(gate_mask.sum(), 1))
-    fa = float((~gate_mask & (post > 0.5)).sum() / max((~gate_mask).sum(), 1))
-    inter = (gate_mask & (post > 0.5)).sum()
-    union = (gate_mask | (post > 0.5)).sum()
+    hit = float((gm & (post > 0.5)).sum() / max(gm.sum(), 1))
+    fa = float((~gm & (post > 0.5)).sum() / max((~gm).sum(), 1))
+    inter = (gm & (post > 0.5)).sum()
+    union = (gm | (post > 0.5)).sum()
     iou = float(inter / max(union, 1))
-    print(f"{ps:>7.3f} | {frac:>5.1%} {hit:>5.1%} {fa:>5.1%} {iou:>5.1%}", flush=True)
+    return nc, p01, p11, frac, hit, fa, iou
+
+configs = list(itertools.product([False, True], p01_values, p11_values))
+print(f"Sweeping {len(configs)} configs in parallel...", flush=True)
+
+t0 = time.perf_counter()
+results = Parallel(n_jobs=-1, verbose=1)(
+    delayed(run_one_config)(nc, p01, p11, yres_c, sig2_c, b_c, gate_mask)
+    for nc, p01, p11 in configs)
+print(f"Done in {time.perf_counter()-t0:.1f}s\n", flush=True)
+
+print(f"{'corr':>4} {'p01':>6} {'p11':>5} | {'frac':>5} {'hit':>5} {'fa':>5} {'IoU':>5}", flush=True)
+print("-" * 55, flush=True)
+
+best_iou = 0; best_params = None
+for nc, p01, p11, frac, hit, fa, iou in sorted(results, key=lambda r: -r[6]):
+    nc_str = "Y" if nc else "N"
+    print(f"  {nc_str}  {p01:>6.3f} {p11:>5.2f} | {frac:>5.1%} {hit:>5.1%} {fa:>5.1%} {iou:>5.1%}", flush=True)
+    if best_params is None:
+        best_params = (nc, p01, p11, hit, fa, iou)
+
+print(f"\nBest IoU: null_corr={best_params[0]}, p01={best_params[1]}, p11={best_params[2]}, "
+      f"hit={best_params[3]:.1%}, fa={best_params[4]:.1%}, IoU={best_params[5]:.1%}", flush=True)
+
+# Also show best by hit with FA<15%
+good = [(nc,p01,p11,f,h,fa,iou) for nc,p01,p11,f,h,fa,iou in results if fa < 0.15]
+if good:
+    good.sort(key=lambda r: -r[4])
+    print(f"\nBest hit (FA<15%):", flush=True)
+    for nc,p01,p11,f,h,fa,iou in good[:5]:
+        nc_s = "Y" if nc else "N"
+        print(f"  corr={nc_s} p01={p01} p11={p11}: hit={h:.1%} fa={fa:.1%} IoU={iou:.1%}", flush=True)
+
+# === Iteration 3: Direct LL difference thresholding (no HMM) ===
+print(f"\n{'='*60}", flush=True)
+print(f"Direct LL difference (no HMM) with smoothing sweep", flush=True)
+print(f"{'='*60}", flush=True)
+
+from scipy.ndimage import uniform_filter1d
+
+ll_diff = compute_ll_diff(yres_c, sig2_c, b_c)
+print(f"LL diff: mean={ll_diff.mean():.4f} std={ll_diff.std():.4f} "
+      f"max={ll_diff.max():.4f}", flush=True)
+print(f"LL diff during coupling: {ll_diff[gate_mask].mean():.4f}", flush=True)
+print(f"LL diff during null:     {ll_diff[~gate_mask].mean():.4f}", flush=True)
+
+# Sweep smoothing windows and thresholds
+smooth_windows = [1, 15, 30, 60, 150, 450]  # samples at 30 Hz
+thresholds_pct = [50, 60, 70, 80, 90, 95]
+
+def run_smooth_thresh(sw, tp, lld, gm):
+    if sw > 1:
+        lld_s = uniform_filter1d(lld, sw, mode='nearest')
+    else:
+        lld_s = lld
+    thresh = np.percentile(lld_s, tp)
+    det = lld_s > thresh
+    hit = float((gm & det).sum() / max(gm.sum(), 1))
+    fa = float((~gm & det).sum() / max((~gm).sum(), 1))
+    inter = (gm & det).sum(); union = (gm | det).sum()
+    iou = float(inter / max(union, 1))
+    return sw, tp, hit, fa, iou
+
+configs2 = list(itertools.product(smooth_windows, thresholds_pct))
+results2 = Parallel(n_jobs=-1)(
+    delayed(run_smooth_thresh)(sw, tp, ll_diff, gate_mask)
+    for sw, tp in configs2)
+
+print(f"\n{'smooth':>6} {'pct':>4} | {'hit':>5} {'fa':>5} {'IoU':>5}", flush=True)
+print("-" * 40, flush=True)
+results2.sort(key=lambda r: -r[4])
+for sw, tp, hit, fa, iou in results2[:20]:
+    print(f"{sw:>6} {tp:>4} | {hit:>5.1%} {fa:>5.1%} {iou:>5.1%}", flush=True)
+
+good2 = [r for r in results2 if r[3] < 0.15]
+if good2:
+    good2.sort(key=lambda r: -r[2])
+    print(f"\nBest hit (FA<15%):", flush=True)
+    for sw, tp, hit, fa, iou in good2[:5]:
+        print(f"  smooth={sw} pct={tp}: hit={hit:.1%} fa={fa:.1%} IoU={iou:.1%}", flush=True)
+
+# === Iteration 4: Iterative b refinement ===
+print(f"\n{'='*60}", flush=True)
+print(f"Iterative b refinement (re-estimate b from HMM detections)", flush=True)
+print(f"{'='*60}", flush=True)
+
+b_iter = b_c.copy()
+p01_use, p11_use = 0.01, 0.99  # best IoU params
+
+for iteration in range(5):
+    post = run_hmm(yres_c, sig2_c, b_iter, p01=p01_use, p11=p11_use)
+    detected = post > 0.5
+    det_frac = detected.mean()
+
+    hit = float((gate_mask & detected).sum() / max(gate_mask.sum(), 1))
+    fa = float((~gate_mask & detected).sum() / max((~gate_mask).sum(), 1))
+    inter = (gate_mask & detected).sum(); union = (gate_mask | detected).sum()
+    iou = float(inter / max(union, 1))
+
+    print(f"  Iter {iteration}: frac={det_frac:.1%} hit={hit:.1%} fa={fa:.1%} "
+          f"IoU={iou:.1%} ||b||={np.linalg.norm(b_iter):.4f}", flush=True)
+
+    # Re-estimate b from detected windows
+    if detected.sum() > nb + 5:
+        Y_s = np.concatenate([yres_c[c, detected] for c in range(C) if active[c]])
+        X_s = np.concatenate([lam[c] * X_src[c, detected] for c in range(C) if active[c]])
+        b_new = np.linalg.solve(X_s.T @ X_s + 1e-4*np.eye(nb), X_s.T @ Y_s)
+        b_iter = b_new
+    else:
+        print(f"  -> Too few detected windows, stopping", flush=True)
+        break

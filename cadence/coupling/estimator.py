@@ -101,6 +101,15 @@ class CouplingResult:
     # HMM coupling posterior per pathway
     pathway_coupling_posterior: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
 
+    # Per-channel dR2 for matched-diagonal pathways (C, T) arrays
+    pathway_dr2_perchannel: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
+
+    # Z-score temporal posterior (matched-diagonal pathways)
+    pathway_zscore_posterior: Dict[Tuple[str, str], np.ndarray] = field(default_factory=dict)
+
+    # SLDS detection metadata per pathway (kappa, n_active_channels, etc.)
+    pathway_slds_details: Dict[Tuple[str, str], Dict] = field(default_factory=dict)
+
     # Summary statistics
     overall_dr2: Optional[np.ndarray] = None  # average across pathways
     n_significant_pathways: int = 0
@@ -351,12 +360,27 @@ class CouplingEstimator:
         result.discovery = discovery
         _log(f"[{direction}] Stage 1 done in {_time.perf_counter()-_t0:.1f}s")
 
-        # Stage 1.5: Surrogate significance screen
-        _log(f"[{direction}] Stage 1.5: Surrogate screening...")
-        _t0 = _time.perf_counter()
-        self._stage1_5_surrogate_screen(
-            source_sigs, target_sigs, duration, discovery, result, eval_rate)
-        _log(f"[{direction}] Stage 1.5 done in {_time.perf_counter()-_t0:.1f}s")
+        # Stage 1.5: Surrogate significance screen (skippable in V3)
+        skip_screening = self.config.get('significance', {}).get(
+            'skip_screening', False)
+        if skip_screening:
+            _log(f"[{direction}] Stage 1.5: SKIPPED (skip_screening=true)")
+            # Mark all discovered pathways as significant so they proceed
+            # to Stage 2 (coherence TL handles temporal significance).
+            for key, selected in discovery.selected_features.items():
+                if selected:
+                    src_mod_s, tgt_mod_s = key
+                    if src_mod_s in source_sigs and tgt_mod_s in target_sigs:
+                        result.pathway_significant[key] = True
+                        result.n_significant_pathways += 1
+        else:
+            _log(f"[{direction}] Stage 1.5: Surrogate screening...")
+            _t0 = _time.perf_counter()
+            self._stage1_5_surrogate_screen(
+                source_sigs, target_sigs, duration, discovery, result,
+                eval_rate)
+            _log(f"[{direction}] Stage 1.5 done in "
+                 f"{_time.perf_counter()-_t0:.1f}s")
 
         # Stage 2: EWLS on surviving pathways only
         _log(f"[{direction}] Stage 2: EWLS estimation...")
@@ -388,23 +412,71 @@ class CouplingEstimator:
                     result.pathway_significant[key] = False
                     result.n_significant_pathways -= 1
 
-        # Post-Stage-2 HMM: final arbiter for pathway_significant
-        from cadence.significance.detection import detect_coupling_hmm
-        hmm_cfg = sig_cfg.get('session_level', {}).get('hmm', {})
-        hmm_cfg['min_dr2'] = min_dr2
+        # Post-Stage-2 detection: coherence-based (V3)
+        # Matched-diagonal pathways already have coherence posterior from
+        # Stage 2.  Detection = coupling_fraction > min threshold.
+        tl_cfg = self.config.get('temporal_localization', {})
+        tl_method = tl_cfg.get('method', 'coherence')
         eval_rate_overrides = self.config.get('eval_rate_overrides', {})
 
-        for key in result.pathway_dr2:
-            if key not in result.pathway_pvalues:
-                continue
-            dr2_arr = result.pathway_dr2[key]
-            null_stats = result.pathway_null_stats.get(key)
-            pw_eval_rate = eval_rate_overrides.get(key[0], eval_rate)
-            detected, details = detect_coupling_hmm(
-                dr2_arr, null_stats, pw_eval_rate, hmm_cfg)
-            result.pathway_significant[key] = detected
-            if 'coupling_posterior' in details:
-                result.pathway_coupling_posterior[key] = details['coupling_posterior']
+        if tl_method == 'coherence':
+            # V3: detection from coherence coupling fraction
+            min_coupling_frac = tl_cfg.get('min_coupling_fraction', 0.03)
+            for key in result.pathway_dr2:
+                sel_method_key = discovery.selection_method.get(key, '')
+                src_mod_key, tgt_mod_key = key
+                n_selected = len(discovery.selected_features.get(key, []))
+                is_matched_diag = (sel_method_key == 'stability_hmm'
+                                   and src_mod_key == tgt_mod_key
+                                   and n_selected <= 30)
+
+                if is_matched_diag and key in result.pathway_coupling_posterior:
+                    posterior = result.pathway_coupling_posterior[key]
+                    coupling_frac = float(np.mean(posterior > 0.5))
+                    mean_dr2_val = float(np.nanmean(
+                        result.pathway_dr2[key][
+                            np.isfinite(result.pathway_dr2[key])]))
+                    detected = (coupling_frac > min_coupling_frac
+                                and mean_dr2_val > min_dr2)
+                    result.pathway_significant[key] = detected
+                elif key in result.pathway_pvalues:
+                    # Non-matched-diagonal: use HMM detection
+                    from cadence.significance.detection import (
+                        detect_coupling_hmm,
+                    )
+                    hmm_cfg = sig_cfg.get('session_level', {}).get(
+                        'hmm', {})
+                    hmm_cfg['min_dr2'] = min_dr2
+                    dr2_arr = result.pathway_dr2[key]
+                    null_stats = result.pathway_null_stats.get(key)
+                    pw_eval_rate = eval_rate_overrides.get(
+                        key[0], eval_rate)
+                    detected, details = detect_coupling_hmm(
+                        dr2_arr, null_stats, pw_eval_rate, hmm_cfg,
+                        selection_method=sel_method_key)
+                    result.pathway_significant[key] = detected
+                    if 'coupling_posterior' in details:
+                        result.pathway_coupling_posterior[key] = details[
+                            'coupling_posterior']
+        else:
+            # Legacy: session-level HMM detection
+            from cadence.significance.detection import detect_coupling_hmm
+            hmm_cfg = sig_cfg.get('session_level', {}).get('hmm', {})
+            hmm_cfg['min_dr2'] = min_dr2
+            for key in result.pathway_dr2:
+                if key not in result.pathway_pvalues:
+                    continue
+                dr2_arr = result.pathway_dr2[key]
+                null_stats = result.pathway_null_stats.get(key)
+                pw_eval_rate = eval_rate_overrides.get(key[0], eval_rate)
+                sel_method_key = discovery.selection_method.get(key, '')
+                detected, details = detect_coupling_hmm(
+                    dr2_arr, null_stats, pw_eval_rate, hmm_cfg,
+                    selection_method=sel_method_key)
+                result.pathway_significant[key] = detected
+                if 'coupling_posterior' in details:
+                    result.pathway_coupling_posterior[key] = details[
+                        'coupling_posterior']
         result.n_significant_pathways = sum(result.pathway_significant.values())
 
         # Overall dR2
@@ -2197,9 +2269,41 @@ class CouplingEstimator:
             fallback_used = 'tertiary'
         elif n_stable >= 2:
             # HMM fallback: stability found features but block/intersection
-            # failed. Use stability features directly — the post-Stage-2 HMM
-            # handles temporal discrimination (episodic coupling detection).
-            final_groups = stable_groups
+            # failed. Use CC-selected features instead of stability features.
+            # Stability misses episodic coupling (25% duty cycle) because
+            # coupled features aren't consistently selected across subsamples.
+            # CC directly measures source→target predictive power at lags,
+            # capturing time-averaged coupling even from episodic windows.
+            # HMM handles temporal discrimination downstream.
+            #
+            # Use Frobenius CC (not matched diagonal) because target may be
+            # PCA-reduced, making channel pairing meaningless. Frobenius CC
+            # measures total cross-covariance of each source feature against
+            # ALL target dimensions, ranking all n_grouped features.
+            import torch as _torch
+            if valid is not None:
+                _Xsv = X_source[valid]
+                _Xav = X_ar[valid]
+                _yv = y[valid]
+            else:
+                _Xsv = X_source
+                _Xav = X_ar
+                _yv = y
+            _Tv = _Xsv.shape[0]
+            _dev, _dt = _Xsv.device, _Xsv.dtype
+            # AR-whiten target (pooled across channels)
+            _XtX = _Xav.T @ _Xav
+            _reg = lam * _torch.eye(_XtX.shape[0], device=_dev, dtype=_dt)
+            _beta_ar = _torch.linalg.solve(_XtX + _reg, _Xav.T @ _yv)
+            _y_resid = _yv - _Xav @ _beta_ar  # (T_v, C_tgt)
+            # Per-feature Frobenius cross-covariance
+            _cc_full = _Xsv[:, :n_grouped * n_basis].T @ _y_resid / _Tv
+            _cc_3d = _cc_full.reshape(n_grouped, n_basis, C_tgt)
+            _cc_scores = (_cc_3d ** 2).sum(dim=(1, 2))  # (n_grouped,)
+            cc_np = _cc_scores.cpu().numpy()
+            n_sel = max(min(15, n_grouped // 2), 2)
+            top_idx = np.argsort(cc_np)[-n_sel:]
+            final_groups = sorted(top_idx.tolist())
             fallback_used = 'stability_hmm'
         else:
             final_groups = []
@@ -2576,6 +2680,10 @@ class CouplingEstimator:
                 if is_significant:
                     result.n_significant_pathways += 1
                     result.pathway_pvalues[k] = np.full(1, p_raw)
+                    # Store screening p for detection fallback
+                    if not hasattr(result, 'pathway_screening_p'):
+                        result.pathway_screening_p = {}
+                    result.pathway_screening_p[k] = p_raw
                     _log(f"  Screen {k[0]}->{k[1]}: PASS "
                           f"(p={p_raw:.4f} [hmm, no FDR])")
                 else:
@@ -3357,7 +3465,8 @@ class CouplingEstimator:
         moderator_names = stage2_cfg.get('moderation', {}).get(
             'moderators', ['ecg_hr', 'ecg_rmssd'])
         lam_ridge = self.config['ewls']['lambda_ridge']
-        tau = self.config['ewls']['tau_seconds']
+        base_tau = self.config['ewls']['tau_seconds']
+        tau_overrides = self.config.get('ewls_tau_overrides', {})
 
         # Per-timepoint significance config
         tp_cfg = self.config['significance'].get('timepoint', {})
@@ -3377,16 +3486,13 @@ class CouplingEstimator:
 
         eval_times = np.arange(0, duration, 1.0 / eval_rate)
 
+        # --- Build filtered list of pathways to process ---
+        pathways_to_run = []
         for key, selected in discovery.selected_features.items():
             if not selected:
                 continue
-
-            # Only run Stage 2 for pathways that passed significance screening
             if not result.pathway_significant.get(key, False):
                 continue
-
-            # Gate on pathway-level p-value (skip clearly non-significant)
-            # Skip this gate for stability_hmm pathways — they bypass block selection
             sel_method = discovery.selection_method.get(key, '')
             if sel_method != 'stability_hmm':
                 pw_p = discovery.block_pathway_pvalue.get(key, 1.0)
@@ -3397,10 +3503,29 @@ class CouplingEstimator:
                     result.n_significant_pathways = max(
                         0, result.n_significant_pathways - 1)
                     continue
-
             src_mod, tgt_mod = key
             if src_mod not in source_sigs or tgt_mod not in target_sigs:
                 continue
+            # V3.5: skip non-matched-diagonal pathways (Kim filter only)
+            kim_only = self.config.get('stage2', {}).get('kim_only', False)
+            if kim_only and src_mod != tgt_mod:
+                _log(f"  Stage 2 {src_mod}->{tgt_mod}: skipped (kim_only)")
+                continue
+            pathways_to_run.append((key, list(selected)))
+
+        if not pathways_to_run:
+            return
+
+        # --- Per-pathway worker function ---
+        import threading
+        _result_lock = threading.Lock()
+
+        def _run_pathway(key, selected, stream=None):
+            """Process one Stage 2 pathway, optionally on a CUDA stream."""
+            t_pw_start = _time.perf_counter()
+            src_mod, tgt_mod = key
+            sel_method = discovery.selection_method.get(key, '')
+            tau = tau_overrides.get(src_mod, base_tau)
 
             src_signal, src_ts, src_valid = source_sigs[src_mod]
             tgt_signal, tgt_ts, tgt_valid = target_sigs[tgt_mod]
@@ -3419,12 +3544,47 @@ class CouplingEstimator:
             C_tgt = tgt_signal.shape[1]
             T_eval = len(eval_times)
 
-            # Estimate EWLS memory for full model
+            # V3.2: Matched-diagonal per-channel EWLS
+            is_same_mod_hmm = (sel_method == 'stability_hmm'
+                               and src_mod == tgt_mod
+                               and n_sel <= 30)
+            if is_same_mod_hmm:
+                try:
+                    self._stage2_matched_diagonal(
+                        key,
+                        source_sigs[src_mod][0],
+                        source_sigs[src_mod][1],
+                        source_sigs[src_mod][2],
+                        tgt_signal, tgt_ts, tgt_valid,
+                        basis, n_basis, list(selected),
+                        eval_times, eval_rate, tau, lam_ridge,
+                        result, source_sigs,
+                        use_nonlinear=use_nonlinear,
+                        use_moderation=use_moderation,
+                        moderator_names=moderator_names,
+                        tp_enabled=tp_enabled,
+                        tp_n_surr=tp_n_surr,
+                        tp_surr_rate=tp_surr_rate,
+                        tp_smooth_sec=tp_smooth_sec,
+                        tp_seed=tp_seed,
+                    )
+                except Exception as e:
+                    _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
+                         f"matched-diagonal FAILED ({e}), "
+                         f"falling back to multivariate")
+                else:
+                    _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
+                         f"done in {_time.perf_counter()-t_pw_start:.1f}s")
+                    return
+
+            pw_use_nonlinear = use_nonlinear and sel_method != 'stability_hmm'
+            pw_use_moderation = use_moderation and sel_method != 'stability_hmm'
+
             p_ar = self.ar_order * C_tgt
             p_aug = n_source_cols
-            if use_nonlinear:
+            if pw_use_nonlinear:
                 p_aug += n_source_cols
-            if use_moderation:
+            if pw_use_moderation:
                 p_aug += n_source_cols * len(moderator_names)
             p_full = p_aug + p_ar
 
@@ -3436,23 +3596,19 @@ class CouplingEstimator:
             triton_grid = p_full ** 2
             triton_unsafe = triton_grid > 50_000
 
-            # Memory estimate: use checkpointed estimate since solve()
-            # auto-dispatches to checkpointed path for large p
             K_est = max(1, int(T_eval ** 0.5))
             n_ckpts_est = (T_eval + K_est - 1) // K_est
-            # Peak: checkpoints + 3 segment copies (fwd + bwd + combined)
             ewls_bytes = (n_ckpts_est + 3 * K_est) * 4 * (p_full**2 + p_full * C_tgt)
 
             if ewls_bytes > 0.4 * free_vram:
-                # Even checkpointed path would OOM — must chunk
                 self._stage2_chunked(
                     key, src_r, src_ts_r, src_valid_r,
                     tgt_signal, tgt_ts, tgt_valid,
                     basis, n_basis, n_sel, n_source_cols,
                     eval_times, eval_rate, tau, lam_ridge,
                     free_vram, result, target_sigs,
-                    use_nonlinear=use_nonlinear,
-                    use_moderation=use_moderation,
+                    use_nonlinear=pw_use_nonlinear,
+                    use_moderation=pw_use_moderation,
                     moderator_names=moderator_names,
                     force_sequential=triton_unsafe,
                     selected=list(selected),
@@ -3462,11 +3618,10 @@ class CouplingEstimator:
                     tp_smooth_sec=tp_smooth_sec,
                     tp_seed=tp_seed,
                     ib_surrogate_method=ib_surrogate_method)
-                continue
+                _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
+                     f"done in {_time.perf_counter()-t_pw_start:.1f}s")
+                return
 
-            # --- Standard full EWLS ---
-            # solve() auto-selects checkpointed path when full xx
-            # would exceed 40% VRAM; force_sequential bypasses Triton
             dm = DesignMatrixBuilder(basis, ar_order=self.ar_order,
                                       device=self.device)
             X_base, y, valid = dm.build(
@@ -3480,12 +3635,12 @@ class CouplingEstimator:
 
             X_augmented = X_base
 
-            if use_nonlinear and n_source_cols > 0:
+            if pw_use_nonlinear and n_source_cols > 0:
                 X_source = X_base[:, :n_source_cols]
                 X_sq = X_source ** 2
                 X_augmented = torch.cat([X_augmented, X_sq], dim=1)
 
-            if use_moderation and moderator_names:
+            if pw_use_moderation and moderator_names:
                 moderator_signals = self._get_moderator_signals(
                     tgt_signal, tgt_ts, tgt_mod, eval_times,
                     source_sigs, moderator_names)
@@ -3506,8 +3661,10 @@ class CouplingEstimator:
             )
 
             try:
+                t_ewls = _time.perf_counter()
                 dr2_tv, r2_full_tv, r2_restr_tv, beta_full, _ = \
                     solver.solve_restricted(X_augmented, X_restricted, y, valid)
+                t_ewls = _time.perf_counter() - t_ewls
 
                 dr2_np = dr2_tv.cpu().numpy()
                 result.pathway_dr2[key] = dr2_np
@@ -3515,9 +3672,10 @@ class CouplingEstimator:
                 result.pathway_r2_restricted[key] = r2_restr_tv.cpu().numpy()
                 result.pathway_times[key] = eval_times
 
-                if key not in result.pathway_significant:
-                    result.pathway_significant[key] = True
-                    result.n_significant_pathways += 1
+                with _result_lock:
+                    if key not in result.pathway_significant:
+                        result.pathway_significant[key] = True
+                        result.n_significant_pathways += 1
 
                 if beta_full is not None:
                     basis_coeffs = beta_full[:, :n_source_cols, :].cpu().numpy()
@@ -3525,14 +3683,9 @@ class CouplingEstimator:
                         basis_coeffs, n_sel, basis=basis)
                     result.pathway_kernels[key] = kernel
 
-                    # --- Per-feature dr2 decomposition (Fix 6) ---
-                    # Coefficient-based: contribution_i(t) proportional to
-                    # ||beta_i(t)||² relative to total. Multiply by dr2(t)
-                    # so per-feature dr2 sums to total dr2 at each timepoint.
                     if n_sel > 1 and n_source_cols > 0:
-                        beta_src = beta_full[:, :n_source_cols, :]  # (T, n_src_cols, C)
-                        # Total beta energy at each timepoint
-                        total_energy = (beta_src ** 2).sum(dim=(1, 2))  # (T,)
+                        beta_src = beta_full[:, :n_source_cols, :]
+                        total_energy = (beta_src ** 2).sum(dim=(1, 2))
                         total_np = total_energy.cpu().numpy()
 
                         feat_dr2_dict = {}
@@ -3546,10 +3699,6 @@ class CouplingEstimator:
 
                         result.pathway_feature_dr2[key] = feat_dr2_dict
 
-                    # --- Source x Target feature decomposition ---
-                    # Beta energy per (source_feat, target_channel) pair,
-                    # apportioned from total dr2. Keep top-N pairs by
-                    # mean contribution to avoid storage bloat.
                     max_src_tgt_pairs = 20
                     src_tgt_dict = {}
                     for i, feat_idx in enumerate(selected):
@@ -3562,7 +3711,6 @@ class CouplingEstimator:
                             pair_dr2 = dr2_np * pair_frac
                             src_tgt_dict[(feat_idx, c)] = pair_dr2
 
-                    # Prune to top-N by mean absolute dr2
                     if len(src_tgt_dict) > max_src_tgt_pairs:
                         ranked = sorted(
                             src_tgt_dict.items(),
@@ -3572,17 +3720,14 @@ class CouplingEstimator:
 
                     result.pathway_src_tgt_dr2[key] = src_tgt_dict
 
-                # --- Per-timepoint significance via surrogate threshold ---
                 if tp_enabled and n_source_cols > 0:
                     from cadence.significance.surrogate import (
                         surrogate_pvalues_from_design,
                     )
-                    # Choose surrogate method (Fourier for interbrain)
                     surr_method = 'circular_shift'
                     if src_mod == INTERBRAIN_MODALITY:
                         surr_method = ib_surrogate_method
 
-                    # Optionally subsample to lower eval rate for surrogates
                     surr_rate = tp_surr_rate or eval_rate
                     if surr_rate < eval_rate:
                         step = max(1, int(round(eval_rate / surr_rate)))
@@ -3604,7 +3749,7 @@ class CouplingEstimator:
                          f"{f' @{surr_rate}Hz' if step > 1 else ''})...")
 
                     try:
-                        # Create solver at surrogate rate if subsampled
+                        t_surr = _time.perf_counter()
                         if step > 1:
                             surr_solver = EWLSSolver(
                                 tau_seconds=tau,
@@ -3618,7 +3763,6 @@ class CouplingEstimator:
                         else:
                             surr_solver = solver
 
-                        # Prepare per-feature dR2 at surrogate rate
                         feat_dr2_s = None
                         if key in result.pathway_feature_dr2 and n_sel > 1:
                             feat_dr2_s = {
@@ -3626,10 +3770,9 @@ class CouplingEstimator:
                                 for fi, arr in result.pathway_feature_dr2[key].items()
                             }
 
-                        # GPD config for continuous p-values
-                        tp_cfg = self.config['significance'].get('timepoint', {})
-                        gpd_ph = tp_cfg.get('gpd_pool_half', 50)
-                        gpd_tq = tp_cfg.get('gpd_threshold_quantile', 0.9)
+                        tp_cfg_local = self.config['significance'].get('timepoint', {})
+                        gpd_ph = tp_cfg_local.get('gpd_pool_half', 50)
+                        gpd_tq = tp_cfg_local.get('gpd_threshold_quantile', 0.9)
 
                         tp_pvalues_raw, tp_dr2_null, feat_pv_raw = \
                             surrogate_pvalues_from_design(
@@ -3645,14 +3788,13 @@ class CouplingEstimator:
                                 feat_dr2_real=feat_dr2_s,
                                 gpd_pool_half=gpd_ph,
                                 gpd_threshold_quantile=gpd_tq)
+                        t_surr = _time.perf_counter() - t_surr
 
-                        # Store null stats for HMM detection
                         result.pathway_null_stats[key] = {
                             'mu_0': float(np.mean(tp_dr2_null)),
                             'sigma_0': float(np.std(tp_dr2_null)),
                         }
 
-                        # Interpolate back to full eval rate if subsampled
                         if step > 1:
                             T_full = len(dr2_np)
                             T_sub = len(tp_pvalues_raw)
@@ -3664,7 +3806,6 @@ class CouplingEstimator:
 
                         result.pathway_pvalues[key] = tp_pvalues
 
-                        # Store per-feature p-values
                         if feat_pv_raw is not None:
                             if step > 1:
                                 feat_pv_interp = {}
@@ -3674,14 +3815,21 @@ class CouplingEstimator:
                                 result.pathway_feature_pvalues[key] = feat_pv_interp
                             else:
                                 result.pathway_feature_pvalues[key] = feat_pv_raw
+
+                        _log(f"  Stage 2 {src_mod}->{tgt_mod}: timing "
+                             f"ewls={t_ewls:.1f}s surr={t_surr:.1f}s "
+                             f"total={_time.perf_counter()-t_pw_start:.1f}s")
                     except Exception as tp_e:
                         _log(f"  Stage 2 {src_mod}->{tgt_mod}: "
                              f"timepoint p-values failed ({tp_e})")
-                        # Broadcast session-level p-value to match dr2 length
                         if key in result.pathway_pvalues:
                             sess_p = result.pathway_pvalues[key].flat[0]
                             result.pathway_pvalues[key] = np.full_like(
                                 dr2_np, sess_p)
+                else:
+                    _log(f"  Stage 2 {src_mod}->{tgt_mod}: timing "
+                         f"ewls={t_ewls:.1f}s "
+                         f"total={_time.perf_counter()-t_pw_start:.1f}s")
 
             except Exception as e:
                 _log(f"  Stage 2 {src_mod}->{tgt_mod}: FAILED ({e}), retrying chunked")
@@ -3705,8 +3853,8 @@ class CouplingEstimator:
                         basis, n_basis, n_sel, n_source_cols,
                         eval_times, eval_rate, tau, lam_ridge,
                         free_vram, result, source_sigs,
-                        use_nonlinear=use_nonlinear,
-                        use_moderation=use_moderation,
+                        use_nonlinear=pw_use_nonlinear,
+                        use_moderation=pw_use_moderation,
                         moderator_names=moderator_names,
                         force_sequential=is_triton_error,
                         selected=list(selected),
@@ -3720,11 +3868,245 @@ class CouplingEstimator:
                 except Exception as e2:
                     _log(f"  Stage 2 {src_mod}->{tgt_mod}: chunked retry ALSO FAILED ({e2})")
 
-            # Free GPU memory between pathways
+            # Free GPU memory
             try:
                 torch.cuda.empty_cache()
             except Exception:
                 pass
+
+        # --- Dispatch pathways: sequential or parallel ---
+        n_stage2_workers = stage2_cfg.get('pathway_workers', 3)
+
+        if n_stage2_workers <= 1 or len(pathways_to_run) <= 1:
+            # Sequential execution
+            for key, selected in pathways_to_run:
+                _run_pathway(key, selected)
+        else:
+            # Parallel execution via thread pool with CUDA streams.
+            # First pathway runs sequentially (Triton JIT warmup).
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            _log(f"  Stage 2: {len(pathways_to_run)} pathways, "
+                 f"{n_stage2_workers} workers")
+
+            _run_pathway(pathways_to_run[0][0], pathways_to_run[0][1])
+
+            if len(pathways_to_run) > 1:
+                def _run_pathway_threaded(key, selected):
+                    stream = torch.cuda.Stream(device=self.device)
+                    try:
+                        with torch.cuda.stream(stream):
+                            _run_pathway(key, selected, stream=stream)
+                    except Exception as e:
+                        _log(f"  Stage 2 {key}: thread failed ({e})")
+                        # Disable Triton after CUDA errors to prevent cascade
+                        if 'illegal memory' in str(e).lower() or 'cuda' in str(e).lower():
+                            from cadence.regression.ewls import disable_triton_scan
+                            disable_triton_scan()
+                        return
+                    finally:
+                        try:
+                            stream.synchronize()
+                        except Exception:
+                            pass  # stream may be corrupt; don't cascade
+
+                # VRAM safety: reduce concurrency if GPU memory is tight
+                # Need headroom for concurrent EWLS solves (each ~1-3 GB)
+                try:
+                    free_vram_now = torch.cuda.mem_get_info(self.device)[0]
+                    vram_per_worker_mb = 3000  # conservative: ~3 GB per pathway
+                    min_vram = vram_per_worker_mb * n_stage2_workers * (1024 ** 2)
+                    if free_vram_now < min_vram:
+                        n_stage2_workers = max(1, int(free_vram_now /
+                                               (vram_per_worker_mb * 1024 ** 2)))
+                        _log(f"  Stage 2: VRAM={free_vram_now/1e9:.1f}GB, "
+                             f"reducing to {n_stage2_workers} workers")
+                except Exception:
+                    pass
+
+                if n_stage2_workers > 1:
+                    with ThreadPoolExecutor(max_workers=n_stage2_workers) as pool:
+                        futures = [
+                            pool.submit(_run_pathway_threaded, key, selected)
+                            for key, selected in pathways_to_run[1:]
+                        ]
+                        for f in as_completed(futures):
+                            f.result()  # threads handle their own errors
+                else:
+                    for key, selected in pathways_to_run[1:]:
+                        _run_pathway(key, selected)
+
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass  # CUDA context may be corrupt after thread errors
+
+    def _stage2_matched_diagonal(self, key, src_signal, src_ts, src_valid,
+                                   tgt_signal, tgt_ts, tgt_valid,
+                                   basis, n_basis, selected,
+                                   eval_times, eval_rate, tau, lam_ridge,
+                                   result, source_sigs,
+                                   use_nonlinear=True, use_moderation=True,
+                                   moderator_names=None,
+                                   tp_enabled=True, tp_n_surr=20,
+                                   tp_surr_rate=None, tp_smooth_sec=30,
+                                   tp_seed=42):
+        """Matched-diagonal per-channel Kim filter for same-modality pathways.
+
+        V3.5: Kim switching regression replaces EWLS. Provides both
+        temporal localization (regime posterior) and coefficient estimates
+        in a single model at native sampling rate.
+
+        For same-mod pathways (BL->BL, Pose->Pose), source channel i pairs
+        with target channel i. Each channel gets an independent Kim filter.
+        """
+        src_mod, tgt_mod = key
+        selected_cols = np.array(selected)
+        C_min = len(selected_cols)
+
+        # ===================================================================
+        # Step 1: Basis-convolve source at NATIVE rate (no resampling)
+        # ===================================================================
+        _t_total = _time.perf_counter()
+
+        src_matched = src_signal[:, selected_cols]  # (T_src, C_min)
+        tgt_matched = tgt_signal[:, selected_cols]  # (T_tgt, C_min)
+
+        # Find common time range and resample both to uniform native grid
+        fs_native = float(MODALITY_SPECS_V2[src_mod][1])
+        t_start = max(float(src_ts[0]), float(tgt_ts[0]))
+        t_end = min(float(src_ts[-1]), float(tgt_ts[-1]))
+        T_native = int((t_end - t_start) * fs_native)
+        native_times = np.linspace(t_start, t_end, T_native)
+
+        # Ensure numpy
+        _src_ts = src_ts if isinstance(src_ts, np.ndarray) \
+            else src_ts.cpu().numpy()
+        _tgt_ts = tgt_ts if isinstance(tgt_ts, np.ndarray) \
+            else tgt_ts.cpu().numpy()
+        _src_sig = src_matched if isinstance(src_matched, np.ndarray) \
+            else src_matched.cpu().numpy()
+        _tgt_sig = tgt_matched if isinstance(tgt_matched, np.ndarray) \
+            else tgt_matched.cpu().numpy()
+
+        # Interpolate both to uniform native grid
+        src_native = np.stack([np.interp(native_times, _src_ts, _src_sig[:, c])
+                               for c in range(C_min)]).T  # (T_native, C_min)
+        tgt_native = np.stack([np.interp(native_times, _tgt_ts, _tgt_sig[:, c])
+                               for c in range(C_min)]).T
+
+        # Build basis at NATIVE rate (not eval_rate)
+        from cadence.basis.raised_cosine import raised_cosine_basis
+        from cadence.coupling.pathways import get_pathway_category
+        category = get_pathway_category(src_mod, tgt_mod, self.config)
+        pw_temporal = self.config.get('pathway_temporal', {}).get(
+            category, {'max_lag_seconds': 18.0, 'n_basis': 10})
+        native_basis, _ = raised_cosine_basis(
+            n_basis=pw_temporal['n_basis'],
+            max_lag_s=pw_temporal['max_lag_seconds'],
+            min_lag_s=0.0,
+            sample_rate=fs_native,
+            log_spacing=True)
+        n_basis_native = pw_temporal['n_basis']
+
+        # Basis convolution at native rate
+        src_native_t = torch.tensor(src_native, dtype=torch.float32,
+                                    device=self.device)
+        dm = DesignMatrixBuilder(native_basis, ar_order=0, device=self.device)
+        convolved, _ = dm.convolve_source(src_native_t,
+                                          np.ones(T_native, dtype=bool))
+        # convolved: (T_native, C_min * n_basis_native) on device
+        X_src_batch = convolved.view(
+            T_native, C_min, n_basis_native).permute(
+            1, 0, 2).cpu().numpy()  # (C_min, T_native, n_basis_native)
+
+        y_mc = tgt_native.T  # (C_min, T_native)
+        valid_np = np.ones(T_native, dtype=bool)
+
+        _log(f"  Stage 2 {src_mod}->{tgt_mod}: native rate "
+             f"fs={fs_native} Hz, T={T_native} ({t_end-t_start:.0f}s), "
+             f"nb={n_basis_native}")
+
+        # ===================================================================
+        # Step 2: Kim filter (replaces EWLS + surrogates + TL)
+        # ===================================================================
+        from cadence.significance.kim_filter import kim_filter_batched
+
+        kim_cfg = self.config.get('kim_filter', {})
+        Q_coeff = kim_cfg.get('Q_coeff', 1e-5)
+        p_stay = kim_cfg.get('p_stay', 0.95)
+        em_iter = kim_cfg.get('em_iterations', 5)
+
+        _log(f"  Stage 2 {src_mod}->{tgt_mod}: Kim filter "
+             f"C={C_min}, nb={n_basis_native}, Q={Q_coeff:.1e}, "
+             f"p_stay={p_stay}")
+
+        _t_kim = _time.perf_counter()
+        posterior_mc, kim_params = kim_filter_batched(
+            y_mc, X_src_batch,
+            ar_order=self.ar_order,
+            p_stay_coupled=p_stay,
+            p_stay_uncoupled=p_stay,
+            Q_coeff=Q_coeff,
+            em_iterations=em_iter,
+            valid=valid_np)
+        _t_kim = _time.perf_counter() - _t_kim
+
+        # Per-channel coupling fractions
+        coupling_frac_mc = kim_params['coupling_fraction_mc']  # (C,)
+        sigma2_ratio = kim_params['sigma2_ratio']              # (C,)
+
+        # Per-channel dR2 proxy: 1 - sigma2_ratio (variance reduction)
+        dr2_perchannel = np.maximum(
+            1.0 - sigma2_ratio[:, None] * np.ones((1, T_native)), 0.0)
+
+        # Aggregate: mean posterior across channels (NOT union)
+        dr2_agg = dr2_perchannel.mean(axis=0)
+
+        _log(f"  Stage 2 {src_mod}->{tgt_mod}: Kim done ({_t_kim:.1f}s) "
+             f"sig2_ratio={sigma2_ratio.mean():.3f} "
+             f"coupled_ch={int((coupling_frac_mc > 0.03).sum())}/{C_min}")
+        for c in range(C_min):
+            if coupling_frac_mc[c] > 0.01:
+                _log(f"    ch{selected[c]:>3}: frac={coupling_frac_mc[c]:.1%} "
+                     f"sig2r={sigma2_ratio[c]:.3f}")
+
+        # ===================================================================
+        # Store results
+        # ===================================================================
+        result.pathway_dr2_perchannel[key] = posterior_mc     # (C, T)
+        result.pathway_dr2[key] = dr2_agg
+        result.pathway_times[key] = native_times
+
+        # Coupling posterior: per-channel (not pooled)
+        # For session-level detection, use max channel coupling fraction
+        max_coupling_frac = float(coupling_frac_mc.max())
+        result.pathway_coupling_posterior[key] = posterior_mc.max(axis=0)
+        result.pathway_zscore_posterior[key] = posterior_mc.max(axis=0)
+
+        if key not in result.pathway_significant:
+            result.pathway_significant[key] = True
+            result.n_significant_pathways += 1
+
+        # Per-feature coupling fraction
+        feat_dr2_dict = {}
+        for i, feat_idx in enumerate(selected):
+            feat_dr2_dict[feat_idx] = posterior_mc[i]
+        result.pathway_feature_dr2[key] = feat_dr2_dict
+
+        # Source x target diagonal
+        src_tgt_dict = {}
+        for i, feat_idx in enumerate(selected):
+            src_tgt_dict[(feat_idx, feat_idx)] = posterior_mc[i]
+        if len(src_tgt_dict) > 20:
+            ranked = sorted(src_tgt_dict.items(),
+                            key=lambda kv: float(np.mean(kv[1] > 0.5)),
+                            reverse=True)
+            src_tgt_dict = dict(ranked[:20])
+        result.pathway_src_tgt_dr2[key] = src_tgt_dict
+
+        _t_total = _time.perf_counter() - _t_total
+        _log(f"  Stage 2 {src_mod}->{tgt_mod}: total={_t_total:.1f}s")
 
     def _stage2_chunked(self, key, src_r, src_ts_r, src_valid_r,
                           tgt_signal, tgt_ts, tgt_valid,

@@ -23,6 +23,7 @@ def _forward_backward(log_emissions, log_A, log_pi):
     T = log_emissions.shape[0]
 
     # Forward pass (log-space with normalization)
+    # Inner 2-state loop vectorized: one logaddexp call per timestep
     log_alpha = np.zeros((T, 2))
     log_alpha[0] = log_pi + log_emissions[0]
     # Normalize
@@ -31,23 +32,20 @@ def _forward_backward(log_emissions, log_A, log_pi):
     log_evidence = log_norm
 
     for t in range(1, T):
-        for j in range(2):
-            log_alpha[t, j] = np.logaddexp(
-                log_alpha[t-1, 0] + log_A[0, j],
-                log_alpha[t-1, 1] + log_A[1, j]
-            ) + log_emissions[t, j]
+        # log_A[0] and log_A[1] are rows (2,); vectorized over j
+        log_alpha[t] = np.logaddexp(
+            log_alpha[t-1, 0] + log_A[0],
+            log_alpha[t-1, 1] + log_A[1]) + log_emissions[t]
         log_norm = np.logaddexp(log_alpha[t, 0], log_alpha[t, 1])
         log_alpha[t] -= log_norm
         log_evidence += log_norm
 
-    # Backward pass
+    # Backward pass (vectorized over 2-state dimension)
     log_beta = np.zeros((T, 2))
     for t in range(T - 2, -1, -1):
-        for i in range(2):
-            log_beta[t, i] = np.logaddexp(
-                log_A[i, 0] + log_emissions[t+1, 0] + log_beta[t+1, 0],
-                log_A[i, 1] + log_emissions[t+1, 1] + log_beta[t+1, 1]
-            )
+        msg = log_emissions[t+1] + log_beta[t+1]  # (2,)
+        log_beta[t, 0] = np.logaddexp(log_A[0, 0] + msg[0], log_A[0, 1] + msg[1])
+        log_beta[t, 1] = np.logaddexp(log_A[1, 0] + msg[0], log_A[1, 1] + msg[1])
         log_norm = np.logaddexp(log_beta[t, 0], log_beta[t, 1])
         if np.isfinite(log_norm):
             log_beta[t] -= log_norm
@@ -113,12 +111,12 @@ def _fit_hmm(dr2, null_mu, null_sigma, eval_rate, hmm_cfg):
             [beta, 1.0 - beta],
         ]))
 
-        # Emission log-probabilities
+        # Emission log-probabilities (vectorized over T)
         log_emissions = np.zeros((T, 2))
-        for t in range(T):
-            x = dr2[t]
-            log_emissions[t, 0] = _log_normal(x, mu_0, sigma_0)
-            log_emissions[t, 1] = _log_normal(x, mu_1, sigma_1)
+        log_emissions[:, 0] = (-0.5 * np.log(2 * np.pi) - np.log(sigma_0)
+                               - 0.5 * ((dr2 - mu_0) / sigma_0) ** 2)
+        log_emissions[:, 1] = (-0.5 * np.log(2 * np.pi) - np.log(sigma_1)
+                               - 0.5 * ((dr2 - mu_1) / sigma_1) ** 2)
 
         # E-step
         gamma, ll = _forward_backward(log_emissions, log_A, log_pi)
@@ -151,28 +149,17 @@ def _fit_hmm(dr2, null_mu, null_sigma, eval_rate, hmm_cfg):
         if mu_1 <= mu_0 + sigma_0:
             mu_1 = mu_0 + sigma_0 * 1.01
 
-        # Update transitions from expected counts
-        # Sum of expected transitions i->j
-        n_00 = n_01 = n_10 = n_11 = 0.0
-        for t in range(T - 1):
-            for i in range(2):
-                for j in range(2):
-                    xi_ij = (gamma[t, i] *
-                             np.exp(log_A[i, j] + log_emissions[t+1, j]) *
-                             gamma[t+1, j])
-                    if i == 0 and j == 0:
-                        n_00 += xi_ij
-                    elif i == 0 and j == 1:
-                        n_01 += xi_ij
-                    elif i == 1 and j == 0:
-                        n_10 += xi_ij
-                    else:
-                        n_11 += xi_ij
+        # Update transitions from expected counts (vectorized)
+        # xi: (T-1, 2, 2) — expected transition counts
+        xi = (gamma[:-1, :, None]
+              * np.exp(log_A[None, :, :] + log_emissions[1:, None, :])
+              * gamma[1:, None, :])
+        n_ij = xi.sum(axis=0)  # (2, 2)
 
-        if n_00 + n_01 > 1e-10:
-            alpha = np.clip(n_01 / (n_00 + n_01), 1e-6, 0.3)
-        if n_10 + n_11 > 1e-10:
-            beta = np.clip(n_10 / (n_10 + n_11), 1e-6, 0.3)
+        if n_ij[0, 0] + n_ij[0, 1] > 1e-10:
+            alpha = np.clip(n_ij[0, 1] / (n_ij[0, 0] + n_ij[0, 1]), 1e-6, 0.3)
+        if n_ij[1, 0] + n_ij[1, 1] > 1e-10:
+            beta = np.clip(n_ij[1, 0] / (n_ij[1, 0] + n_ij[1, 1]), 1e-6, 0.3)
 
     params = {
         'mu_0': mu_0, 'sigma_0': sigma_0,
@@ -186,7 +173,109 @@ def _log_normal(x, mu, sigma):
     return -0.5 * np.log(2 * np.pi) - np.log(sigma) - 0.5 * ((x - mu) / sigma) ** 2
 
 
-def detect_coupling_hmm(dr2, null_stats, eval_rate, hmm_cfg):
+def detect_coupling_pelt_perchannel(dr2_perchannel, null_stats, eval_rate,
+                                     hmm_cfg):
+    """Per-channel PELT change-point detection with consensus aggregation.
+
+    Runs PELT on each channel's dR2 to find change-points, labels segments
+    as coupled (mean > null_mu) or uncoupled, then averages binary labels
+    across channels.  More sensitive than HMM for weak signals because PELT
+    accumulates evidence over entire segments rather than per-timepoint.
+
+    Args:
+        dr2_perchannel: (C, T) per-channel dR2 from matched-diagonal EWLS.
+        null_stats: dict with 'mu_0', 'sigma_0' from surrogates.
+        eval_rate: Hz.
+        hmm_cfg: dict with episode_duration_s, min_coupling_fraction.
+
+    Returns:
+        detected: bool
+        details: dict with 'coupling_posterior' (T,), per-channel info.
+    """
+    import ruptures
+
+    C, T = dr2_perchannel.shape
+    channel_labels = np.zeros((C, T))
+
+    # Minimum segment length: half the expected episode duration
+    episode_s = hmm_cfg.get('episode_duration_s', 7.5)
+    min_size = max(3, int(episode_s * eval_rate * 0.5))
+
+    # PELT penalty: controls over-segmentation
+    # BIC-like: log(T) * variance.  Higher = fewer change-points = larger segs.
+    pen_scale = hmm_cfg.get('pelt_pen_scale', 2.0)
+
+    n_active = 0
+    for c in range(C):
+        ch_dr2 = dr2_perchannel[c]
+        valid = np.isfinite(ch_dr2)
+        n_valid = int(np.sum(valid))
+        if n_valid < 2 * min_size:
+            continue
+        ch_clean = np.where(valid, ch_dr2, 0.0)
+
+        # Per-channel null from lower 50%
+        ch_valid = ch_dr2[valid]
+        lower = ch_valid[ch_valid <= np.median(ch_valid)]
+        ch_null_mu = float(np.mean(lower)) if len(lower) > 0 else 0.0
+        ch_null_sigma = max(
+            float(np.std(lower)) if len(lower) > 1 else 1.0, 1e-8)
+
+        # PELT with L2 cost
+        penalty = pen_scale * np.log(T) * ch_null_sigma ** 2
+        algo = ruptures.Pelt(model="l2", min_size=min_size).fit(
+            ch_clean.reshape(-1, 1))
+        try:
+            bkps = algo.predict(pen=penalty)
+        except Exception:
+            continue
+
+        # Label segments: coupled if segment mean > null_mu + 0.75*sigma
+        threshold = ch_null_mu + 0.75 * ch_null_sigma
+        prev = 0
+        ch_coupled = False
+        for bp in bkps:
+            seg = ch_clean[prev:bp]
+            if np.mean(seg) > threshold:
+                channel_labels[c, prev:bp] = 1.0
+                ch_coupled = True
+            prev = bp
+        if ch_coupled:
+            n_active += 1
+
+    # Aggregate: mean label across channels (soft consensus)
+    coupling_posterior = channel_labels.mean(axis=0)
+    coupling_fraction = float(np.mean(coupling_posterior))
+
+    # Smooth the posterior with a short Gaussian kernel for continuity
+    smooth_samples = max(1, int(episode_s * eval_rate * 0.5))
+    if smooth_samples > 1 and T > smooth_samples:
+        from scipy.ndimage import uniform_filter1d
+        coupling_posterior = uniform_filter1d(
+            coupling_posterior, size=smooth_samples)
+
+    # Detection criteria
+    min_frac = hmm_cfg.get('min_coupling_fraction', 0.03)
+    min_dr2 = hmm_cfg.get('min_dr2', 0.001)
+    mean_dr2 = float(np.mean(dr2_perchannel))
+    detected = coupling_fraction > min_frac and mean_dr2 > min_dr2
+
+    p_value = 1.0 - coupling_fraction
+
+    return detected, {
+        'detected': detected,
+        'coupling_posterior': coupling_posterior,
+        'coupling_fraction': coupling_fraction,
+        'p_value': p_value,
+        'mean_dr2': mean_dr2,
+        'n_channels_active': n_active,
+        'n_channels_total': C,
+        'method': 'perchannel_pelt',
+    }
+
+
+def detect_coupling_hmm(dr2, null_stats, eval_rate, hmm_cfg,
+                        selection_method=None):
     """Detect coupling using 2-state Gaussian HMM.
 
     Args:
@@ -195,6 +284,9 @@ def detect_coupling_hmm(dr2, null_stats, eval_rate, hmm_cfg):
             If None, estimated from lower 50% of dR2.
         eval_rate: Sampling rate of dR2 in Hz.
         hmm_cfg: Dict with episode_duration_s, min_coupling_fraction, min_dr2.
+        selection_method: 'stability_hmm' uses softer above_null criterion
+            (standard error instead of raw sigma) since screening already
+            confirmed coupling.
 
     Returns:
         detected: bool.
@@ -318,6 +410,30 @@ def detect_coupling_hmm(dr2, null_stats, eval_rate, hmm_cfg):
     return detected, details
 
 
+def detect_coupling_slds(dr2_perchannel, dr2_surr_perchannel, eval_rate,
+                         slds_cfg, device='cuda'):
+    """SLDS coupling event detection (thin wrapper).
+
+    Uses MCMC (Gibbs) on real data + VI on surrogates to detect and
+    temporally localize coupling events via cross-channel covariance.
+
+    Args:
+        dr2_perchannel: (C, T) per-channel dR2 from matched-diagonal EWLS.
+        dr2_surr_perchannel: (K, C, T) surrogate per-channel dR2.
+        eval_rate: Hz.
+        slds_cfg: dict from config['slds'].
+        device: 'cuda' or 'cpu'.
+
+    Returns:
+        detected: bool.
+        details: dict with coupling_posterior (T,), metadata.
+    """
+    from cadence.significance.slds_detector import SLDSDetector
+    detector = SLDSDetector(slds_cfg, device=device)
+    result = detector.fit(dr2_perchannel, dr2_surr_perchannel, eval_rate)
+    return result['detected'], result
+
+
 def detection_summary(result, config=None):
     """Summarize detection results across all pathways.
 
@@ -343,9 +459,16 @@ def detection_summary(result, config=None):
     # Get null stats from result if available
     null_stats_dict = getattr(result, 'pathway_null_stats', {})
 
+    # Get selection methods from discovery if available
+    discovery = getattr(result, 'discovery', None)
+    sel_methods = (getattr(discovery, 'selection_method', {})
+                   if discovery is not None else {})
+    pvalues_dict = getattr(result, 'pathway_pvalues', {})
+
     summary = {}
     for key in result.pathway_dr2:
         dr2 = result.pathway_dr2[key]
+        sel_method = sel_methods.get(key, '')
 
         # Determine eval rate for this pathway
         src_mod = key[0]
@@ -354,12 +477,46 @@ def detection_summary(result, config=None):
         # Get null stats for this pathway
         null_stats = null_stats_dict.get(key, None)
 
-        detected, details = detect_coupling_hmm(
-            dr2, null_stats, eval_rate, hmm_cfg)
+        # Per-channel HMM for same-modality matched-diagonal pathways
+        n_selected = 0
+        if discovery is not None:
+            n_selected = len(getattr(discovery, 'selected_features',
+                                      {}).get(key, []))
+        dr2_pc_dict = getattr(result, 'pathway_dr2_perchannel', {})
+        is_matched_diag = (sel_method == 'stability_hmm'
+                           and key[0] == key[1]
+                           and n_selected <= 30)
+        if is_matched_diag:
+            # Session-level detection via screening p-value (pools evidence
+            # over time — robust even with weak per-timepoint effect)
+            screen_p_dict = getattr(result, 'pathway_screening_p', {})
+            screen_p = screen_p_dict.get(key)
+            min_dr2 = hmm_cfg.get('min_dr2', 0.001)
+            mean_dr2_val = float(np.nanmean(dr2[np.isfinite(dr2)]))
+            if screen_p is not None:
+                detected = screen_p < 0.05 and mean_dr2_val > min_dr2
+                p_value = screen_p
+            else:
+                # Fallback to aggregate HMM
+                det_res, det_details = detect_coupling_hmm(
+                    dr2, null_stats, eval_rate, hmm_cfg,
+                    selection_method=sel_method)
+                detected = det_res
+                p_value = det_details.get('p_value', 1.0)
+            summary_details = {
+                'detected': detected,
+                'p_value': p_value,
+                'mean_dr2': mean_dr2_val,
+                'method': 'screening_perchannel_hmm',
+            }
+        else:
+            detected, details = detect_coupling_hmm(
+                dr2, null_stats, eval_rate, hmm_cfg,
+                selection_method=sel_method)
+            # Remove coupling_posterior from summary (large array)
+            summary_details = {k: v for k, v in details.items()
+                               if k != 'coupling_posterior'}
 
-        # Remove coupling_posterior from summary (large array)
-        summary_details = {k: v for k, v in details.items()
-                           if k != 'coupling_posterior'}
         summary[key] = summary_details
 
     return summary

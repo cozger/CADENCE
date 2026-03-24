@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -46,7 +47,8 @@ from cadence.constants import MODALITY_ORDER_V2, MOD_SHORT_V2, MODALITY_SPECS_V2
 
 
 # Target modality configs: each injects coupling into ONE modality
-TARGET_MODS = ['eeg_wavelet', 'blendshapes_v2', 'pose_features']
+TARGET_MODS = [x for x in ['eeg_wavelet', 'blendshapes_v2', 'pose_features']
+               if x in (os.environ.get('CADENCE_TARGET_MODS', 'eeg_wavelet,blendshapes_v2,pose_features').split(','))]
 
 # Same-modality pathway keys for AUC
 SAME_MOD_PATHWAYS = {mod: (mod, mod) for mod in TARGET_MODS}
@@ -305,6 +307,11 @@ def main():
                         help='Seed for cross-dyad pairing')
     parser.add_argument('--no-combined', action='store_true',
                         help='Skip combined (all-modality) tests')
+    parser.add_argument('--duty-cycle', type=float, default=None,
+                        help='Override coupling duty cycle (fraction of time coupled)')
+    parser.add_argument('--target-mods', default=None,
+                        help='Comma-separated target modalities to test '
+                             '(default: all enabled in CADENCE_TARGET_MODS)')
     args = parser.parse_args()
 
     # Load config
@@ -324,6 +331,14 @@ def main():
 
     kappa_levels = [float(k) for k in args.kappas.split(',')]
 
+    # Override target modalities if specified
+    global TARGET_MODS, SAME_MOD_PATHWAYS
+    if args.target_mods:
+        TARGET_MODS = [m.strip() for m in args.target_mods.split(',')]
+        SAME_MOD_PATHWAYS = {mod: (mod, mod) for mod in TARGET_MODS}
+
+    duty_cycle_override = args.duty_cycle
+
     output_dir = args.output
     os.makedirs(output_dir, exist_ok=True)
 
@@ -333,6 +348,9 @@ def main():
     print(f"Semi-synthetic validation", flush=True)
     print(f"  Pairs: {args.n_pairs}", flush=True)
     print(f"  Kappas: {kappa_levels}", flush=True)
+    print(f"  Target mods: {TARGET_MODS}", flush=True)
+    if duty_cycle_override is not None:
+        print(f"  Duty cycle override: {duty_cycle_override:.1%}", flush=True)
     print(f"  Output: {output_dir}", flush=True)
     print(f"  Cache: {cache_dir}", flush=True)
 
@@ -444,12 +462,43 @@ def main():
                         + int(kappa * 100))
                 semi_session = inject_coupling_modality(
                     base_session, target_mod, kappa,
-                    lag_s=2.0, seed=seed)
+                    lag_s=2.0, seed=seed,
+                    duty_cycle=duty_cycle_override)
 
                 t0 = time.time()
-                result = estimator.analyze_session(
-                    semi_session, 'p1_to_p2')
+                try:
+                    result = estimator.analyze_session(
+                        semi_session, 'p1_to_p2')
+                except Exception as _run_err:
+                    print(f"    ANALYSIS FAILED: {_run_err}", flush=True)
+                    result = None
                 dt = time.time() - t0
+
+                # Free GPU memory between runs to prevent cumulative VRAM pressure
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+
+                if result is None:
+                    all_results.append({
+                        'pair_idx': global_pair_idx,
+                        'pair': f'{name_a}_x_{name_b}',
+                        'kappa': kappa,
+                        'target_mod': target_mod,
+                        'label': label,
+                        'p_value': 1.0, 'detected': False,
+                        'mean_dr2': 0.0, 'best_pathway': 'error',
+                        'n_targeting': 0, 'n_detected': 0,
+                        'timing': {}, 'analysis_time_s': dt,
+                    })
+                    _save_incremental(output_dir, all_results,
+                                      roc_data, pairs_info)
+                    continue
 
                 summary = detection_summary(result, config)
 
@@ -576,9 +625,37 @@ def main():
                     base_session, kappa, lag_s=2.0, seed=seed)
 
                 t0 = time.time()
-                result = estimator.analyze_session(
-                    semi_session, 'p1_to_p2')
+                try:
+                    result = estimator.analyze_session(
+                        semi_session, 'p1_to_p2')
+                except Exception as _run_err:
+                    print(f"    COMBINED ANALYSIS FAILED: {_run_err}",
+                          flush=True)
+                    result = None
                 dt = time.time() - t0
+
+                # Free GPU memory between runs
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.synchronize()
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+
+                if result is None:
+                    all_results.append({
+                        'pair_idx': global_pair_idx,
+                        'pair': f'{name_a}_x_{name_b}',
+                        'kappa': kappa,
+                        'target_mod': 'combined',
+                        'label': 1 if kappa > 0 else 0,
+                        'analysis_time_s': dt,
+                    })
+                    _save_incremental(output_dir, all_results,
+                                      roc_data, pairs_info)
+                    continue
 
                 summary = detection_summary(result, config)
                 for mod in TARGET_MODS:

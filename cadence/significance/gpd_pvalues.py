@@ -57,61 +57,67 @@ def gpd_tail_pvalues(dr2_real, dr2_surr, pool_half=50,
 
     p_values = np.ones(T)
 
+    # --- Pre-compute pooled statistics for all timepoints ---
+    # Sliding window median and rank-based p via cumsum trick.
+    # For each t, pool = dr2_surr[:, max(0,t-ph):min(T,t+ph+1)].ravel()
+    # Pre-compute cumulative sum for rank-based p-values.
+    # Vectorize the easy cases (~90% of timepoints), loop only for GPD tail.
+
+    # Pre-compute per-timepoint pool median and quantile using sliding window
+    # (avoids redundant slicing in the loop for the ~10% GPD cases)
+    pool_medians = np.empty(T)
+    pool_thresholds = np.empty(T)
+    pool_rank_p = np.empty(T)  # rank-based p for all t
+    valid_pool = np.ones(T, dtype=bool)
+
     for t in range(T):
-        real_val = dr2_real[t]
-
-        # Edge case: negative or NaN dR2
-        if np.isnan(real_val) or real_val < 0:
-            p_values[t] = 1.0
-            continue
-
-        # Pool surrogates from t +/- pool_half
         t_lo = max(0, t - pool_half)
         t_hi = min(T, t + pool_half + 1)
         pool = dr2_surr[:, t_lo:t_hi].ravel()
-
-        # Remove NaN
         pool = pool[np.isfinite(pool)]
         if len(pool) < 20:
-            p_values[t] = 1.0
+            valid_pool[t] = False
             continue
+        pool_medians[t] = np.median(pool)
+        pool_thresholds[t] = np.quantile(pool, threshold_quantile)
+        pool_rank_p[t] = np.mean(pool >= dr2_real[t])
 
-        # Zero-variance null
-        pool_std = np.std(pool)
-        if pool_std < 1e-12:
-            p_values[t] = 0.5 if abs(real_val - np.mean(pool)) < 1e-12 else (
-                1.0 if real_val <= np.mean(pool) else p_floor)
-            continue
+    # Classify timepoints into fast paths
+    bad_real = np.isnan(dr2_real) | (dr2_real < 0) | ~valid_pool
+    p_values[bad_real] = 1.0
 
-        pool_median = np.median(pool)
+    # Below median: rank-based (fast path)
+    below_median = ~bad_real & (dr2_real <= pool_medians)
+    p_values[below_median] = np.maximum(pool_rank_p[below_median], p_floor)
 
-        # Below median: clearly not significant
-        if real_val <= pool_median:
-            # Rank-based p from pooled distribution
-            p_values[t] = max(np.mean(pool >= real_val), p_floor)
-            continue
+    # Between median and threshold: rank-based (fast path)
+    between = ~bad_real & ~below_median & (dr2_real <= pool_thresholds)
+    p_values[between] = np.maximum(pool_rank_p[between], p_floor)
 
-        # Above threshold quantile: GPD tail fit
-        u = np.quantile(pool, threshold_quantile)
+    # Above threshold: need GPD tail fitting (loop only over ~10%)
+    needs_gpd = ~bad_real & ~below_median & ~between
+    gpd_indices = np.where(needs_gpd)[0]
 
-        if real_val > u:
-            exceedances = pool[pool > u] - u
+    for t in gpd_indices:
+        real_val = dr2_real[t]
+        t_lo = max(0, t - pool_half)
+        t_hi = min(T, t + pool_half + 1)
+        pool = dr2_surr[:, t_lo:t_hi].ravel()
+        pool = pool[np.isfinite(pool)]
 
-            if len(exceedances) >= 10:
-                fit = _fit_gpd_safe(exceedances)
-                if fit is not None:
-                    shape, _, scale = fit
-                    # P(X > real | X > u) via GPD survival function
-                    tail_p = genpareto.sf(real_val - u, shape, scale=scale)
-                    # Scale by probability of exceeding threshold
-                    p_val = (1.0 - threshold_quantile) * tail_p
-                    p_values[t] = max(float(p_val), p_floor)
-                    continue
+        u = pool_thresholds[t]
+        exceedances = pool[pool > u] - u
 
-            # GPD fit failed: fall through to rank-based
-            p_values[t] = max(np.mean(pool >= real_val), p_floor)
-        else:
-            # Between median and threshold: rank-based
-            p_values[t] = max(np.mean(pool >= real_val), p_floor)
+        if len(exceedances) >= 10:
+            fit = _fit_gpd_safe(exceedances)
+            if fit is not None:
+                shape, _, scale = fit
+                tail_p = genpareto.sf(real_val - u, shape, scale=scale)
+                p_val = (1.0 - threshold_quantile) * tail_p
+                p_values[t] = max(float(p_val), p_floor)
+                continue
+
+        # GPD fit failed: fall through to rank-based
+        p_values[t] = max(float(pool_rank_p[t]), p_floor)
 
     return p_values

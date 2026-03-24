@@ -59,6 +59,8 @@ def save_result(result, path, session_name='', runtime_s=0.0,
         'pathway_kernels', 'pathway_pvalues', 'pathway_f_stat',
         'feature_dr2', 'feature_kernels', 'pathway_times',
         'pathway_coupling_posterior',
+        'pathway_dr2_perchannel',
+        'pathway_zscore_posterior',
     ]
     for field_name in array_dicts:
         d = getattr(result, field_name, {})
@@ -91,6 +93,31 @@ def save_result(result, path, session_name='', runtime_s=0.0,
             data[f'null_stats/{ks}_mu_0'] = np.array([v.get('mu_0', 0.0)])
             data[f'null_stats/{ks}_sigma_0'] = np.array([v.get('sigma_0', 1.0)])
         data['null_stats/_keys'] = np.array(keys, dtype=object)
+
+    # pathway_slds_details: Dict[Tuple, Dict] — SLDS detection metadata
+    slds_details = getattr(result, 'pathway_slds_details', {})
+    if slds_details:
+        keys = []
+        for k, v in slds_details.items():
+            ks = _key_str(k)
+            keys.append(ks)
+            # Scalar fields
+            for sf in ['kappa', 'coupling_fraction', 'surr_95',
+                        'n_active_channels']:
+                if sf in v:
+                    data[f'slds/{ks}_{sf}'] = np.array([v[sf]])
+            data[f'slds/{ks}_detected'] = np.array([v.get('detected', False)])
+            data[f'slds/{ks}_method'] = np.array([v.get('method', '')],
+                                                   dtype=object)
+            # Array fields
+            if 'active_channels' in v and v['active_channels'] is not None:
+                data[f'slds/{ks}_active_channels'] = np.array(
+                    v['active_channels'])
+            if ('surr_coupling_fractions' in v
+                    and v['surr_coupling_fractions'] is not None):
+                data[f'slds/{ks}_surr_fractions'] = np.array(
+                    v['surr_coupling_fractions'])
+        data['slds/_keys'] = np.array(keys, dtype=object)
 
     # pathway_feature_dr2: Dict[Tuple, Dict[int, ndarray]]
     if hasattr(result, 'pathway_feature_dr2') and result.pathway_feature_dr2:
@@ -257,6 +284,8 @@ def load_result(path):
         'pathway_dr2', 'pathway_r2_full', 'pathway_r2_restricted',
         'pathway_kernels', 'pathway_pvalues', 'pathway_f_stat',
         'feature_dr2', 'feature_kernels', 'pathway_times',
+        'pathway_coupling_posterior', 'pathway_dr2_perchannel',
+        'pathway_zscore_posterior',
     ]
     for field_name in array_dicts:
         keys_key = f'{field_name}/_keys'
@@ -290,9 +319,31 @@ def load_result(path):
                 'sigma_0': float(raw[sig_key][0]) if sig_key in raw else 1.0,
             }
 
-    # pathway_coupling_posterior (loaded via array_dicts above)
-    if not hasattr(result, 'pathway_coupling_posterior'):
-        result.pathway_coupling_posterior = {}
+    # pathway_slds_details
+    result.pathway_slds_details = {}
+    if 'slds/_keys' in raw:
+        for ks in raw['slds/_keys']:
+            ks = str(ks)
+            k = _str_key(ks)
+            d = {}
+            for sf in ['kappa', 'coupling_fraction', 'surr_95',
+                        'n_active_channels']:
+                sf_key = f'slds/{ks}_{sf}'
+                if sf_key in raw:
+                    d[sf] = float(raw[sf_key][0])
+            det_key = f'slds/{ks}_detected'
+            if det_key in raw:
+                d['detected'] = bool(raw[det_key][0])
+            meth_key = f'slds/{ks}_method'
+            if meth_key in raw:
+                d['method'] = str(raw[meth_key][0])
+            ac_key = f'slds/{ks}_active_channels'
+            if ac_key in raw:
+                d['active_channels'] = raw[ac_key]
+            sf_key = f'slds/{ks}_surr_fractions'
+            if sf_key in raw:
+                d['surr_coupling_fractions'] = raw[sf_key]
+            result.pathway_slds_details[k] = d
 
     # pathway_feature_dr2
     if 'pathway_feature_dr2/_pw_keys' in raw:

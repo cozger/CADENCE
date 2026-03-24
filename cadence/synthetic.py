@@ -1185,7 +1185,7 @@ def _recompute_bl_derivatives(feat_p2, hz):
 
 
 def inject_coupling_modality(base_session, target_mod, kappa,
-                              lag_s=2.0, seed=42):
+                              lag_s=2.0, seed=42, duty_cycle=None):
     """Create a coupled session from a pre-built base (fast, CPU-only).
 
     Shallow-copies the base session and replaces only the target modality's
@@ -1202,6 +1202,8 @@ def inject_coupling_modality(base_session, target_mod, kappa,
         kappa: Coupling strength (0 returns base unmodified).
         lag_s: Coupling lag in seconds.
         seed: Random seed for coupling gate.
+        duty_cycle: Override duty cycle (fraction of time coupled).
+            If None, uses COUPLING_PROFILES_V2[target_mod]['duty_cycle'].
 
     Returns:
         Session dict ready for analyze_session().
@@ -1231,7 +1233,9 @@ def inject_coupling_modality(base_session, target_mod, kappa,
     mod_idx = MODALITY_ORDER_V2.index(target_mod)
     hz = MODALITY_SPECS_V2[target_mod][1]
     lag_samples = int(lag_s * hz)
-    profile = COUPLING_PROFILES_V2[target_mod]
+    profile = dict(COUPLING_PROFILES_V2[target_mod])
+    if duty_cycle is not None:
+        profile['duty_cycle'] = duty_cycle
 
     coupled_idx = _get_coupled_indices(target_mod)
 

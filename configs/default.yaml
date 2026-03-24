@@ -98,6 +98,7 @@ decomposition:
 # Significance testing
 significance:
   f_test_alpha: 0.05
+  skip_screening: false              # V3: screening filters null pathways; coherence handles TL
   surrogate:
     n_surrogates: 100
     n_screen_surrogates: 500
@@ -110,13 +111,13 @@ significance:
   session_level:
     min_dr2: 0.001
     hmm:
-      episode_duration_s: 60.0
+      episode_duration_s: 7.5
       min_coupling_fraction: 0.03
       max_em_iter: 20
       em_tol: 1.0e-6
   # Per-timepoint significance (Stage 2 surrogate threshold)
   timepoint:
-    enabled: true
+    enabled: true                # V3.4: re-enabled for LLR+CUSUM temporal localization
     n_surrogates: 20
     quantile: 0.95
     smooth_sec: 30
@@ -170,11 +171,15 @@ v2_discovery:
 
 # Stage 2 (EWLS on selected features)
 stage2:
+  pathway_workers: 3              # concurrent pathway threads in Stage 2 (CUDA stream overlap)
   moderation:
     enabled: true                 # ECG RMSSD as moderator (source participant's autonomic state)
     moderators: ["ecg_rmssd"]
   nonlinear:
     enabled: true
+  matched_diagonal_tau: 3.0       # Balance temporal resolution (±9s) with estimation quality (T_eff/p≈6)
+  matched_diagonal_surrogate_mult: 25   # K = 20 * 25 = 500 surrogates for LLR+CUSUM null
+  kim_only: true                       # V3.5: skip cross-modal pathways, only run Kim filter on same-mod
 
 # Pathway-specific temporal parameters
 pathway_temporal:
@@ -234,3 +239,66 @@ doubly_sparse:
     min_block_samples: 20            # minimum valid samples per block
     block_n_shifts: 20               # circular shifts per block for null calibration
   surrogate_fallback: true           # keep surrogate test as fallback for sustained coupling
+
+# ---------------------------------------------------------------------------
+# SLDS Coupling Event Detector (V3.3)
+# ---------------------------------------------------------------------------
+slds:
+  enabled: false                     # V3: disabled (coherence handles TL)
+  n_states: 2
+  latent_dim: 1
+  mcmc:
+    n_burnin: 200
+    n_samples: 300
+    thin: 3
+  vi:
+    max_iter: 50
+    tol: 1.0e-4
+  priors:
+    kappa_a: 1.0
+    kappa_b: 1.0
+    ard_a: 1.0
+    ard_b: 1.0
+    sigma2_alpha: 2.0
+    sigma2_beta: 1.0
+    A_dyn_mean: 0.9
+    A_dyn_std: 0.1
+  detection:
+    min_coupling_fraction: 0.03
+    min_active_channels: 2
+  edge_tau: 0                      # 0 = disabled, >0 = run multi-tau at this tau
+
+# ---------------------------------------------------------------------------
+# Temporal Localization (V3: coherence-based)
+# ---------------------------------------------------------------------------
+# Kim filter parameters (V3.5 — replaces EWLS for matched-diagonal)
+kim_filter:
+  Q_coeff: 1.0e-5                    # coefficient random walk variance
+  p_stay: 0.95                       # P(stay in current regime)
+  em_iterations: 5                   # EM iterations for parameter learning
+
+temporal_localization:
+  method: kim_filter                  # 'kim_filter' (V3.5)
+  window_s: 5.0                       # coherence window length
+  stride_s: 0.5                       # window stride → 2 Hz output
+  use_whitening: true
+  whitening_regularization: 1.0e-4
+  n_surrogates: 100                   # coherence surrogates
+  target_false_alarm: 0.10
+  min_event_s: 2.0                    # minimum coupling event duration
+  min_coupling_fraction: 0.03         # detection threshold for session-level
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# EEG Coherence (band-specific real + ImCoh from raw 256 Hz)
+# ---------------------------------------------------------------------------
+eeg_coherence:
+  enabled: true
+  bands:
+    theta: [4, 8]
+    alpha: [8, 13]
+    beta: [13, 30]
+  window_s: 2.0                       # shorter window for EEG (256 Hz → lots of samples)
+  stride_s: 0.25                      # 4 Hz output
+  use_imcoh: true                     # imaginary coherency (volume conduction robust)
+  roi_pairs: all                      # 4×4=16 cross-participant ROI pairs

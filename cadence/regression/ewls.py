@@ -48,7 +48,9 @@ def _multi_exp_scan_fwd_(tensors, gamma, force_sequential=False):
     Each tensor has shape (B, T, ...). Dispatches to Triton parallel scan
     if available, otherwise falls back to sequential Python loop.
     """
-    if _HAS_TRITON_SCAN and tensors[0].is_cuda and not force_sequential:
+    T = tensors[0].shape[1]
+    if (_HAS_TRITON_SCAN and tensors[0].is_cuda and not force_sequential
+            and T >= 64):  # Triton kernels unsafe for very small T
         triton_exp_scan_fwd_(tensors, gamma)
     else:
         _sequential_exp_scan_fwd_(tensors, gamma)
@@ -159,6 +161,7 @@ class EWLSSolver:
         use_triton = (
             _HAS_TRITON_BWD and X.is_cuda and T > 1
             and not self.force_sequential
+            and T >= 64  # Triton kernels unsafe for very small T (BLOCK > T)
         )
 
         if use_triton:

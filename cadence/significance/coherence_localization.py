@@ -777,6 +777,38 @@ def _coherence_windowed(W_p1, W_p2, win_samp, stride_samp, metric='csd'):
 
             coh[:, fi, :] = (plv + (env + 1) / 2) / 2
 
+        elif metric == 'power_event':
+            # Co-activation: both participants have elevated power simultaneously
+            p1_pow = w1.abs().pow(2).unfold(1, win_samp, stride_samp)  # (C, n_win, W)
+            p2_pow = w2.abs().pow(2).unfold(1, win_samp, stride_samp)
+            # Per-window 75th percentile threshold (adaptive to non-stationarity)
+            thr1 = p1_pow.quantile(0.75, dim=-1, keepdim=True)
+            thr2 = p2_pow.quantile(0.75, dim=-1, keepdim=True)
+            co_act = ((p1_pow > thr1) & (p2_pow > thr2)).float().mean(dim=-1)
+            coh[:, fi, :] = co_act
+            del p1_pow, p2_pow
+
+        elif metric == 'plv_power':
+            # Joint: PLV (phase) + power co-activation (amplitude events)
+            # PLV component
+            sxy = w1 * w2.conj()
+            sxy_n = sxy / sxy.abs().clamp(min=1e-10)
+            sr = sxy_n.real.unfold(1, win_samp, stride_samp)
+            si = sxy_n.imag.unfold(1, win_samp, stride_samp)
+            plv = torch.sqrt(sr.mean(-1)**2 + si.mean(-1)**2)
+            del sr, si, sxy_n
+
+            # Power co-activation component
+            p1_pow = w1.abs().pow(2).unfold(1, win_samp, stride_samp)
+            p2_pow = w2.abs().pow(2).unfold(1, win_samp, stride_samp)
+            thr1 = p1_pow.quantile(0.75, dim=-1, keepdim=True)
+            thr2 = p2_pow.quantile(0.75, dim=-1, keepdim=True)
+            co_act = ((p1_pow > thr1) & (p2_pow > thr2)).float().mean(dim=-1)
+            del p1_pow, p2_pow
+
+            # Average (both in [0,1]): surrogate z handles correlation
+            coh[:, fi, :] = (plv + co_act) / 2
+
         else:
             raise ValueError(f"Unknown metric: {metric}")
 
@@ -1089,25 +1121,26 @@ def wpli_temporal_localization(p1_signal, p2_signal, fs,
 
 def xcorr_temporal_localization(p1_signal, p2_signal, fs,
                                 channels=None, max_lag_s=0.1,
+                                lag_step_s=None,
                                 smooth_s=1.0, n_surrogates=100,
                                 target_fa=0.05, min_event_s=5.0,
                                 seed=42, device=None):
-    """Cross-correlation temporal localization: multiply, smooth, threshold.
+    """Multi-lag bank cross-correlation temporal localization.
 
-    Computes lagged cross-product between P1 and P2, smooths with Gaussian
-    kernel, and thresholds against circular-shift surrogates. No spectral
-    decomposition, no HMM — direct time-domain detection.
+    Tests coupling at ALL lags simultaneously (0 to max_lag_s), takes the
+    max over lags at each timepoint. Surrogate calibration automatically
+    accounts for the max-over-lags penalty.
 
-    For the mixing model p2 = kappa*p1_lagged + noise, the cross-product
-    at the correct lag is the sufficient statistic. Smoothing accumulates
-    evidence over time. The effective DOF is N * 2BW/fs per channel,
-    giving ~16× more power than spectral coherence methods.
+    Pipeline: cross-products at all lags → smooth each → average across
+    channels → max over lags → surrogate-calibrated threshold.
 
     Args:
-        p1_signal, p2_signal: (T, C) numpy arrays at native rate (256 Hz).
+        p1_signal, p2_signal: (T, C) numpy arrays at native rate.
         fs: sampling rate in Hz.
         channels: list of channel indices (None = all).
-        max_lag_s: maximum lag to search in seconds (default 0.1 = 100ms).
+        max_lag_s: maximum lag in seconds (default 0.1).
+        lag_step_s: lag step size in seconds (default None = 1 sample).
+            Set to e.g. 0.01 for 10ms steps to reduce computation.
         smooth_s: Gaussian smoothing sigma in seconds (default 1.0).
         n_surrogates: circular-shift surrogates (default 100).
         target_fa: target false alarm rate (default 0.05).
@@ -1116,9 +1149,9 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
         device: torch device.
 
     Returns:
-        mask: (T,) boolean coupling mask at native rate.
-        cc_agg: (T,) aggregated cross-correlation timecourse.
-        cc_per_channel: (C_sel, T) per-channel smoothed cross-product.
+        mask: (T_out,) boolean coupling mask at output rate.
+        cc_agg: (T_out,) max-over-lags aggregated timecourse.
+        best_lag: (T_out,) best lag in samples at each timepoint.
         diagnostics: dict with metadata.
     """
     if device is None:
@@ -1129,6 +1162,13 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
         channels = list(range(C_all))
     C_sel = len(channels)
     max_lag_samp = max(1, int(max_lag_s * fs))
+    lag_step = max(1, int(lag_step_s * fs)) if lag_step_s else 1
+    lags = list(range(0, max_lag_samp + 1, lag_step))
+    n_lags = len(lags)
+
+    # Decimate output to ~4 Hz for memory (native rate is too large)
+    dec = max(1, int(fs / 4))
+    T_out = (T + dec - 1) // dec
 
     # Move to GPU
     x1 = torch.as_tensor(
@@ -1138,7 +1178,7 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
         np.ascontiguousarray(p2_signal[:, channels].T),
         dtype=torch.float32, device=device)
 
-    # Build Gaussian smoothing kernel once
+    # Build Gaussian smoothing kernel
     if smooth_s > 0:
         sigma_samp = smooth_s * fs
         half = int(np.ceil(3.0 * sigma_samp))
@@ -1150,40 +1190,48 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
     else:
         smooth_kernel = None
 
-    def _smooth(x):
-        """Gaussian smooth (C, T) tensor along T."""
+    def _smooth_1d(x):
+        """Smooth (N,) tensor."""
         if smooth_kernel is None:
             return x
-        x_pad = F.pad(x.unsqueeze(1), (smooth_pad, smooth_pad), mode='reflect')
-        return F.conv1d(x_pad, smooth_kernel).squeeze(1)
+        xp = F.pad(x.unsqueeze(0).unsqueeze(0),
+                    (smooth_pad, smooth_pad), mode='reflect')
+        return F.conv1d(xp, smooth_kernel).squeeze()
 
-    def _compute_cc(s1, s2):
-        """Fixed-lag cross-product, smoothed. Returns (C, T)."""
+    def _multi_lag_bank(s1, s2):
+        """Compute smoothed cross-product at each lag, avg across channels,
+        max over lags. Returns (T_out,) max-cc and (T_out,) best_lag."""
         C, N = s1.shape
-        if max_lag_samp == 0:
-            cp = s1 * s2
-        else:
-            # Average cross-product across a small range of lags
-            # (captures coupling even if lag estimate is slightly off)
-            cp = torch.zeros(C, N, device=device)
-            n_lags = 0
-            for lag in range(max(0, max_lag_samp - 3),
-                             max_lag_samp + 4):  # ±3 samples around target
-                tmp = torch.zeros(C, N, device=device)
-                if lag == 0:
-                    tmp = s1 * s2
-                else:
-                    tmp[:, lag:] = s1[:, :-lag] * s2[:, lag:]
-                cp += tmp
-                n_lags += 1
-            cp /= n_lags
-        return _smooth(cp)
+        best_cc = torch.full((N,), -1e10, device=device)
+        best_lag_arr = torch.zeros(N, device=device, dtype=torch.long)
 
-    # Real cross-correlation
-    cc_real = _compute_cc(x1, x2)  # (C, T)
-    cc_agg_real = cc_real.mean(dim=0)  # (T,) — average across channels
+        for lag in lags:
+            # Cross-product at this lag
+            if lag == 0:
+                cp = s1 * s2
+            else:
+                cp = torch.zeros(C, N, device=device)
+                cp[:, lag:] = s1[:, :-lag] * s2[:, lag:]
 
-    # Surrogate cross-correlations
+            # Average across channels → (N,)
+            cp_avg = cp.mean(dim=0)
+
+            # Smooth
+            cp_smooth = _smooth_1d(cp_avg)
+
+            # Update max
+            better = cp_smooth > best_cc
+            best_cc = torch.where(better, cp_smooth, best_cc)
+            best_lag_arr = torch.where(better, torch.tensor(lag, device=device),
+                                       best_lag_arr)
+
+        # Decimate to output rate
+        return best_cc[::dec][:T_out], best_lag_arr[::dec][:T_out]
+
+    # Real multi-lag bank
+    cc_real, lag_real = _multi_lag_bank(x1, x2)
+
+    # Surrogate multi-lag bank
     min_shift = max(1, int(0.1 * T))
     max_shift = T - min_shift
     gen = torch.Generator(device='cpu')
@@ -1191,56 +1239,49 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
     shifts = torch.randint(min_shift, max_shift + 1, (n_surrogates,),
                            generator=gen)
 
-    cc_surr_agg = torch.zeros(n_surrogates, T, device=device)
+    cc_surr = torch.zeros(n_surrogates, T_out, device=device)
     for k in range(n_surrogates):
         x1_shifted = torch.roll(x1, int(shifts[k].item()), dims=1)
-        cc_k = _compute_cc(x1_shifted, x2)
-        cc_surr_agg[k] = cc_k.mean(dim=0)
+        cc_surr[k], _ = _multi_lag_bank(x1_shifted, x2)
 
     # Move to CPU
-    cc_agg_np = cc_agg_real.cpu().numpy()
-    cc_surr_np = cc_surr_agg.cpu().numpy()
-    cc_per_ch = cc_real.cpu().numpy()
+    cc_real_np = cc_real.cpu().numpy()
+    cc_surr_np = cc_surr.cpu().numpy()
+    lag_np = lag_real.cpu().numpy()
 
-    del x1, x2, cc_real, cc_agg_real, cc_surr_agg
+    del x1, x2, cc_real, cc_surr, lag_real
     if device.type == 'cuda':
         torch.cuda.empty_cache()
 
-    # Z-score against surrogates (pooled)
+    # Z-score against surrogates
     surr_mean = cc_surr_np.mean(axis=0)
     surr_std = np.maximum(cc_surr_np.std(axis=0), 1e-10)
-    z_agg = (cc_agg_np - surr_mean) / surr_std
+    z_agg = (cc_real_np - surr_mean) / surr_std
 
-    # Threshold from surrogates
     z_surr = (cc_surr_np - surr_mean[None]) / surr_std[None]
     per_win_thresh = np.percentile(z_surr, 100 * (1 - target_fa), axis=0)
     z_threshold = max(float(np.median(per_win_thresh)), 1.0)
 
-    # Direct threshold on smoothed cross-product (BL agent finding)
+    # Threshold + event filter at output rate (4 Hz)
+    out_rate = fs / dec
     mask = z_agg > z_threshold
-    min_samp = max(1, int(min_event_s * fs))
-    # Decimate mask for event filtering then upsample
-    dec = max(1, int(fs / 4))  # 4 Hz for event filtering
-    mask_dec = mask[::dec]
-    mask_dec = _min_event_filter(mask_dec, max(1, int(min_event_s * 4)))
-    mask_up = np.repeat(mask_dec, dec)[:T]
-    mask = mask_up
-
-    win_times = np.arange(T) / fs
+    mask = _min_event_filter(mask, max(1, int(min_event_s * out_rate)))
 
     diagnostics = {
-        'method': 'xcorr_v1',
+        'method': 'xcorr_multilag_v2',
         'device': str(device),
         'n_channels': C_sel,
+        'n_lags': n_lags,
         'max_lag_samp': max_lag_samp,
+        'lag_step': lag_step,
         'smooth_s': smooth_s,
         'n_surrogates': n_surrogates,
         'fs': fs,
+        'output_rate': out_rate,
         'z_threshold': float(z_threshold),
         'coupling_fraction': float(mask.mean()),
         'z_agg_mean': float(z_agg.mean()),
         'z_agg_max': float(z_agg.max()),
-        'win_times': win_times,
     }
 
-    return mask, z_agg, cc_per_ch, diagnostics
+    return mask, z_agg, lag_np, diagnostics

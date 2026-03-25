@@ -151,6 +151,101 @@ def fourier_surrogate_gpu_batched(tensor, n_surrogates, base_seed=0,
     return torch.fft.irfft(shifted, n=N)
 
 
+def iaaft_surrogate(data, seed=None, max_iter=50, tol=1e-6):
+    """Iterative Amplitude-Adjusted Fourier Transform (IAAFT) surrogate.
+
+    Preserves BOTH the power spectrum AND the amplitude distribution
+    of the original signal, providing a stronger null than circular
+    shift (which preserves everything) or Fourier phase randomization
+    (which destroys amplitude distribution).
+
+    Algorithm (Schreiber & Schmitz 2000, Physica D):
+      1. Compute sorted amplitudes and Fourier amplitudes of original
+      2. Initialize with rank-ordered Gaussian noise
+      3. Iterate:
+         a. FFT, replace amplitudes with original's → preserves spectrum
+         b. Rank-reorder to match original's amplitude distribution
+      4. Converge when the spectrum stops changing
+
+    Parameters:
+        data: (N, C) numpy array — each column is a channel.
+        seed: Random seed.
+        max_iter: Maximum iterations (default 50).
+        tol: Convergence tolerance on spectral difference.
+
+    Returns:
+        surrogate: (N, C) IAAFT surrogate.
+    """
+    rng = np.random.default_rng(seed)
+    N, C = data.shape
+    surrogate = np.empty_like(data)
+
+    for ch in range(C):
+        x = data[:, ch].copy()
+        # Original sorted values and Fourier amplitudes
+        x_sorted = np.sort(x)
+        x_spectrum = np.fft.rfft(x)
+        x_amplitudes = np.abs(x_spectrum)
+
+        # Initialize: rank-order Gaussian noise to match x's distribution
+        noise = rng.standard_normal(N)
+        rank = np.argsort(np.argsort(noise))
+        s = x_sorted[rank]
+
+        prev_spectrum_diff = np.inf
+        for _ in range(max_iter):
+            # Fourier step: replace amplitudes, keep current phases
+            s_spectrum = np.fft.rfft(s)
+            s_phases = np.angle(s_spectrum)
+            s_spectrum = x_amplitudes * np.exp(1j * s_phases)
+            s = np.fft.irfft(s_spectrum, n=N)
+
+            # Amplitude step: rank-reorder to match original distribution
+            rank = np.argsort(np.argsort(s))
+            s = x_sorted[rank]
+
+            # Convergence check
+            spectrum_diff = np.mean((np.abs(np.fft.rfft(s)) - x_amplitudes) ** 2)
+            if abs(prev_spectrum_diff - spectrum_diff) < tol:
+                break
+            prev_spectrum_diff = spectrum_diff
+
+        surrogate[:, ch] = s
+
+    return surrogate
+
+
+def iaaft_surrogate_batched(data, n_surrogates, seed=None, max_iter=50):
+    """Generate K IAAFT surrogates.
+
+    Parameters:
+        data: (N, C) numpy array.
+        n_surrogates: Number of surrogates to generate.
+        seed: Base seed; surrogate k uses seed + k.
+        max_iter: Maximum iterations per surrogate.
+
+    Returns:
+        surrogates: (K, N, C) array of IAAFT surrogates.
+    """
+    N, C = data.shape
+    surrogates = np.empty((n_surrogates, N, C), dtype=data.dtype)
+
+    try:
+        from joblib import Parallel, delayed
+        results = Parallel(n_jobs=-1)(
+            delayed(iaaft_surrogate)(data, seed=seed + k if seed else k,
+                                     max_iter=max_iter)
+            for k in range(n_surrogates))
+        for k, s in enumerate(results):
+            surrogates[k] = s
+    except ImportError:
+        for k in range(n_surrogates):
+            surrogates[k] = iaaft_surrogate(
+                data, seed=seed + k if seed else k, max_iter=max_iter)
+
+    return surrogates
+
+
 def fourier_surrogate_tensors(data_dict, seed=None):
     """
     Apply Fourier phase randomization to a dict of tensors.

@@ -1318,6 +1318,110 @@ def inject_eeg_coupling_spatial(p1_eeg, p2_eeg, gate, kappa,
     return p2_coupled, kappa_per_ch
 
 
+def inject_bl_event_coupling(p1_bl, p2_bl, gate, kappa_per_ch,
+                              lag_samp=60, seed=42,
+                              peak_prominence=0.5, response_half_s=0.5,
+                              fs=30.0):
+    """Inject event-triggered mimicry coupling into blendshape signals.
+
+    Models real facial mimicry: when P1 has an AU activation event,
+    P2 has probability kappa of producing a mimicry response at t+lag.
+    The response is a Gaussian-enveloped copy of P1's peak waveform.
+
+    This coupling model is complementary to linear amplitude mixing:
+    - Amplitude mixing: continuous P2 ~ kappa*P1 + noise (cross-product detects)
+    - Event mimicry: P1 peak → P2 response with probability kappa (event sync detects)
+
+    Args:
+        p1_bl, p2_bl: (T, C) raw AU signals, z-scored.
+        gate: (T,) coupling gate in [0, 1].
+        kappa_per_ch: (C_coupled,) dict or array mapping channel index to kappa.
+            kappa here is the PROBABILITY of mimicry per event (not amplitude).
+        lag_samp: Coupling lag in samples (default 60 = 2.0s at 30 Hz).
+        seed: Random seed.
+        peak_prominence: Prominence for peak detection in P1 (std units).
+        response_half_s: Half-width of Gaussian response envelope in seconds.
+        fs: Sampling rate in Hz.
+
+    Returns:
+        p2_coupled: (T, C) with event-triggered coupling injected.
+        n_triggered: Dict[ch] -> number of triggered mimicry events.
+    """
+    from scipy.signal import find_peaks
+
+    rng = np.random.default_rng(seed)
+    T, C = p1_bl.shape
+    p2_coupled = p2_bl.copy()
+    n_triggered = {}
+
+    response_half_samp = int(response_half_s * fs)
+    # Gaussian envelope for the response
+    env_t = np.arange(-response_half_samp, response_half_samp + 1)
+    envelope = np.exp(-env_t ** 2 / (2 * (response_half_samp / 2.5) ** 2))
+
+    if isinstance(kappa_per_ch, dict):
+        channels = list(kappa_per_ch.keys())
+        kappas = [kappa_per_ch[ch] for ch in channels]
+    else:
+        channels = list(range(len(kappa_per_ch)))
+        kappas = list(kappa_per_ch)
+
+    for ch, kappa in zip(channels, kappas):
+        if kappa <= 0:
+            continue
+
+        # Detect P1 peaks
+        prominence = peak_prominence * p1_bl[:, ch].std()
+        peaks, props = find_peaks(p1_bl[:, ch], prominence=prominence,
+                                   distance=int(0.5 * fs))
+
+        triggered = 0
+        for pk in peaks:
+            # Check if coupling is active at this time
+            if gate[pk] < 0.5:
+                continue
+
+            # Probabilistic triggering: kappa = probability of mimicry
+            if rng.random() > kappa:
+                continue
+
+            # Response location in P2
+            resp_center = pk + lag_samp
+            if resp_center >= T or resp_center < 0:
+                continue
+
+            # Extract P1's waveform around the peak
+            wf_start = max(0, pk - response_half_samp)
+            wf_end = min(T, pk + response_half_samp + 1)
+            waveform = p1_bl[wf_start:wf_end, ch].copy()
+
+            # Apply Gaussian envelope
+            env_start = wf_start - pk + response_half_samp
+            env_end = wf_end - pk + response_half_samp
+            waveform *= envelope[env_start:env_end]
+
+            # Scale to match P2's local dynamics
+            wf_amp = max(abs(waveform).max(), 1e-8)
+            p2_local_std = max(p2_bl[max(0, resp_center-int(fs)):
+                                      min(T, resp_center+int(fs)), ch].std(),
+                               1e-8)
+            waveform = waveform / wf_amp * p2_local_std * 1.5
+
+            # Inject into P2 at the lagged position
+            inj_start = max(0, resp_center - response_half_samp)
+            inj_end = min(T, resp_center + response_half_samp + 1)
+            wf_offset_start = inj_start - (resp_center - response_half_samp)
+            wf_offset_end = wf_offset_start + (inj_end - inj_start)
+
+            if inj_end > inj_start and wf_offset_end <= len(waveform):
+                p2_coupled[inj_start:inj_end, ch] += waveform[wf_offset_start:wf_offset_end]
+                triggered += 1
+
+        n_triggered[ch] = triggered
+
+    return p2_coupled, n_triggered
+
+
 def inject_coupling_all(base_session, kappa, lag_s=2.0, seed=42):
     """Inject coupling into ALL target modalities at the same kappa.
 

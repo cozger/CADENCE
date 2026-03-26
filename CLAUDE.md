@@ -28,6 +28,12 @@ conda activate MCCT
 ## Key Commands
 
 ```bash
+# Pipeline validation suites (run these after any changes)
+python scripts/test_eeg_pipeline.py --quick     # EEG: fast_cycles multi-band (~30s)
+python scripts/test_bl_pipeline.py --quick      # BL: two-stage co-occurrence (~5s)
+python scripts/test_eeg_pipeline.py             # EEG: full suite with kappa sweep (~2min)
+python scripts/test_bl_pipeline.py              # BL: full suite both directions (~30s)
+
 # Single session analysis
 python scripts/run_session.py --session y_06
 
@@ -57,7 +63,7 @@ CADENCE/
     basis/         # raised_cosine.py, design_matrix.py
     regression/    # ewls.py (core), ridge.py, ftest.py, group_lasso.py
     coupling/      # pathways.py, estimator.py (CouplingEstimator), discovery.py, serialization.py
-    significance/  # surrogate.py (per-timepoint + session-level), detection.py
+    significance/  # fast_cycles.py (GPU EEG), bl_coupling.py (BL two-stage), coherence_localization.py (PLV), surrogate.py, detection.py
     visualization/ # kernels.py, timecourse.py, heatmaps.py, comparison.py, sparsity.py
   configs/default.yaml
   scripts/         # run_session, run_all_sessions, run_synthetic, generate_synthetic, compare_mcct, plot_coupling_activity

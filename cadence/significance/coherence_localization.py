@@ -745,6 +745,36 @@ def _coherence_windowed(W_p1, W_p2, win_samp, stride_samp, metric='csd'):
             si = sxy_n.imag.unfold(1, win_samp, stride_samp)
             coh[:, fi, :] = torch.sqrt(sr.mean(-1)**2 + si.mean(-1)**2)
 
+        elif metric == 'ccorr':
+            # Circular correlation coefficient (Burgess 2013).
+            # Measures covariance of phase deviations from each signal's
+            # own circular mean.  Resistant to spurious synchronization
+            # caused by coincidental rhythmicity changes.
+            #
+            # CCorr = Σ sin(φ1-μ1)·sin(φ2-μ2)
+            #       / √(Σ sin²(φ1-μ1) · Σ sin²(φ2-μ2))
+            ph1 = w1.angle()  # (C, T)
+            ph2 = w2.angle()
+
+            ph1_w = ph1.unfold(1, win_samp, stride_samp)  # (C, n_win, W)
+            ph2_w = ph2.unfold(1, win_samp, stride_samp)
+
+            # Circular mean per window (via mean of unit vectors)
+            mu1 = torch.atan2(ph1_w.sin().mean(-1, keepdim=True),
+                              ph1_w.cos().mean(-1, keepdim=True))
+            mu2 = torch.atan2(ph2_w.sin().mean(-1, keepdim=True),
+                              ph2_w.cos().mean(-1, keepdim=True))
+
+            # Deviations from circular mean
+            d1 = (ph1_w - mu1).sin()  # sin(φ1 - μ1)
+            d2 = (ph2_w - mu2).sin()  # sin(φ2 - μ2)
+
+            num = (d1 * d2).sum(-1)
+            den = (d1.pow(2).sum(-1) * d2.pow(2).sum(-1)
+                   ).sqrt().clamp(min=1e-10)
+            coh[:, fi, :] = (num / den).clamp(min=0)  # clamp negative
+            del ph1_w, ph2_w, d1, d2
+
         elif metric == 'envelope':
             e1 = w1.abs().unfold(1, win_samp, stride_samp)  # (C, n_win, W)
             e2 = w2.abs().unfold(1, win_samp, stride_samp)
@@ -1113,6 +1143,320 @@ def wpli_temporal_localization(p1_signal, p2_signal, fs,
     }
 
     return mask, z_agg, per_channel_z, diagnostics
+
+
+# ---------------------------------------------------------------------------
+# Multi-resolution PLV temporal localization
+# ---------------------------------------------------------------------------
+
+def multires_plv_temporal_localization(p1_signal, p2_signal, fs,
+                                        channels=None,
+                                        center_freqs=None,
+                                        n_surrogates=100,
+                                        windows_s=(2.0, 5.0, 10.0, 20.0),
+                                        stride_s=0.5,
+                                        n_cycles=5,
+                                        z_threshold=None,
+                                        target_fa=0.05,
+                                        min_event_s=2.0,
+                                        metric='plv',
+                                        surrogate_method='circular',
+                                        seed=42,
+                                        device=None,
+                                        **kwargs):
+    """Multi-resolution PLV temporal localization with optional IAAFT surrogates.
+
+    Computes coherence at multiple window sizes simultaneously and takes the
+    max-over-scales after per-scale surrogate-calibrated z-scoring.  Analogous
+    to the multi-lag bank for BL: short windows (2 s) catch transient coupling
+    bursts that long windows average out, while long windows (20 s) accumulate
+    evidence for weak sustained coupling.
+
+    The max-over-scales penalty is small because PLV at nearby window sizes is
+    highly correlated (similar to ~5 effective lags in BL's multi-lag bank).
+
+    Optionally uses IAAFT surrogates instead of circular shift.  IAAFT
+    preserves both power spectrum and amplitude distribution of the original
+    signal, providing a tighter null for near-Gaussian EEG signals.
+
+    Args:
+        p1_signal, p2_signal: (T, C) numpy arrays at native rate.
+        fs: sampling rate in Hz.
+        channels: channel indices to use (None = all).
+        center_freqs: (F,) center frequencies in Hz.
+            Default: 30 log-spaced from 2-40 Hz.
+        n_surrogates: number of surrogates (default 100).
+        windows_s: tuple of window sizes in seconds (default (2, 5, 10, 20)).
+        stride_s: stride in seconds (default 0.5).
+        n_cycles: Morlet cycles — scalar or [min, max] for frequency-scaled.
+        z_threshold: fixed z-score threshold (None = calibrate from surrogates).
+        target_fa: target false alarm rate (default 0.05).
+        min_event_s: minimum event duration in seconds (default 2.0).
+        metric: coherence metric ('plv', 'csd', 'wpli'). Default 'plv'.
+        surrogate_method: 'circular' (default) or 'iaaft'.
+        seed: random seed.
+        device: torch device.
+
+    Keyword args:
+        smooth_s: float or 'auto'.  If 'auto' (default), uses 0.75*window_s
+            per scale (matching validated 20s->15s ratio).  If float, applies
+            that fixed smoothing to all scales.  If 0, no smoothing.
+        roi_map: dict for ROI averaging (see wpli_temporal_localization).
+        max_gap_s: float, gap filling in seconds (default 0).
+        verbose: bool, print progress for long operations (default True).
+
+    Returns:
+        mask: (n_common,) boolean coupling mask.
+        z_multires: (n_common,) max-over-scales z-score timecourse.
+        per_scale_z: dict {window_s: (n_win_w,) z-score} per-scale z-scores
+            (on their own time grids, before alignment).
+        diagnostics: dict with pipeline metadata.
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    verbose = kwargs.get('verbose', True)
+    T_raw, C_all = p1_signal.shape
+
+    if center_freqs is None:
+        center_freqs = np.logspace(np.log10(2.0), np.log10(40.0), 30)
+
+    if channels is None:
+        channels = list(range(C_all))
+    C_sel = len(channels)
+
+    stride_samp = int(stride_s * fs)
+
+    # Resolve n_cycles: [min, max] → per-frequency linear scaling
+    if isinstance(n_cycles, (list, tuple)) and len(n_cycles) == 2:
+        n_cycles_arr = np.linspace(n_cycles[0], n_cycles[1], len(center_freqs))
+    else:
+        n_cycles_arr = n_cycles
+
+    # Optional ROI averaging
+    roi_map = kwargs.get('roi_map', None)
+    if roi_map is not None:
+        p1_signal = _roi_average_signals(p1_signal, roi_map)
+        p2_signal = _roi_average_signals(p2_signal, roi_map)
+        channels = list(range(p1_signal.shape[1]))
+        C_sel = len(channels)
+
+    # Tensorize selected channels → (C_sel, T)
+    x1 = torch.as_tensor(
+        np.ascontiguousarray(p1_signal[:, channels].T),
+        dtype=torch.float32, device=device)
+    x2 = torch.as_tensor(
+        np.ascontiguousarray(p2_signal[:, channels].T),
+        dtype=torch.float32, device=device)
+
+    N = x1.shape[1]
+    K = n_surrogates
+
+    # ── CWT (computed once, reused across all window sizes) ──────────────
+    W_p2 = _morlet_cwt(x2, fs, center_freqs, n_cycles=n_cycles_arr,
+                       device=device)  # (C, N, F)
+    W_p1_real = _morlet_cwt(x1, fs, center_freqs, n_cycles=n_cycles_arr,
+                            device=device)
+
+    # ── Real coherence at each scale ─────────────────────────────────────
+    coh_real = {}       # {w: (C, F, n_win_w) numpy}
+    centers_dict = {}   # {w: (n_win_w,) numpy in samples}
+
+    for w in windows_s:
+        win_samp = int(w * fs)
+        coh_w, centers_w = _coherence_windowed(
+            W_p1_real, W_p2, win_samp, stride_samp, metric=metric)
+        coh_real[w] = coh_w.cpu().numpy()
+        centers_dict[w] = centers_w.cpu().numpy()
+
+    del W_p1_real
+
+    # ── Pre-generate IAAFT surrogates if needed ──────────────────────────
+    iaaft_cache = None
+    if surrogate_method == 'iaaft':
+        from cadence.surrogates import iaaft_surrogate_batched
+        x1_np = x1.cpu().numpy().T  # (N, C)
+        if verbose:
+            print(f"  Generating {K} IAAFT surrogates "
+                  f"({N} samples × {C_sel} ch)...", flush=True)
+        iaaft_cache = iaaft_surrogate_batched(
+            x1_np, K, seed=seed, max_iter=50)  # (K, N, C)
+
+    # ── Surrogate coherence at each scale ────────────────────────────────
+    coh_surr_lists = {w: [] for w in windows_s}
+
+    min_shift = max(1, int(0.1 * N))
+    max_shift = N - min_shift
+    if min_shift >= max_shift:
+        min_shift, max_shift = 1, N - 1
+    gen = torch.Generator(device='cpu')
+    gen.manual_seed(seed)
+    shifts = torch.randint(min_shift, max_shift + 1, (K,), generator=gen)
+
+    for k in range(K):
+        # Generate surrogate P1
+        if surrogate_method == 'iaaft':
+            x1_surr = torch.as_tensor(
+                np.ascontiguousarray(iaaft_cache[k].T),
+                dtype=torch.float32, device=device)  # (C, N)
+        else:
+            x1_surr = torch.roll(x1, int(shifts[k].item()), dims=1)
+
+        # CWT of surrogate P1 (the expensive step — done once per surrogate)
+        W_p1_k = _morlet_cwt(x1_surr, fs, center_freqs,
+                             n_cycles=n_cycles_arr, device=device)
+
+        # Windowed coherence at each scale (cheap from existing CWT)
+        for w in windows_s:
+            win_samp = int(w * fs)
+            coh_k_w, _ = _coherence_windowed(
+                W_p1_k, W_p2, win_samp, stride_samp, metric=metric)
+            coh_surr_lists[w].append(coh_k_w.cpu().numpy())
+
+        del W_p1_k, x1_surr
+
+    del W_p2, x1, x2, iaaft_cache
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    # Stack: {w: (K, C, F, n_win_w)}
+    coh_surr = {w: np.stack(coh_surr_lists[w], axis=0) for w in windows_s}
+    del coh_surr_lists
+
+    # ── Z-score per scale (pooled aggregation) ───────────────────────────
+    smooth_mode = kwargs.get('smooth_s', 'auto')
+
+    z_per_scale = {}         # {w: (n_win_w,)}
+    z_surr_per_scale = {}    # {w: (K, n_win_w)}
+
+    for w in windows_s:
+        agg_real = coh_real[w].mean(axis=(0, 1))      # (n_win_w,)
+        agg_surr = coh_surr[w].mean(axis=(1, 2))      # (K, n_win_w)
+
+        surr_mean = agg_surr.mean(axis=0)
+        surr_std = np.maximum(agg_surr.std(axis=0), 1e-10)
+
+        z_w = (agg_real - surr_mean) / surr_std
+        z_surr_w = (agg_surr - surr_mean[None]) / surr_std[None]
+
+        # Per-scale temporal smoothing
+        if smooth_mode == 'auto':
+            sm = 0.75 * w
+        elif isinstance(smooth_mode, (int, float)) and smooth_mode > 0:
+            sm = float(smooth_mode)
+        else:
+            sm = 0.0
+
+        if sm > 0:
+            from scipy.ndimage import uniform_filter1d
+            smooth_win = max(1, int(sm / stride_s))
+            z_w = uniform_filter1d(z_w, smooth_win)
+            z_surr_w = uniform_filter1d(z_surr_w, smooth_win, axis=1)
+
+        z_per_scale[w] = z_w
+        z_surr_per_scale[w] = z_surr_w
+
+    del coh_real, coh_surr
+
+    # ── Align to common time grid ────────────────────────────────────────
+    # All scales share the same stride; centers differ only by window offset.
+    t_min = max(centers_dict[w][0] for w in windows_s)
+    t_max = min(centers_dict[w][-1] for w in windows_s)
+
+    z_aligned = {}
+    z_surr_aligned = {}
+    n_common = None
+
+    for w in windows_s:
+        c = centers_dict[w]
+        idx = (c >= t_min) & (c <= t_max)
+        z_aligned[w] = z_per_scale[w][idx]
+        z_surr_aligned[w] = z_surr_per_scale[w][:, idx]
+        nw = int(idx.sum())
+        n_common = nw if n_common is None else min(n_common, nw)
+
+    # Trim to exact common length (handles off-by-one from rounding)
+    for w in windows_s:
+        z_aligned[w] = z_aligned[w][:n_common]
+        z_surr_aligned[w] = z_surr_aligned[w][:, :n_common]
+
+    # ── Max over scales ──────────────────────────────────────────────────
+    z_stack = np.stack(
+        [z_aligned[w] for w in windows_s], axis=0)       # (S, n_common)
+    z_multires = z_stack.max(axis=0)                       # (n_common,)
+    best_scale_idx = z_stack.argmax(axis=0)
+    best_scale = np.array(windows_s)[best_scale_idx]
+
+    z_surr_stack = np.stack(
+        [z_surr_aligned[w] for w in windows_s], axis=0)   # (S, K, n_common)
+    z_multires_null = z_surr_stack.max(axis=0)             # (K, n_common)
+
+    # ── Threshold calibration from multi-res null ────────────────────────
+    if z_threshold is None:
+        per_win_thresh = np.percentile(
+            z_multires_null, 100 * (1 - target_fa), axis=0)
+        z_threshold = max(float(np.median(per_win_thresh)), 1.0)
+
+    mask = z_multires > z_threshold
+
+    # ── Post-processing ──────────────────────────────────────────────────
+    max_gap_s = kwargs.get('max_gap_s', 0.0)
+    if max_gap_s > 0:
+        gap_samples = max(1, int(max_gap_s / stride_s))
+        mask = _fill_gaps(mask, gap_samples)
+    min_samples = max(1, int(min_event_s / stride_s))
+    if min_samples > 1:
+        mask = _min_event_filter(mask, min_samples)
+
+    # Common-grid center times in seconds (use largest window as reference)
+    w_ref = max(windows_s)
+    c_ref = centers_dict[w_ref]
+    idx_ref = (c_ref >= t_min) & (c_ref <= t_max)
+    win_times = c_ref[idx_ref][:n_common] / fs
+
+    coupling_frac = float(np.mean(mask))
+
+    # Scale distribution among detected windows
+    if mask.any():
+        detected_scales = best_scale[mask]
+        scale_dist = {float(w): float((detected_scales == w).mean())
+                      for w in windows_s}
+    else:
+        scale_dist = {float(w): 0.0 for w in windows_s}
+
+    diagnostics = {
+        'method': 'multires_plv',
+        'device': str(device),
+        'n_channels': C_sel,
+        'n_freqs': len(center_freqs),
+        'n_windows_common': n_common,
+        'n_surrogates': K,
+        'fs': fs,
+        'windows_s': list(windows_s),
+        'stride_s': stride_s,
+        'n_cycles': n_cycles,
+        'center_freqs': (center_freqs.tolist()
+                         if hasattr(center_freqs, 'tolist')
+                         else list(center_freqs)),
+        'surrogate_method': surrogate_method,
+        'z_threshold': float(z_threshold),
+        'coupling_fraction': coupling_frac,
+        'z_multires_mean': float(np.mean(z_multires)),
+        'z_multires_max': float(np.max(z_multires)),
+        'z_multires_p95': float(np.percentile(z_multires, 95)),
+        'scale_distribution': scale_dist,
+        'win_times': win_times,
+        'per_scale_z_coupled': {
+            float(w): float(z_aligned[w][mask].mean())
+            if mask.any() else 0.0
+            for w in windows_s},
+        'per_scale_z_null': {
+            float(w): float(z_aligned[w][~mask].mean())
+            if (~mask).any() else 0.0
+            for w in windows_s},
+    }
+
+    return mask, z_multires, z_per_scale, diagnostics
 
 
 # ---------------------------------------------------------------------------

@@ -303,8 +303,134 @@ Stage 2: Per-event co-occurrence detection (RAW AU composites)
 - **Circular shift is already optimal for zero-inflated AU signals**
 - EEG (near-Gaussian) untested at scale — may still help there
 
+### Phase 3b: IAAFT for EEG — ❌ OOM / not needed
+- 100 IAAFT surrogates × 460K samples exhausted memory (joblib parallelization)
+- Even if fixed, circular shift already preserves more within-P1 structure (stronger null)
+- IAAFT destroys cross-channel correlations → weaker null for pooled PLV
+
 ### Phase 4: BOCPD — 🔲 Pending
-### Phase 5: Multi-Resolution PLV — 🔲 Pending
+
+### Phase 5: Multi-Resolution PLV — ✅ Implemented, ❌ Neutral
+- `multires_plv_temporal_localization()` added to `coherence_localization.py`
+- Windows (2s, 5s, 10s, 20s) with auto scale-proportional smoothing (0.75×w)
+- Max-over-scales with full surrogate calibration
+- **Result**: Neutral for sustained coupling (−3 to +2 pp vs baseline)
+- **Result**: Neutral for burst coupling (+1 pp at best)
+- The 20s window dominates (62% of detections at κ=0.1)
+- **Root cause**: Max-over-scales penalty (~0.3z) exactly offsets z_coupled gain
+- Short windows (2s) have too few samples for meaningful PLV
+
+### Phase 6: CCorr Metric — ✅ Implemented, ❌ Worse than PLV
+- Circular correlation coefficient (Burgess 2013) added to `_coherence_windowed()`
+- CCorr = correlation of sin(φ−μ) deviations, resistant to rhythmicity artifacts
+- **Result**: 15-19 pp WORSE than PLV at all κ (26.7% vs 41.0% at κ=0.1 mixing)
+- 4× slower (42s vs 10s) due to per-window circular mean computation
+- Burgess's lower spurious rate doesn't compensate for ~40% sensitivity loss
+
+### Phase 7: Burst-Triggered ITC — ✅ Implemented, ❌ Much worse than PLV
+- `burst_itc_temporal_localization()` in `cadence/significance/burst_itc.py`
+- Hilbert phase at P1 theta burst peaks, ITC across events in sliding windows
+- **Result**: 30 pp worse than continuous PLV (8.3% vs 39.4% at κ=0.2)
+- **Root cause**: Continuous PLV uses 5120 samples/window; burst ITC uses ~10 events
+- √N advantage (√512 ≈ 22×) overwhelms 2× amplitude amplification at burst times
+
+### Phase 8: Dual Coupling Model Comparison — ✅ Critical finding
+- Three models tested: mixing (phase+amp), Kuramoto (phase-only), amplitude (amp-only)
+- Three metrics: PLV, CCorr, envelope correlation
+- **Critical finding**: Broadband mixing model was 2× too optimistic
+  - Old baseline (broadband mixing + broadband PLV): κ=0.2 → 76.3% hit
+  - Fair test (narrowband mixing + theta PLV): κ=0.2 → 44.4% hit
+  - Kuramoto + theta PLV: κ=0.2 → 29.5% hit
+- **Revised detection thresholds** (realistic narrowband theta, 14-ch EPOC):
+  - Narrowband mixing: ~50% hit at κ≈0.25, ~80% at κ≈0.40
+  - Kuramoto phase attractor: ~50% hit at κ≈0.35, ~80% at κ>0.50
+- Literature confirms: "reliable estimation only at coupling > 0.3" (Yang et al. 2024)
+
+### Phase 9: Real Data Theta Scan (y_06) — ✅ Reveals amplitude coupling
+- Per-condition theta PLV (4-8 Hz, 20s window, avg-ref, all 14 channels)
+- **meditate_K**: 8.3% coupling, z_max=2.48 (strongest theta PLV)
+- Conversations: near-zero theta PLV (z_mean negative)
+- base_EC: z_mean=+0.44 (possible alpha contamination)
+
+### Phase 10: GPU Cycle Analysis (bycycle → fast_cycles) — ✅ Game-changing
+- Bycycle (Voytek lab) provides per-cycle features: amplitude, period, symmetry, burst
+- numpy 2.x bug fixed (read-only array in `detect_bursts_cycles`)
+- Default burst thresholds too strict for consumer EEG; tuned: monotonicity=0.7, amp_consistency=0.4
+- **Wrote `cadence/significance/fast_cycles.py`**: GPU-accelerated replacement, 50× faster
+  - FFT bandpass on GPU (all channels simultaneously)
+  - Per-cycle feature extraction (CPU, fast numpy)
+  - GPU-vectorized cross-correlation + 200 surrogates
+  - ~2-4s per condition vs bycycle's 4-10s+ per condition
+
+**KEY FINDING — Amplitude co-modulation is the dominant inter-brain EEG signal:**
+
+| Condition | volt_amp z | period z | symmetry z | burst z |
+|-----------|-----------|----------|------------|---------|
+| **conv_2** | **+7.24** | −1.46 | −0.12 | −0.95 |
+| **meditate_K** | **+6.56** | −0.20 | −1.02 | +0.51 |
+| base_EO | +3.55 | +0.48 | +0.79 | +1.58 |
+| conv_1 | +3.10 | −0.59 | −0.93 | +1.51 |
+| meditate_B | +0.69 | −0.03 | −0.11 | +0.90 |
+
+- Amplitude coupling (z=6-7) is **2× stronger** than phase coupling (PLV z=2.5)
+- Period, symmetry, burst co-occurrence show NO significant coupling
+- Signal is genuine (not artifact): frontal-weighted spatial pattern, pseudo-dyad null is clean (z≈0), persists without avg-ref
+
+**Spatial pattern (meditate_K):**
+- Frontal R: mean r=+0.076 (AF4 r=0.10, F4 r=0.076)
+- Frontal L: mean r=+0.044 (AF3 r=0.072, F3 r=0.055)
+- Temporal: mean r=+0.036
+- Parietal: mean r=+0.039
+- Occipital: mean r=+0.033
+- Right frontal 2× occipital — consistent with social/emotional processing
+
+### Phase 11: Arousal Coupling Injection Model — ✅ Validated
+- `inject_eeg_coupling_arousal()` added to `synthetic.py`
+- Slow modulator (LP 0.5Hz of P1 global theta envelope) → lag → modulate P2 broadband
+- Frontal-weighted spatial pattern (based on y_06 real distribution)
+- Band-specific spatial modes: `'frontal'` (theta), `'occipital'` (alpha), `'centroparietal'` (beta)
+- **Validated**: volt_amp z grows linearly with κ (0.16→3.85)
+- **Selective**: period z≈0, symmetry z≈−0.85 (constant), burst z≈−0.8 at all κ
+- **PLV cross-check**: PLV hit≈8% at all κ — no phase coupling created
+- Detection threshold: volt_amp z>2 at κ≈0.20
+- Calibration: y_06 real data (z≈6.5 at 688s) corresponds to κ≈0.5-0.6
+
+### Phase 12: Multi-Band Analysis (θ + α + β) — ✅ Powerful
+- `analyze_interbrain_cycles_multiband()` added to `fast_cycles.py`
+- GPU-batched bandpass for all bands in one pass, joblib-parallel cycle extraction
+- Stouffer combination across bands: `z_combined = mean(z_per_band) × √n_bands`
+- ~0.3-0.5s per condition (vectorized cycle features + joblib + GPU surrogates)
+
+**Multi-band y_06 real data (volt_amp z):**
+
+| Condition | θ (4-8) | α (8-13) | β (13-30) | **Combined** |
+|-----------|---------|----------|-----------|-------------|
+| **conv_2** | +7.24 | +7.48 | **+9.97** | **+14.25** |
+| **meditate_K** | **+6.56** | +3.89 | +2.94 | **+7.74** |
+| conv_1 | +3.10 | +3.45 | +1.85 | +4.85 |
+| base_EO | +3.55 | −0.26 | −1.39 | +1.10 |
+| base_EC | +1.81 | +0.56 | −0.19 | +1.26 |
+| meditate_B | +0.69 | −1.97 | −0.67 | −1.13 |
+
+**Band profile differs by condition type:**
+- **conv_2**: ALL bands coupled, beta strongest (z=9.97) — speech motor / turn-taking
+- **meditate_K**: theta dominant (z=6.56), alpha moderate (z=3.89) — emotional attunement
+- **conv_1**: theta + alpha — shared attention
+- **Baselines**: weak/absent — no shared task
+- **meditate_B (body scan)**: nothing — individual introspective activity
+
+**Multi-band Stouffer is very powerful**: conv_2 goes from z=7.24 (theta alone) to z=14.25 (combined) — genuine independent information across bands.
+
+### Validity Diagnostic — ✅ Signal is genuine
+
+**Concern investigated**: Eyes-closed conditions (base_EC, meditate_B, meditate_K) don't all show alpha coupling. Suspicious?
+
+**Findings:**
+1. **Alpha power is asymmetric**: P1 (patient) has strong alpha in eyes-closed (1.02 base_EC, 0.70 meditate_K), but P2 (therapist) consistently has low alpha (0.09-0.19 all conditions). For amplitude co-modulation to register, BOTH participants need power fluctuations in the band. P2's flat alpha means nothing to correlate.
+2. **Detrending has zero effect**: 3rd-order polynomial detrend changes z by ±0.01 — not a slow drift artifact. Circular-shift surrogates already handle non-stationarity.
+3. **Pseudo-dyad null is clean**: All bands z≈0 (θ=−0.49, α=−0.72, β=−0.03) when pairing y_06 P1 with a different session's P2.
+
+**Key insight**: Amplitude co-modulation requires BOTH participants to have power fluctuations in the detected band. The coupling is in the *modulation dynamics*, not the *presence of power*. meditate_K shows alpha coupling (z=3.89) because shared emotional attunement creates correlated alpha modulations that are absent during individual body scan (meditate_B) or passive eyes-closed rest (base_EC).
 
 ## What Was Built Instead
 
@@ -347,33 +473,60 @@ Stage 2: Per-event co-occurrence detection (RAW AU composites)
 
 ## Pending Work
 
-| Item | Notes |
-|------|-------|
-| Corpus rerun with raw composites | Debug zero-event issue in corpus test |
-| BOCPD regime detection | Still promising for Stage 1 z-score segmentation |
-| Multi-resolution PLV for EEG | Still promising for EEG at κ=0.1 |
-| Cross-modal event-triggered analysis | Use BL co-occurrence LSL timestamps to query EEG/ECG |
-| Session-level summary metrics | Clean output table for outcome prediction |
-| Pseudo-dyad null | Cross-session pairing for stronger null |
+| Item | Priority | Notes |
+|------|----------|-------|
+| **Corpus-wide scan** | **✅ Done** | 8 sessions × 36 segments, 102s. meditate_K z=+3.5 avg, conv_2 variable |
+| **Integrate fast_cycles into production pipeline** | **High** | Wire into main CouplingEstimator for session output |
+| BL semi-synthetic calibration | Medium | Clustered pseudo-dyad works; co-occ scales with κ; attribution needs work |
+| Cross-modal event-triggered analysis | Medium | BL co-occurrence LSL timestamps → query EEG amplitude coupling |
+| Session-level summary metrics | Medium | Clean output table for outcome prediction |
+| Event-triggered ITC with Hilbert phase | Low | For EEG characterization, not detection (burst ITC 30pp worse) |
 
 ## Key Design Decisions
 
-1. **Raw AU values, not z-scored**: Prominence ≥ 0.3 in raw composite ensures visible expressions
+1. **Raw AU values, not z-scored**: Prominence ≈ 0.3 in raw composite ensures visible expressions
 2. **Co-occurrence framing**: Most synchrony is shared_stimulus. Symmetric detection with who-led is more honest than forcing source→target
 3. **Hierarchical lag shrinkage**: Population prior (2.5±1.0s) regularizes without overriding strong data
 4. **Causal attribution as bonus**: ALL co-occurrences matter for outcome prediction; mimicry is the rare strong signal
 5. **LSL timestamps**: Every co-occurrence anchors cross-modal queries
+6. **Amplitude co-modulation > phase coupling for EEG**: Real inter-brain EEG signal is shared theta power dynamics (z=6-7), not phase locking (z=2.5). PLV detects a secondary signal; volt_amp cross-correlation is the primary metric.
+7. **Narrowband detection**: Broadband mixing model was 2× too optimistic. Realistic theta coupling threshold is κ≈0.25-0.30 on 14-ch EPOC.
+8. **Continuous > event-triggered for EEG**: Continuous PLV/amplitude correlation always beats burst-triggered approaches due to √N advantage (5120 samples vs ~10 events per window).
+9. **fast_cycles over bycycle**: GPU-native cycle analysis (50× faster) extracts the same features with identical results.
+
+## What Did NOT Work for EEG Detection
+
+| Approach | Result | Why |
+|----------|--------|-----|
+| Multi-resolution PLV | Neutral | Max-over-scales penalty = z gain |
+| IAAFT surrogates | OOM / not needed | Circular shift already optimal |
+| CCorr metric | −15 pp worse | Subtracting circular mean removes signal |
+| Burst-triggered ITC | −30 pp worse | √N loss (10 events vs 5120 samples) |
+| Envelope correlation (in mixing model) | 3.8× worse | κ² sensitivity vs PLV's κ |
+| SNR-weighted aggregation | Risky | Can amplify spurious channels |
+| ROI averaging | Hurts | Dilutes focal coupling |
+| CaCoh/CCA | Overfits | C ≈ DOF on 14-ch |
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `cadence/significance/bl_coupling.py` | Production two-stage pipeline |
+| `cadence/significance/bl_coupling.py` | Production BL two-stage pipeline |
+| `cadence/significance/fast_cycles.py` | **GPU cycle analysis — primary EEG coupling metric** |
+| `cadence/significance/coherence_localization.py` | PLV/CCorr/envelope TL (CCorr added, multi-res added) |
+| `cadence/significance/burst_itc.py` | Burst-triggered ITC (archived — worse than continuous) |
 | `cadence/surrogates.py` | IAAFT + circular shift + Fourier surrogates |
-| `cadence/synthetic.py` | Event-mimicry coupling injection model |
+| `cadence/synthetic.py` | All coupling injection models (mixing, Kuramoto, amplitude, **arousal**) |
 | `cadence/data/xdf_loader.py` | Role detection (therapist/patient) |
-| `scripts/_test_bl_corpus.py` | Corpus-level analysis |
-| `scripts/_test_bl_event_catalog.py` | LSL timestamp catalog for video verification |
-| `scripts/_test_bl_two_stage.py` | Single-session pipeline test |
+| `scripts/_test_fast_cycles_y06.py` | GPU cycle analysis on real data |
+| `scripts/_test_arousal_semisynthetic.py` | Arousal injection validation |
+| `scripts/_test_metric_model_matrix.py` | 3×3 metric × model comparison |
+| `scripts/_test_narrowband_fair.py` | Fair narrowband PLV comparison |
+| `scripts/_test_multires_burst_eeg.py` | Multi-res + burst pattern tests |
+| `scripts/_diag_spatial_amplitude.py` | Spatial pattern diagnostic (genuine vs artifact) |
+| `scripts/_scan_y06_theta.py` | Per-condition theta PLV scan |
+| `scripts/_test_bl_corpus.py` | Corpus-level BL analysis |
+| `scripts/_test_bl_event_catalog.py` | LSL timestamp catalog |
+| `scripts/_test_bl_two_stage.py` | Single-session BL pipeline test |
 | `scripts/_test_event_sync.py` | Event sync experiments (archived) |
 | `scripts/_test_iaaft.py` | IAAFT validation (archived) |

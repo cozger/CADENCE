@@ -253,6 +253,144 @@ def generate_coupling_gate(n_samples, hz, profile, seed=42):
     return gate
 
 
+def generate_burst_coupling_gate(n_samples, fs, config=None, seed=42):
+    """Generate coupling gate with theta-burst temporal structure.
+
+    Models realistic neural synchrony: coupling occurs in burst trains
+    (3-10 bursts per train, 100-300 ms per burst, ~200 ms inter-burst
+    interval).  Burst trains are placed inside macro coupling windows
+    (same episodic structure as ``generate_coupling_gate``).
+
+    A burst train of 5 × 200 ms bursts with 200 ms gaps spans ~2 s.
+    This is the timescale where short PLV windows (2-5 s) dramatically
+    outperform the standard 20 s window.
+
+    Args:
+        n_samples: Total number of samples.
+        fs: Sampling rate in Hz.
+        config: Dict with optional keys:
+            macro_duty_cycle: fraction of time with coupling opportunities
+                (default 0.10).
+            macro_event_range_s: (min, max) macro window in seconds
+                (default (5, 20)).
+            bursts_per_train: (min, max) number of bursts per train
+                (default (3, 10)).
+            burst_duration_ms: (min, max) single-burst duration in ms
+                (default (100, 300)).
+            inter_burst_ms: (min, max) or scalar inter-burst gap in ms
+                (default 200).
+            inter_train_s: (min, max) or scalar gap between trains in s
+                (default (1.0, 3.0)).
+            ramp_ms: cosine ramp applied to each burst edge in ms
+                (default 20).
+        seed: Random seed.
+
+    Returns:
+        gate: (n_samples,) float32 array in [0, 1].
+        info: dict with ``n_trains``, ``n_bursts_total``, ``burst_duty``
+            (fraction of macro window occupied by bursts).
+    """
+    cfg = config or {}
+    rng = np.random.default_rng(seed)
+
+    macro_duty = cfg.get('macro_duty_cycle', 0.10)
+    macro_ev = cfg.get('macro_event_range_s', (5, 20))
+    bpt = cfg.get('bursts_per_train', (3, 10))
+    bd_ms = cfg.get('burst_duration_ms', (100, 300))
+    ib_ms = cfg.get('inter_burst_ms', 200)
+    it_s = cfg.get('inter_train_s', (1.0, 3.0))
+    ramp_ms = cfg.get('ramp_ms', 20)
+
+    # Resolve scalar vs range
+    if np.isscalar(ib_ms):
+        ib_range = (ib_ms, ib_ms)
+    else:
+        ib_range = tuple(ib_ms)
+    if np.isscalar(it_s):
+        it_range = (it_s, it_s)
+    else:
+        it_range = tuple(it_s)
+
+    # Step 1: macro windows (binary)
+    macro_gate = generate_coupling_gate(n_samples, fs, {
+        'duty_cycle': macro_duty,
+        'event_range_s': macro_ev,
+        'ramp_s': 0.0,  # hard edges — bursts provide micro-structure
+    }, seed=seed)
+
+    # Find macro window intervals
+    macro_bool = macro_gate > 0.5
+    edges = np.diff(macro_bool.astype(np.int8), prepend=0)
+    onsets = np.where(edges == 1)[0]
+    offsets = np.where(edges == -1)[0]
+    if len(offsets) < len(onsets):
+        offsets = np.append(offsets, n_samples)
+
+    # Step 2: place burst trains within each macro window
+    gate = np.zeros(n_samples, dtype=np.float32)
+    n_trains = 0
+    n_bursts_total = 0
+    burst_samples_total = 0
+
+    ramp_samp = max(1, int(ramp_ms / 1000 * fs))
+    # Cosine ramp template
+    ramp_up = 0.5 * (1 - np.cos(np.linspace(0, np.pi, ramp_samp)))
+    ramp_down = ramp_up[::-1]
+
+    for on, off in zip(onsets, offsets):
+        pos = on
+        while pos < off:
+            # Start a burst train
+            n_bursts = int(rng.integers(bpt[0], bpt[1] + 1))
+            for b in range(n_bursts):
+                dur_ms = int(rng.integers(bd_ms[0], bd_ms[1] + 1))
+                dur_samp = max(1, int(dur_ms / 1000 * fs))
+                burst_end = min(pos + dur_samp, off, n_samples)
+                actual_len = burst_end - pos
+
+                if actual_len < 2 * ramp_samp:
+                    # Too short for ramp — just set to 1
+                    gate[pos:burst_end] = 1.0
+                else:
+                    gate[pos:burst_end] = 1.0
+                    # Apply cosine ramps
+                    r = min(ramp_samp, actual_len // 2)
+                    gate[pos:pos + r] = ramp_up[:r]
+                    gate[burst_end - r:burst_end] = ramp_down[:r]
+
+                n_bursts_total += 1
+                burst_samples_total += actual_len
+                pos = burst_end
+
+                # Inter-burst gap
+                gap_ms = rng.uniform(ib_range[0], ib_range[1])
+                pos += max(1, int(gap_ms / 1000 * fs))
+
+                if pos >= off:
+                    break
+
+            n_trains += 1
+
+            # Inter-train gap
+            train_gap_s = rng.uniform(it_range[0], it_range[1])
+            pos += max(1, int(train_gap_s * fs))
+
+    macro_on_samples = int(macro_bool.sum())
+    burst_duty = burst_samples_total / max(macro_on_samples, 1)
+
+    info = {
+        'n_trains': n_trains,
+        'n_bursts_total': n_bursts_total,
+        'burst_samples_total': burst_samples_total,
+        'macro_on_samples': macro_on_samples,
+        'burst_duty_within_macro': float(burst_duty),
+        'overall_duty': float(burst_samples_total / n_samples),
+        'macro_gate': macro_gate,  # for period-level evaluation
+    }
+
+    return gate.astype(np.float32), info
+
+
 # =========================================================================
 # Synthetic session builder
 # =========================================================================
@@ -1316,6 +1454,268 @@ def inject_eeg_coupling_spatial(p1_eeg, p2_eeg, gate, kappa,
         p2_coupled[:, ch] = alpha * p1_lagged[:, ch] + noise_scale * p2_eeg[:, ch]
 
     return p2_coupled, kappa_per_ch
+
+
+def inject_eeg_coupling_kuramoto(p1_eeg, p2_eeg, gate, kappa,
+                                  center_ch=2, decay_sigma=0.5,
+                                  lag_samp=8, band=(4.0, 8.0), fs=256.0):
+    """Inject spatially-decaying EEG coupling via Kuramoto phase attractor.
+
+    Unlike the mixing model (which linearly combines signals), this model
+    rotates P2's instantaneous phase toward P1's phase without changing
+    amplitude.  This tests whether phase-only metrics (PLV, CCorr) detect
+    coupling that has no amplitude signature.
+
+    Model per channel:
+      φ_p2'[t, ch] = φ_p2[t, ch] + κ_ch·gate[t]·sin(φ_p1[t-lag, ch] - φ_p2[t, ch])
+      p2'[t, ch] = A_p2[t, ch] · cos(φ_p2'[t, ch])
+
+    The phase rotation is applied in a narrow band (default theta 4-8 Hz)
+    via Hilbert transform, leaving other frequencies untouched.
+
+    Args:
+        p1_eeg, p2_eeg: (T, 14) raw EEG at fs Hz, z-scored.
+        gate: (T,) coupling gate in [0, 1].
+        kappa: peak coupling strength at center electrode.
+        center_ch: electrode index (0-13) for the focal source.
+        decay_sigma: Gaussian decay width (default 0.5).
+        lag_samp: coupling lag in samples (default 8 ≈ 30ms at 256 Hz).
+        band: (lo, hi) frequency band for phase rotation (default theta).
+        fs: sampling rate.
+
+    Returns:
+        p2_coupled: (T, 14) with phase-rotated coupling.
+        kappa_per_ch: (14,) effective peak kappa per channel.
+    """
+    from scipy.signal import sosfiltfilt, butter, hilbert
+    from cadence.constants import EPOC_DISTANCE
+
+    T, C = p1_eeg.shape
+    dist = EPOC_DISTANCE[center_ch]
+    kappa_per_ch = kappa * np.exp(-dist ** 2 / (2 * decay_sigma ** 2))
+    kappa_per_ch[kappa_per_ch < 0.01] = 0.0
+
+    # Bandpass filter for phase extraction
+    sos = butter(4, [band[0], band[1]], btype='band', fs=fs, output='sos')
+
+    p2_coupled = p2_eeg.copy()
+    for ch in range(C):
+        if kappa_per_ch[ch] <= 0:
+            continue
+
+        # Extract narrowband analytic signals
+        p1_filt = sosfiltfilt(sos, p1_eeg[:, ch]).astype(np.float64)
+        p2_filt = sosfiltfilt(sos, p2_eeg[:, ch]).astype(np.float64)
+
+        p1_analytic = hilbert(p1_filt)
+        p2_analytic = hilbert(p2_filt)
+
+        phi1 = np.angle(np.roll(p1_analytic, lag_samp))
+        phi2 = np.angle(p2_analytic)
+        amp2 = np.abs(p2_analytic)
+
+        # Kuramoto phase rotation
+        alpha = kappa_per_ch[ch] * gate
+        phi2_new = phi2 + alpha * np.sin(phi1 - phi2)
+
+        # Reconstruct narrowband with rotated phase
+        p2_filt_new = amp2 * np.cos(phi2_new)
+
+        # Replace narrowband component: subtract old, add new
+        p2_coupled[:, ch] = (p2_eeg[:, ch].astype(np.float64)
+                             - p2_filt + p2_filt_new).astype(np.float32)
+
+    return p2_coupled, kappa_per_ch
+
+
+def inject_eeg_coupling_amplitude(p1_eeg, p2_eeg, gate, kappa,
+                                   center_ch=2, decay_sigma=0.5,
+                                   band=(4.0, 8.0), fs=256.0):
+    """Inject spatially-decaying EEG coupling via amplitude co-modulation.
+
+    Models shared arousal: P2's power envelope is modulated to correlate
+    with P1's power envelope, without changing phase.  This creates
+    amplitude-amplitude coupling that envelope correlation should detect
+    but PLV should not.
+
+    Model per channel:
+      A_p2'[t, ch] = A_p2[t, ch] · (1 + κ_ch·gate[t]·(A_p1_norm[t-lag, ch] - 1))
+      p2'[t, ch] = A_p2'[t, ch] · cos(φ_p2[t, ch])
+
+    where A_p1_norm is the P1 envelope normalized to mean=1.
+
+    Args:
+        p1_eeg, p2_eeg: (T, 14) raw EEG at fs Hz, z-scored.
+        gate: (T,) coupling gate in [0, 1].
+        kappa: peak modulation depth at center electrode.
+        center_ch: electrode index (0-13) for the focal source.
+        decay_sigma: Gaussian decay width (default 0.5).
+        band: (lo, hi) frequency band for envelope modulation (default theta).
+        fs: sampling rate.
+
+    Returns:
+        p2_coupled: (T, 14) with amplitude-modulated coupling.
+        kappa_per_ch: (14,) effective peak kappa per channel.
+    """
+    from scipy.signal import sosfiltfilt, butter, hilbert
+    from cadence.constants import EPOC_DISTANCE
+
+    T, C = p1_eeg.shape
+    dist = EPOC_DISTANCE[center_ch]
+    kappa_per_ch = kappa * np.exp(-dist ** 2 / (2 * decay_sigma ** 2))
+    kappa_per_ch[kappa_per_ch < 0.01] = 0.0
+
+    sos = butter(4, [band[0], band[1]], btype='band', fs=fs, output='sos')
+
+    p2_coupled = p2_eeg.copy()
+    for ch in range(C):
+        if kappa_per_ch[ch] <= 0:
+            continue
+
+        p1_filt = sosfiltfilt(sos, p1_eeg[:, ch]).astype(np.float64)
+        p2_filt = sosfiltfilt(sos, p2_eeg[:, ch]).astype(np.float64)
+
+        p1_analytic = hilbert(p1_filt)
+        p2_analytic = hilbert(p2_filt)
+
+        amp1 = np.abs(np.roll(p1_analytic, 0))  # no lag for amplitude
+        amp2 = np.abs(p2_analytic)
+        phi2 = np.angle(p2_analytic)
+
+        # Normalize P1 envelope to mean=1
+        amp1_norm = amp1 / max(amp1.mean(), 1e-10)
+
+        # Modulate P2 envelope
+        alpha = kappa_per_ch[ch] * gate
+        amp2_new = amp2 * (1 + alpha * (amp1_norm - 1))
+        amp2_new = np.maximum(amp2_new, 0)  # ensure non-negative
+
+        # Reconstruct: replace narrowband with modulated version
+        p2_filt_new = amp2_new * np.cos(phi2)
+        p2_coupled[:, ch] = (p2_eeg[:, ch].astype(np.float64)
+                             - p2_filt + p2_filt_new).astype(np.float32)
+
+    return p2_coupled, kappa_per_ch
+
+
+def inject_eeg_coupling_arousal(p1_eeg, p2_eeg, gate, kappa,
+                                 lag_s=1.0, mod_bandwidth=(0.05, 0.5),
+                                 source_band=(4.0, 8.0),
+                                 spatial_mode='frontal',
+                                 spatial_sigma=0.15,
+                                 fs=256.0, seed=42):
+    """Inject slow amplitude co-modulation (shared arousal) into EEG.
+
+    Models inter-brain amplitude coupling: a slow modulator derived from
+    P1's global power envelope modulates P2's broadband EEG amplitude.
+    Creates correlated per-cycle volt_amp between participants without
+    affecting phase, period, or waveform symmetry.
+
+    The modulator is lowpass-filtered to < 0.5 Hz, matching real arousal
+    dynamics (~seconds timescale).  Spatial pattern is frontal-weighted
+    by default, matching observed y_06 spatial distribution (frontal 2×
+    occipital, right hemisphere slightly stronger).
+
+    Model:
+      m(t) = LP_0.5Hz[ mean_ch( |Hilbert(BP(P1))| ) ]
+      m_norm(t) = (m - mean) / std
+      p2'[t, ch] = p2[t, ch] * (1 + kappa_ch * gate(t) * m_norm(t - lag))
+
+    Args:
+        p1_eeg, p2_eeg: (T, 14) raw EEG at fs Hz, z-scored.
+        gate: (T,) coupling gate in [0, 1].
+        kappa: nominal modulation depth (0.15-0.35 for r≈0.05-0.08).
+        lag_s: modulation lag in seconds (default 1.0).
+        mod_bandwidth: (lo, hi) Hz for modulator lowpass (default 0.05-0.5).
+        source_band: (lo, hi) Hz for P1 envelope extraction (default theta).
+        spatial_mode: 'frontal' (default, anterior-weighted matching y_06),
+            'uniform' (all channels ±sigma noise), or array (14,) of weights.
+        spatial_sigma: channel-to-channel kappa noise (default 0.15).
+        fs: sampling rate.
+        seed: for spatial noise RNG.
+
+    Returns:
+        p2_coupled: (T, 14) with amplitude co-modulation.
+        kappa_per_ch: (14,) effective kappa per channel.
+        modulator: (T,) the slow modulator signal (for diagnostics).
+    """
+    from scipy.signal import sosfiltfilt, butter, hilbert
+    from cadence.constants import EPOC_2D_POS
+
+    rng = np.random.default_rng(seed)
+    T, C = p1_eeg.shape
+    lag_samp = int(lag_s * fs)
+
+    # ── Spatial weights ──────────────────────────────────────────────────
+    if isinstance(spatial_mode, np.ndarray):
+        weights = spatial_mode.copy()
+    elif spatial_mode == 'frontal':
+        # Theta pattern: frontal 2x occipital, slight right bias
+        y = EPOC_2D_POS[:, 1]  # anterior-posterior
+        x = EPOC_2D_POS[:, 0]  # left-right
+        y_norm = (y - y.min()) / (y.max() - y.min())
+        weights = 0.5 + 0.5 * y_norm
+        weights[x > 0] *= 1.1
+        weights /= weights.mean()
+    elif spatial_mode == 'occipital':
+        # Alpha pattern: occipital/parietal dominant
+        y = EPOC_2D_POS[:, 1]
+        y_norm = (y - y.min()) / (y.max() - y.min())
+        # Invert: 1.0 at occipital, 0.5 at frontal
+        weights = 1.0 - 0.5 * y_norm
+        weights /= weights.mean()
+    elif spatial_mode == 'centroparietal':
+        # Beta/mu pattern: central + parietal dominant
+        # Peak at FC5/FC6/T7/T8/P7/P8 (y ≈ -0.59 to +0.35)
+        y = EPOC_2D_POS[:, 1]
+        # Gaussian centered at y=−0.1 (between central and parietal)
+        weights = np.exp(-(y - (-0.1)) ** 2 / (2 * 0.5 ** 2))
+        weights /= weights.mean()
+    elif spatial_mode == 'uniform':
+        weights = np.ones(C)
+    else:
+        weights = np.ones(C)
+
+    # Add per-channel noise
+    noise = rng.normal(0, spatial_sigma, C)
+    kappa_per_ch = kappa * np.maximum(weights + noise, 0.1)
+
+    # ── Extract slow modulator from P1 ───────────────────────────────────
+    # Bandpass filter P1 in source band, compute envelope per channel
+    sos_bp = butter(4, [source_band[0], source_band[1]], btype='band',
+                    fs=fs, output='sos')
+    envelopes = np.zeros((T, C))
+    for ch in range(C):
+        filt = sosfiltfilt(sos_bp, p1_eeg[:, ch].astype(np.float64))
+        envelopes[:, ch] = np.abs(hilbert(filt))
+
+    # Global average envelope
+    global_env = envelopes.mean(axis=1)  # (T,)
+
+    # Lowpass filter to modulation bandwidth
+    sos_lp = butter(2, mod_bandwidth[1], btype='low', fs=fs, output='sos')
+    modulator = sosfiltfilt(sos_lp, global_env)
+
+    # Normalize to zero-mean, unit-variance
+    mod_mean = modulator.mean()
+    mod_std = max(modulator.std(), 1e-10)
+    modulator_norm = (modulator - mod_mean) / mod_std
+
+    # Apply lag
+    if lag_samp > 0:
+        modulator_lagged = np.roll(modulator_norm, lag_samp)
+        modulator_lagged[:lag_samp] = 0
+    else:
+        modulator_lagged = modulator_norm
+
+    # ── Modulate P2 ──────────────────────────────────────────────────────
+    p2_coupled = p2_eeg.copy().astype(np.float64)
+    for ch in range(C):
+        scale = 1.0 + kappa_per_ch[ch] * gate * modulator_lagged
+        scale = np.maximum(scale, 0.1)  # prevent sign flips
+        p2_coupled[:, ch] *= scale
+
+    return p2_coupled.astype(np.float32), kappa_per_ch, modulator_norm
 
 
 def inject_bl_event_coupling(p1_bl, p2_bl, gate, kappa_per_ch,

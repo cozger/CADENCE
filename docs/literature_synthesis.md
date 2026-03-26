@@ -166,3 +166,85 @@ These are the signals the literature identifies as carrying interpersonal coupli
 9. **Strangers vs. established dyads**: Ohayon meta-analysis finds strangers show *higher* neural-behavioral correlations than familiar dyads (0.40 vs 0.15). First therapy sessions may show different coupling patterns than established therapeutic relationships — CADENCE should track session number as a covariate.
 
 10. **Facilitator selection via coupling profiles**: Goldy 2026 shows facilitators account for 13.6% of psychedelic session variance. CADENCE could generate per-facilitator coupling profiles that predict which facilitator-patient pairings produce the strongest synchrony — enabling data-driven facilitator matching.
+
+---
+
+### V. New Papers Added 2026-03-26 (~45 papers)
+
+#### A. Inter-Brain Synchrony — Clinical & Methodological
+
+| Paper | N | Key Finding | Effect Size | CADENCE Relevance |
+|-------|---|-------------|-------------|-------------------|
+| **Adel et al. NBR 2025** | 160 dyads (11 studies) | INS present in ALL clinical hyperscanning studies; attachment moderates INS-outcome link | Mixed (systematic review) | Validates premise; add attachment as moderator |
+| **Zimmermann/Ayrolles 2024** | 18 dyads + sim | Epoch <5s inflates phase-based IBS; adjusted CCorr = PLV (r>.99); low SNR degrades phase | 36-49% inflation | Validates CADENCE volt_amp over phase methods |
+| **Bevilacqua et al. 2019** | 12 students + 1 teacher | Social closeness predicts teacher-student synchrony; synchrony tracks engagement NOT outcomes | Closeness-TI r=.38 | Relationship quality moderates coupling magnitude |
+| **Czeszumski et al. 2022** | 890 (13 fNIRS studies) | Cooperation IBS in PFC+TPJ; massive heterogeneity | g=1.98, I2=98.6% | Expect high between-session variability |
+| **Hakim et al. 2023** | 215 studies | 27 IBC methods; cross-brain GLM endorsed; multimodal data essential | Review | CADENCE architecture (EWLS distributed lag) validated |
+| **Mu et al. 2016** | 65 + 30 dyads | Oxytocin enhances alpha-band IBS during coordination; gender differences | F(1,28)=10.18, p<.005 | Gender composition as moderator; alpha band key |
+| **Pan et al. 2020** | 24 dyads fNIRS | Scaffolding behaviors drive coupling bursts; not passive observation | eta2>.65, d=0.78 | Validates event-anchored architecture |
+| **Sened et al. 2025** | 8 patients, 1 therapist | IBS increases across therapy sessions (inter-brain plasticity); tracks symptoms not alliance; coupling is dyad-specific | d=1.34 | Track session-over-session coupling trajectories |
+
+#### B. Neurofeedback & Intervention — Psychedelic Context
+
+| Paper | Key Finding | CADENCE Relevance |
+|-------|-------------|-------------------|
+| **Carhart-Harris & Friston 2019 (REBUS)** | Psychedelics = simulated annealing; relax precision of high-level priors via 5-HT2A; window of plasticity | Foundational theory for drug-state coupling |
+| **Levin et al. 2024** (N=24, psilocybin MDD) | Post-psilocybin alliance predicts depression r=-.85 (4wk), r=-.77 (6mo). Pre-dosing alliance predicts mystical experience r=.49. Task subscale dominates. | CADENCE coupling in prep sessions should predict acute experience; alliance 4x more important than conventional therapy |
+| **Kleinbub et al. 2020** | Proposes "interpersonal biofeedback" — real-time physiological coupling feedback to therapists via haptic signals. SC synchrony tracks attachment processes. | CADENCE builds exactly this measurement backbone |
+| **Muscat et al. 2021** | Ketamine: 5 mechanisms (NMDA, neuroplasticity, anti-inflammatory, high-entropy, psychedelic). Spinogenesis peaks 24-48h. | Integration sessions in plasticity window; track pre/post resting-state EEG |
+| **Schartner et al. 2017** (N=54, psilocybin+ketamine+LSD) | All 3 psychedelics increase LZ complexity above waking consciousness (86-100% of participants). Temporal > spatial diversity. Phase coherence does NOT index drug state. | LZ complexity per-channel per-epoch (2s sufficient); phase metrics won't capture drug effects |
+| **Shamay-Tsoory & Abu-Akel 2016** | Oxytocin social salience hypothesis: context-dependent effects via dopamine modulation. Can increase envy, aggression in threatening contexts. | Interpret coupling in context (cooperative vs rupture) |
+| **Timmermann et al. 2019** (N=13, DMT) | Alpha suppression + theta emergence (9.3->7.4 Hz) + LZs increase. Oscillatory component shows functionally relevant changes; fractal less relevant. Minute-by-minute resolution sufficient. | Track alpha/theta/LZs in real-time; oscillatory > fractal; CADENCE's volt_amp focus validated |
+| **De Jong et al. 2025** | Multi-dimensional progress feedback (symptoms + process measures) outperforms simple monitoring. NOT cases benefit most. Up to 50% of clinicians don't use feedback. | CADENCE must be designed for minimal cognitive load |
+
+#### C. Signal Processing Methods — New
+
+| Paper | Method | Key Technical Detail | CADENCE Application |
+|-------|--------|---------------------|---------------------|
+| **Dong et al. 2021** | FMRR (ECG-derived respiration) | <2 bpm error at ALL sampling rates down to 50 Hz; needs only RR intervals; 32s min windows; band-pass 0.15-0.4 Hz | Trivially add respiratory synchrony from Polar H10 |
+| **Varon et al. 2020** | QRS slope EDR | Downslope/slope-range methods best for full waveform; validated on 59,482 segments, 156 subjects | Better respiratory waveform if needed beyond rate |
+| **Charlton et al. 2016** | 314 respiratory algorithms | ECG-based outperforms impedance pneumography; public RRest toolbox | Reference pipeline for respiratory extraction |
+| **Halpin & De Boeck 2013** | Dyadic Response Hawkes model | EM algorithm with gamma kernels; classifies events as spontaneous/self-response/other-response; 14 parameters | Proper framework for BL event co-occurrence |
+| **Kreuz et al. 2013** | SPIKE-distance | Parameter-free, time-resolved, causal variant for point-process synchrony | Alternative to cross-correlation for BL events |
+| **Li et al. 2018** | Synchronization templates | Coupled HMMs + Beta-Bernoulli discover role-specific facial coordination patterns; templates predict negotiation outcomes | Role-specific therapist/patient templates for BL |
+| **Ayrolles/HyPyP 2021** | HyPyP toolbox | 12 inter-brain connectivity measures; pseudo-dyad permutation standard; envelope correlation = volt_amp concept | Confirms CADENCE design choices |
+
+#### D. Clinical Synchrony Dynamics — Therapy-Specific
+
+| Paper | N | Key Finding | Effect Size | CADENCE Relevance |
+|-------|---|-------------|-------------|-------------------|
+| **Schoenherr et al. 2019** | 267 SAD dyads | Session 3 movement synchrony predicts dropout. Patient-led sync strongest. | 1% sync -> 5% dropout reduction | Early-session dropout risk indicator |
+| **Schoenherr et al. 2021** | 64 SAD patients | Vocal f0 synchrony predicts WORSE outcomes. Different modalities = different regulatory competencies. | beta=.24-.37 | Confirms vocal sync is negative; keep modalities separate |
+| **Uhl et al. 2025** | 90 clients, 22 therapists | Movement and EDA sync NEGATIVELY correlated (r=-.34). High move + low EDA = best outcomes. Within-therapist variability predicts, not between. | b=-3.57, p=.048 | Critical: don't average modalities; track relative sync |
+| **Stuldreher et al. 2020** | ~52 participants | EDA detects emotional events (AUC=.658), EEG detects attentional (AUC=.642), HR moderate (.592). Multimodal average most robust. | AUC .58-.66 | Validates multimodal approach; each modality serves different function |
+| **Wynn/Heyn et al. 2023** | 45 mother-child dyads | SCR synchrony during vicarious extinction -> better recall. EDA sync = safety learning mechanism. | F=4.62, p=.032 | EDA synchrony positive in emotional contexts; context-dependent |
+| **Ramseyer & Tschacher 2011** | 70 patients, 42 therapists | Movement synchrony predicts alliance + outcome. 15-minute segment sufficient (r=.70 reliability with full session). | r=.33-.35 | Foundational validation for automated movement synchrony |
+| **Koole & Tschacher 2016** | Review | In-Sync model: movement sync -> alliance -> emotion regulation. Co-regulation = complementary responses, not just matching. | Theory | Look for both synchronous AND complementary patterns |
+| **Swidrak 2025** | Review | Interpersonal synchrony as "reconnection" for chronic pain (fibromyalgia). Dance synchrony shows large effects. | Theory | Relevant if extending to chronic pain populations |
+
+#### E. Cardiac & Respiratory Synchrony — New Evidence
+
+| Paper | N | Key Finding | CADENCE Relevance |
+|-------|---|-------------|-------------------|
+| **Feldman et al. 2011** | 40 mother-infant | Vocal + affect sync drives cardiac sync; gaze alone does NOT. Near-zero lag. | Behavioral events anchor cardiac coupling |
+| **Goldstein et al. 2017** | 22 couples | Touch amplifies cardio-respiratory coupling during pain (delta-R2=.18-.25); empathy moderates. Pain WITHOUT touch disrupts coupling. | Empathy is critical moderator |
+| **Wilson/Kiecolt-Glaser 2018** | Review | HRV synchrony during marital CONFLICT predicts HIGHER inflammation. | PNS sync maladaptive in distress; interpret by context |
+| **Sharika et al. 2024** | 204 in 44 groups | HR synchrony predicts group decisions >70% accuracy (Polar H10). MdRQA features outperform questionnaires. | Validates Polar H10; MdRQA captures nonlinear dynamics |
+| **Codrons et al. 2014** | 60 participants | Respiratory sync spontaneous and INDEPENDENT of cardiac. Cardiac sync absent in emotionally neutral context. | Respiratory = "first responder"; add to CADENCE |
+| **Mueller & Lindenberger 2011** | 12 singers | Respiratory sync >> cardiac in choir. Granger causality reveals director->singer directionality. Graph analysis partitions voice groups. | Respiratory more robust; directed coupling measurable |
+| **Rogers et al. 2022** | 21 participants | Polar H10 respiratory rate: r=0.85, ~1 bpm error. Better at rest than exercise. | Hardware validation: no new equipment needed |
+
+#### F. Complexity, Language & Theoretical
+
+| Paper | Key Finding | CADENCE Relevance |
+|-------|-------------|-------------------|
+| **Chidichimo et al. 2025** (Nature Rev Neurosci) | Information theory (MI, TE, PID) as unified framework for interpersonal coordination. Nonlinear transformations common between brains. | Future upgrade: TE generalizes CADENCE regression to nonlinear |
+| **Lotter et al. 2023** (meta-analysis) | rTPJ is robust INS hub; GABA/E/I balance is neurochemical basis. INS linked to ventral attention + DMN. | Prioritize temporal-parietal EEG channels; E/I balance altered by psychedelics |
+| **Alonso et al. 2010** | Drug (alprazolam) DECREASES linear coupling while INCREASING nonlinear coupling across scalp. | CADENCE cross-correlation (linear) may miss drug effects; add MI |
+| **Marmelat & Delignieres 2012** | Complexity matching (DFA exponents) captures coordination invisible to cross-correlation. Strong anticipation, not local error correction. | Compute DFA exponents on coupling timecourses |
+| **Kojovic/Koehler 2024** | MEA synchrony classifies autism (BAC=63.4%). Kurtosis/skewness > mean as features. | Use distributional statistics of coupling timecourses |
+| **Lord et al. 2015** | Language style synchrony d=0.62 for empathy; 2.4x odds high empathy per 1 SD LSS increase. Beyond reflections. | Highest-value NLP feature if speech added |
+| **Bayerl et al. 2022** | Lexical entrainment predicts WAI (r=.44-.52); participation equality predicts alliance. | Convergent evidence for language synchrony |
+| **Kruyt et al. 2023** | 12 prosodic entrainment methods applied to same data DISAGREE. CRQA + windowed cross-correlation most robust. | If adding prosody, use multiple methods |
+| **Xiao et al. 2012, 2015** | NLP empathy detection r=0.56 with expert ratings. Empathy perceived as salient events (thresholded features > cumulative). Automated pipeline scalable. | Event-based empathy detection aligns with CADENCE architecture |
+| **Gullapalli et al. 2025** | TFT opioid misuse detection AUC=0.81. Behavioral >> physiological. 45s optimal window. | Same research group; behavioral signals most discriminative |

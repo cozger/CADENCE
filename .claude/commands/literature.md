@@ -272,6 +272,53 @@ Confirmed as the standard null hypothesis approach by Sened 2025 (1000 permutati
 
 ---
 
+## Wavelet Methods for Facial and Behavioral Coupling
+
+### Frequency Bands in Facial Blendshape Data (empirically grounded)
+
+| Band | Behavior | Source |
+|------|----------|--------|
+| <0.1 Hz | Emotional state, postural drift | Fujiwara & Daibo 2018, 2020 |
+| 0.1-0.5 Hz | Sustained expressions (tonic smile/frown) | Schmidt 2003, Jeganathan 2022 |
+| 0.5-2 Hz | Expression transitions (onset/offset) | Jeganathan 2022, Kawulok 2021 |
+| 2-7 Hz | Speech articulation (syllable rate) | Audiovisual speech literature |
+| 2.6-6.5 Hz | Listener backchannels (fast nods) | Hale & Ward 2019 |
+| >8 Hz | Tracker noise (CNN inference jitter) | MediaPipe GitHub #825; no published PSD characterization exists |
+
+### Key Methods
+
+- **CWT + HMM** (Jeganathan 2022, eLife): Analytic Morse wavelet on AU timeseries, 0-5 Hz, 10 freq bins x 14 AUs -> HMM discovers discrete facial states with unique spectral fingerprints. Complexity of dynamic expressions captured by a small number of simple spatiotemporal states. **THE anchor paper for CADENCE BL wavelet pipeline.**
+- **Wavelet Transform Coherence (WTC)**: Standard for fNIRS hyperscanning (Zhang 2020); Morlet wavelet w=6; real pairs > pseudo pairs at specific frequency bands. Dominant method in 27+ IBC studies (Hakim 2023).
+- **Windowed Multiscale Synchrony (WMS)** (Likens & Wiltshire 2021, SCAN): Time-varying, scale-localized coupling dynamics. Tracks how synchrony changes across both time and frequency. Code: github.com/aaronlikens/wms. Python: multiSyncPy package.
+- **Cross-Wavelet Transform (XWT)** (Issartel 2014, tutorial): Phase relationship between two signals at each time-frequency point. Arrow orientation encodes relative phase (right=in-phase, left=anti-phase).
+- **Convolutional NMF on scalograms** (Mackevicius 2019, eLife): Discovers recurring time-frequency motifs without labels. Applied to neural data; directly applicable to AU scalograms.
+
+### Key Findings for CADENCE
+
+- **Different frequency bands = different social functions** (Hale & Ward 2019): Low-frequency coherence (0.2-1.1 Hz) = mimicry with ~600ms lag. High-frequency content (2.6-6.5 Hz) shows systematic ANTI-synchrony from listener backchannels. The same signal carries opposite social meaning at different frequencies.
+- **Rapport associates with synchrony at TWO distinct bands**: <0.025 Hz (emotional state level, >40s cycles) AND 0.5-1.5 Hz (gestural/sub-second level) (Fujiwara & Daibo 2020). Maps to Koole & Tschacher's three temporal levels.
+- **Wavelet coherence on AU timeseries between dyad members is UNEXPLORED** — all existing wavelet synchrony work uses gross body movement (MEA, motion capture), NOT AU-level facial signals. This is a genuine gap.
+- **Low-pass at 5-8 Hz preserves all facial expression signal, removes tracker noise** (Jeganathan 2022 downsampled to 10 Hz without signal loss). CADENCE does not currently apply temporal filtering to blendshapes.
+- **Different synchrony methods measure different facets, not one construct** (Schoenherr 2019: 7 methods, 84 therapy dyads, only partially correlated). Cannot substitute wavelet coherence for cross-correlation or vice versa.
+- **CRQA may outperform WTC for naturalistic turn-taking interaction** (Schiavo 2025): WTC misses nonlinear, time-lagged coordination in reciprocal exchange.
+
+### Face Tracker Noise Characteristics
+
+- **MediaPipe applies no anti-aliasing filter** — users must implement their own (1-Euro filter recommended). CNN inference noise is broadband 0-15 Hz at 30 fps.
+- **Physiological jaw tremor (6-8 Hz) is below tracker noise floor** — 0.6mm amplitude vs 1-2 pixel tracker precision. Not visible in blendshape data.
+- **50 Hz fluorescent light flicker aliases to 10 Hz at 30 fps** — potential concern for lab recordings.
+- **Effective information bandwidth of face tracker output: ~5-8 Hz** (all meaningful dynamics below 5 Hz for expression, up to 7-8 Hz for speech).
+
+### Novel Opportunities for CADENCE
+
+1. **Wavelet coherence on dyadic AU timeseries** — no one has done this; all existing work uses gross movement
+2. **CWT scalogram clustering** for unsupervised facial behavior discovery (Jeganathan CWT + Mackevicius convNMF)
+3. **Multi-scale coupling profile**: speech sync at 3-6 Hz, expression sync at 0.5-2 Hz, state sync at <0.1 Hz — all from a single computation
+4. **No published PSD of any face tracker** — CADENCE could characterize MediaPipe/YQP noise spectrum
+5. **Wavelet-native BL pipeline** replacing hand-crafted speech/blink/smile detectors with principled frequency-domain decomposition
+
+---
+
 ## Key Theoretical Frameworks
 
 1. **REBUS** (Carhart-Harris & Friston 2019): Psychedelics = simulated annealing of high-level priors. Window of plasticity for belief revision. Context sensitivity amplified.
@@ -318,3 +365,4 @@ For full paper details, effect sizes, and citations:
 - `docs/eda_synchrony_literature_review.md` — 20 EDA papers with full methods
 - `docs/eda_key_studies.csv` — key EDA studies table (CSV)
 - `docs/ground_truth_paradigm.md` — validation paradigm design (6 paradigms, 63 min, 12-16 dyads)
+- PDFs in `G:\My Drive\ARPA Shared Documents\Reference Papers\` — all project literature including wavelet/facial dynamics papers (updated 2026-03-26)

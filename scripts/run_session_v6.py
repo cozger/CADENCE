@@ -82,12 +82,23 @@ def load_xdf_session(xdf_path):
     }
 
 
-def extract_bl_segment(landmarks, t_start, t_end, fs=FS_BL):
-    """Extract and resample blendshapes for a segment."""
+def extract_bl_segment(landmarks, t_start, t_end, fs=FS_BL, lowpass_hz=8.0):
+    """Extract, resample, and low-pass filter blendshapes for a segment.
+
+    The low-pass at 8 Hz removes tracker inference noise (broadband CNN jitter)
+    while preserving all meaningful facial dynamics: expression (0.5-2 Hz),
+    speech (2-7 Hz). Literature confirms effective bandwidth of face tracker
+    output is ~5-8 Hz (Jeganathan 2022, MediaPipe docs).
+    """
+    from scipy.signal import butter, sosfiltfilt
+
     dur = t_end - t_start
     T = int(dur * fs)
     t_grid = np.linspace(0, dur, T)
     sigs = {}
+
+    # Design filter once, reuse for both participants
+    sos = butter(4, lowpass_hz / (fs / 2), btype='low', output='sos')
 
     for person in ['P1', 'P2']:
         if person not in landmarks:
@@ -99,6 +110,8 @@ def extract_bl_segment(landmarks, t_start, t_end, fs=FS_BL):
         sig = np.stack([np.interp(t_grid, ts[m] - t_start, d[m, c])
                         for c in range(52)], axis=1)
         np.clip(sig, 0, 1, out=sig)
+        # Low-pass filter all 52 AU channels (vectorized via sosfiltfilt)
+        sig = sosfiltfilt(sos, sig, axis=0).astype(np.float32)
         sigs[person] = sig
 
     return sigs.get('P1'), sigs.get('P2'), dur

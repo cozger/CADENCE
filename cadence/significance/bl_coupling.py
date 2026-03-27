@@ -10,7 +10,7 @@ needs for tight-window per-event significance.
 """
 
 import numpy as np
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, butter, sosfiltfilt, hilbert
 from scipy.ndimage import gaussian_filter1d
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
@@ -93,10 +93,10 @@ class BLCouplingResult:
 # to detect any facial event regardless of type.
 
 EXPRESSION_COMPOSITES = {
-    'smile':  (43, 44, 17),   # mouthSmileL + mouthSmileR + jawOpen → laughter
-    'brow':   (2, 3, 4),      # browInnerUp + browOuterUpL + browOuterUpR → surprise
-    'frown':  (25, 26),       # mouthFrownL + mouthFrownR
-    'speech': (17, 22, 23),   # jawOpen + mouthLeft + mouthRight
+    'smile':  (44, 45),        # mouthSmileLeft + mouthSmileRight
+    'brow':   (3, 4, 5),       # browInnerUp + browOuterUpLeft + browOuterUpRight
+    'frown':  (30, 31),        # mouthFrownLeft + mouthFrownRight
+    'speech': (25, 33, 39),    # jawOpen + mouthLeft + mouthRight
 }
 
 
@@ -359,7 +359,7 @@ def bl_two_stage_coupling(p1_raw, p2_raw, fs,
                           # Stage 1 params
                           xcorr_channels=None,
                           max_lag_s=5.0, lag_step_s=0.1,
-                          smooth_s=3.0, n_surrogates=100,
+                          smooth_s=None, n_surrogates=100,
                           target_fa=0.05,
                           # Stage 2 params
                           event_prominence=0.3,
@@ -405,15 +405,47 @@ def bl_two_stage_coupling(p1_raw, p2_raw, fs,
     T, C = p1_raw.shape
     duration_s = T / fs
 
+    # Adaptive smoothing.  Empirically validated: d' is governed by
+    # effective DOF (≈ smooth_s / decorrelation_time), NOT by sample
+    # count.  AU signals decorrelate in ~0.2 s, so DOF ≈ smooth_s/0.2.
+    # At 30 Hz × 3 s this gives ~15 DOF (baseline).  To keep d' within
+    # ~7 % of baseline at higher rates, use 2.5 s (12.5 DOF, −7 % d')
+    # which buys 17 % better temporal resolution.
+    #   30 Hz → 3.0 s  (15 DOF, baseline)
+    #   60 Hz → 2.5 s  (12.5 DOF, −7 % d', +17 % temporal res)
+    if smooth_s is None:
+        smooth_s = 2.5 if fs > 50 else 3.0
+
     # ── Stage 1: Cross-product multi-lag bank (z-scored internally) ──
 
-    # Z-score for Stage 1 only
-    p1_z = p1_raw.copy()
-    p2_z = p2_raw.copy()
-    for c in range(min(C, 52)):
+    # Differentiate: co-MOVEMENT (velocity) not co-LEVEL (tonic values)
+    p1_z = np.diff(p1_raw, axis=0, prepend=p1_raw[:1])
+    p2_z = np.diff(p2_raw, axis=0, prepend=p2_raw[:1])
+
+    # Expressiveness weighting: downweight channels with high baseline
+    # variance (eye squint, blink — always active), upweight channels
+    # that are mostly silent but spike during expressions (smile, frown).
+    #
+    # Weight = 1 / (baseline_std + epsilon).  Channels with constant
+    # high-frequency jitter (blinks) have large velocity std → low weight.
+    # Channels that are mostly zero but occasionally spike (smiles) have
+    # small velocity std → high weight.
+    #
+    # Computed on the AVERAGE of both participants so the weighting is
+    # symmetric and doesn't leak coupling information.
+    n_ch = min(C, 52)
+    ch_std = np.zeros(n_ch)
+    for c in range(n_ch):
+        ch_std[c] = 0.5 * (p1_z[:, c].std() + p2_z[:, c].std())
+    ch_weights = 1.0 / (ch_std + 1e-6)
+    ch_weights /= ch_weights.sum()  # normalize to sum to 1
+    ch_weights *= n_ch              # scale so mean weight = 1
+
+    # Z-score then apply expressiveness weight
+    for c in range(n_ch):
         for sig in [p1_z, p2_z]:
             mu, sd = sig[:, c].mean(), max(sig[:, c].std(), 1e-8)
-            sig[:, c] = (sig[:, c] - mu) / sd
+            sig[:, c] = (sig[:, c] - mu) / sd * ch_weights[c]
 
     if xcorr_channels is None:
         xcorr_channels = list(range(min(C, 52)))
@@ -573,4 +605,474 @@ def bl_two_stage_coupling(p1_raw, p2_raw, fs,
         lag_window_s=lag_window,
         catalogs=catalogs,
         diagnostics={'stage1': diag_s1},
+    )
+
+
+# ── V6: Saliency-based facial event detection + confidence scoring ───
+#
+# Detects ANY salient facial event via velocity norm on non-eye AUs,
+# then scores confidence (is this a real smile?) from AU profiles.
+# No significance testing — a shared smile during conversation is a
+# real interpersonal event by definition.
+
+# Non-eye AU indices (MediaPipe FaceLandmarker ordering)
+_EYE_AUS = set(range(9, 23))  # eyeBlink*, eyeLook*, eyeSquint*, eyeWide*
+_EXPR_AUS = [i for i in range(52) if i not in _EYE_AUS]
+
+# Speech AU partition (from constants.BLENDSHAPE_COUPLING_GROUPS['speech'])
+# Empirically validated: AU34/35 are 50x discriminative for speech vs silence
+_SPEECH_AUS = {23, 24, 25, 26, 27, 32, 33, 34, 35, 36, 37, 38, 39,
+               40, 41, 42, 43, 46, 47, 48, 49}
+_NONSPEECH_EXPR_AUS = [i for i in _EXPR_AUS if i not in _SPEECH_AUS]
+# Index mappings into the _EXPR_AUS array for velocity partitioning
+_NONSPEECH_INDICES = [j for j, i in enumerate(_EXPR_AUS) if i not in _SPEECH_AUS]
+_SPEECH_INDICES = [j for j, i in enumerate(_EXPR_AUS) if i in _SPEECH_AUS]
+
+# Blink-associated AU partition (brow AUs that co-activate during blinks)
+# Empirically validated: browInnerUp 3.0x, browOuterUp 1.6-2.3x during blinks
+# cheekSquint (7, 8) NOT included — minimal blink co-activation, needed as smile marker
+_BLINK_ASSOC_AUS = {0, 1, 2, 3, 4, 5}  # neutral + brow group
+_BLINK_INDICES = [j for j, i in enumerate(_EXPR_AUS) if i in _BLINK_ASSOC_AUS]
+
+# Affect AUs: the expression channels we actually care about.
+# This is the residual after subtracting speech (jaw/mouth), blinks (brow),
+# and eyes (already excluded). Only emotional expression remains.
+_AFFECT_AUS = [7, 8, 28, 29, 30, 31, 44, 45, 50, 51]
+# cheekSquintL/R, mouthDimpleL/R, mouthFrownL/R, mouthSmileL/R, noseSneerL/R
+
+
+@dataclass
+class FacialEvent:
+    """A detected facial event for one person."""
+    time: float                  # seconds from segment start
+    lsl_time: float              # LSL timestamp (for cross-modal anchoring)
+    saliency: float              # velocity norm amplitude at peak
+    au_snapshot: np.ndarray      # (52,) raw AU values at event
+    smile_composite: float       # AU44 + AU45
+    smile_confidence: float      # amplitude x dominance x bilaterality
+    top_aus: List[Tuple[int, str, float]]  # [(idx, name, value), ...]
+    speech_prob: float = 0.0     # speech probability at event time [0, 1]
+    blink_prob: float = 0.0      # blink mask value at event time [0, 1]
+    smile_phasic: float = 0.0   # deviation of AU44+AU45 from trailing baseline
+    smile_velocity: float = 0.0  # d/dt of smile signal at event (positive = onset)
+
+
+@dataclass
+class SharedEvent:
+    """A co-occurring facial event between two people."""
+    event_a: FacialEvent
+    event_b: FacialEvent
+    lag: float                   # B_time - A_time (positive = A led)
+    leader: str                  # 'A' or 'B'
+    joint_smile_confidence: float  # geometric mean of both smile confidences
+    is_shared_smile: bool        # both have smile_composite > threshold
+
+
+@dataclass
+class FacialEventCatalog:
+    """Complete facial event catalog for a segment."""
+    events_p1: List[FacialEvent]
+    events_p2: List[FacialEvent]
+    shared_events: List[SharedEvent]
+    shared_smiles: List[SharedEvent]  # filtered to is_shared_smile=True
+    # Summary stats
+    n_events_p1: int
+    n_events_p2: int
+    n_shared: int
+    n_shared_smiles: int
+    duration_s: float
+    segment_name: str
+    lsl_start: float = 0.0
+    # Speech detection masks (None when speech_gating=False)
+    speech_p1: Optional[np.ndarray] = None  # (T,) speech probability for P1
+    speech_p2: Optional[np.ndarray] = None  # (T,) speech probability for P2
+    # Blink detection masks (None when blink_gating=False)
+    blink_p1: Optional[np.ndarray] = None   # (T,) blink mask for P1
+    blink_p2: Optional[np.ndarray] = None   # (T,) blink mask for P2
+
+
+def _detect_speech_from_blendshapes(signal, fs=30.0, lo=2.0, hi=8.0,
+                                    smooth_s=0.5, min_bout_s=0.3,
+                                    margin_s=0.15):
+    """Detect speech from blendshape temporal texture.
+
+    Uses mouthLowerDown L/R (AU34+35) bandpass [2-8 Hz] + Hilbert envelope.
+    These AUs are 50x more discriminative for speech vs silence than jawOpen,
+    empirically validated on y_06 (therapist-speaking vs patient-silent).
+
+    Args:
+        signal: (T, 52) raw blendshapes [0, 1].
+        fs: sampling rate (Hz).
+        lo, hi: bandpass frequency range (Hz).
+        smooth_s: envelope smoothing (seconds).
+        min_bout_s: minimum speech bout duration (seconds).
+        margin_s: pad speech regions by this amount on each side (seconds).
+
+    Returns:
+        speech_prob: (T,) array, continuous [0, 1] speech probability.
+    """
+    T = signal.shape[0]
+    nyq = fs / 2.0
+    if hi >= nyq:
+        hi = nyq - 0.5
+
+    # Primary: mouthLowerDown L/R (AU34 + AU35) — best speech indicators
+    lip_open = signal[:, 34].astype(np.float64) + signal[:, 35].astype(np.float64)
+
+    # Bandpass filter to isolate syllable-rate oscillation
+    sos = butter(4, [lo / nyq, hi / nyq], btype='band', output='sos')
+    filtered = sosfiltfilt(sos, lip_open)
+
+    # Analytic envelope via Hilbert transform
+    env = np.abs(hilbert(filtered)).astype(np.float32)
+
+    # Smooth
+    if smooth_s > 0:
+        env = gaussian_filter1d(env, sigma=smooth_s * fs)
+
+    # Threshold using peak-relative scaling with absolute noise floor.
+    # Calibrated from y_06 meditation ground truth:
+    #   Patient silence: max envelope ~0.001 (true null)
+    #   Therapist speech: peaks at 0.010-0.012 (soft guided meditation)
+    #   Conversation: peaks at 0.06-0.26 (normal speech)
+    # Noise floor 0.0005 cleanly separates silence from soft speech (20x headroom).
+    noise_floor = 0.0005
+    p95 = np.percentile(env, 95)
+    if p95 < noise_floor:
+        return np.zeros(T, dtype=np.float32)
+
+    threshold = max(0.15 * p95, noise_floor)
+    speech_prob = np.clip((env - threshold) / (p95 - threshold + 1e-8), 0.0, 1.0)
+
+    # Enforce minimum bout duration: suppress short blips
+    if min_bout_s > 0:
+        min_samples = int(min_bout_s * fs)
+        binary = speech_prob > 0.3
+        changes = np.diff(binary.astype(np.int8), prepend=0, append=0)
+        starts = np.where(changes == 1)[0]
+        stops = np.where(changes == -1)[0]
+        for s, e in zip(starts, stops):
+            if (e - s) < min_samples:
+                speech_prob[s:e] *= 0.2
+
+    # Pad speech regions with margin
+    if margin_s > 0:
+        margin_samples = int(margin_s * fs)
+        padded = gaussian_filter1d(speech_prob, sigma=margin_samples)
+        speech_prob = np.maximum(speech_prob, padded)
+
+    return np.clip(speech_prob, 0.0, 1.0).astype(np.float32)
+
+
+def _detect_blinks(signal, fs=30.0, height=0.3, prominence=0.2,
+                   min_iei_s=0.3, margin_s=0.15):
+    """Detect blinks from eyeBlink AUs and return a binary mask.
+
+    Uses bilateral average of eyeBlinkLeft (AU9) + eyeBlinkRight (AU10).
+    When eyes are closed (mean eyeBlink > 0.5), raises the height threshold
+    to avoid detecting fluctuations in the closed-eye baseline.
+
+    35-42% of conversation facial events coincide with blinks (y_06 empirical).
+
+    Args:
+        signal: (T, 52) raw blendshapes [0, 1].
+        fs: sampling rate (Hz).
+        height: minimum peak height for blink detection.
+        prominence: minimum peak prominence.
+        min_iei_s: minimum inter-blink interval (seconds).
+        margin_s: mask extends ± this many seconds around each blink peak.
+
+    Returns:
+        blink_mask: (T,) float32, 1.0 during blinks, 0.0 otherwise.
+    """
+    T = signal.shape[0]
+    blink_avg = (signal[:, 9].astype(np.float64) + signal[:, 10].astype(np.float64)) / 2
+
+    # When eyes are closed (baseline > 0.5), raise height threshold
+    # to only detect genuine blinks above the elevated baseline
+    baseline = np.median(blink_avg)
+    effective_height = max(height, baseline + 0.15) if baseline > 0.5 else height
+
+    pks, _ = find_peaks(blink_avg, height=effective_height,
+                        distance=int(min_iei_s * fs),
+                        prominence=prominence)
+
+    mask = np.zeros(T, dtype=np.float32)
+    half = int(margin_s * fs)
+    for pk in pks:
+        s = max(0, pk - half)
+        e = min(T, pk + half + 1)
+        mask[s:e] = 1.0
+
+    return mask
+
+
+def _smile_baseline(signal, fs=30.0, window_s=30.0):
+    """Compute trailing median baseline for smile signal (AU44 + AU45).
+
+    Uses a causal (trailing) window so the baseline at time t only depends
+    on data before t. This prevents smile peaks from inflating their own
+    baseline.
+
+    Args:
+        signal: (T, 52) raw blendshapes.
+        fs: sampling rate.
+        window_s: trailing window duration in seconds.
+
+    Returns:
+        baseline: (T,) trailing median of AU44+AU45.
+    """
+    smile = (signal[:, 44] + signal[:, 45]).astype(np.float64)
+    T = len(smile)
+    win = int(window_s * fs)
+
+    # Causal trailing median: pad the signal by prepending `win` samples,
+    # apply centered median_filter, then strip the padding.
+    # This makes the result at time t depend only on t-win..t.
+    from scipy.ndimage import median_filter
+    padded = np.concatenate([np.full(win, smile[0]), smile])
+    filt = median_filter(padded, size=win)
+    baseline = filt[win:]  # strip padding to recover causal result
+
+    return baseline.astype(np.float32)
+
+
+def _smile_confidence(au_snapshot, speech_prob=0.0, phasic_amp=None):
+    """Score confidence that this AU snapshot is a genuine smile.
+
+    Uses phasic amplitude (deviation from trailing baseline) instead of
+    absolute AU44+AU45 level. This eliminates tonic facial tone noise
+    that produces false smiles in meditation and resting conditions.
+
+    confidence = phasic_amplitude * dominance * bilaterality
+
+    Returns (confidence, smile_composite, phasic_amp, dominance, bilaterality).
+    """
+    smile_l = au_snapshot[44]
+    smile_r = au_snapshot[45]
+    smile_comp = smile_l + smile_r
+
+    # Use phasic amplitude if provided, otherwise fall back to absolute
+    amp = phasic_amp if phasic_amp is not None else smile_comp
+
+    # During speech, compute dominance over non-speech AUs only
+    if speech_prob > 0.3:
+        total_expr = sum(au_snapshot[i] for i in _NONSPEECH_EXPR_AUS) + 1e-6
+    else:
+        total_expr = sum(au_snapshot[i] for i in _EXPR_AUS) + 1e-6
+    dominance = smile_comp / total_expr
+
+    max_side = max(smile_l, smile_r, 1e-6)
+    bilaterality = 1.0 - abs(smile_l - smile_r) / max_side
+
+    confidence = max(amp, 0.0) * dominance * bilaterality
+
+    if speech_prob > 0.3:
+        confidence *= (1.0 + 0.3 * speech_prob)
+
+    return confidence, smile_comp, dominance, bilaterality
+
+
+def _detect_facial_events(signal, fs=30.0, smooth_s=0.1, prominence=0.03,
+                          min_iei_s=1.0, lsl_start=0.0,
+                          speech_mask=None, blink_mask=None):
+    """Detect facial events via velocity norm on non-eye AUs.
+
+    Subtractive gating: speech and blink masks suppress AU velocity in
+    their respective AU groups before computing the L2 saliency norm.
+    This removes known mechanical contamination (articulatory mouth
+    movement, brow co-contraction) to reveal genuine expression events.
+
+    Args:
+        signal: (T, 52) raw blendshapes [0, 1].
+        fs: sampling rate.
+        smooth_s: smoothing on velocity norm.
+        prominence: min prominence for peak detection.
+        min_iei_s: min inter-event interval.
+        lsl_start: LSL timestamp of segment start (for absolute timestamps).
+        speech_mask: (T,) speech probability [0, 1], or None.
+        blink_mask: (T,) blink mask [0, 1], or None.
+
+    Returns:
+        list of FacialEvent.
+    """
+    from cadence.significance.hawkes_coupling import MP_BLENDSHAPE_NAMES
+
+    T = signal.shape[0]
+
+    # Affect-only saliency: compute velocity norm on just the 10 AUs that
+    # encode emotional expression (smile, frown, dimple, cheekSquint, noseSneer).
+    vel = np.diff(signal[:, _AFFECT_AUS], axis=0, prepend=signal[:1, _AFFECT_AUS])
+    saliency = np.sqrt((vel ** 2).sum(axis=1))
+
+    if smooth_s > 0:
+        saliency = gaussian_filter1d(saliency, sigma=smooth_s * fs)
+
+    pks, _ = find_peaks(saliency, prominence=prominence,
+                        distance=int(min_iei_s * fs))
+
+    # Pre-compute phasic smile signals for the full timeseries
+    smile_raw = (signal[:, 44] + signal[:, 45]).astype(np.float64)
+    smile_base = _smile_baseline(signal, fs)
+    smile_phasic_ts = (smile_raw - smile_base).astype(np.float32)
+    smile_vel_ts = np.diff(smile_raw, prepend=smile_raw[0])
+    smile_vel_ts = gaussian_filter1d(smile_vel_ts, sigma=0.1 * fs).astype(np.float32)
+
+    half = int(0.25 * fs)
+    events = []
+    for pk in pks:
+        s = max(0, pk - half)
+        e = min(T, pk + half + 1)
+        snapshot = signal[s:e].mean(axis=0)
+
+        sp = float(speech_mask[pk]) if speech_mask is not None else 0.0
+        bp = float(blink_mask[pk]) if blink_mask is not None else 0.0
+        ph_amp = float(smile_phasic_ts[pk])
+        ph_vel = float(smile_vel_ts[pk])
+
+        conf, smile_comp, dom, bilat = _smile_confidence(
+            snapshot, speech_prob=sp, phasic_amp=ph_amp)
+        top = sorted([(i, MP_BLENDSHAPE_NAMES[i], float(snapshot[i]))
+                      for i in _EXPR_AUS if snapshot[i] > 0.1],
+                     key=lambda x: -x[2])[:5]
+
+        events.append(FacialEvent(
+            time=pk / fs,
+            lsl_time=lsl_start + pk / fs,
+            saliency=float(saliency[pk]),
+            au_snapshot=snapshot,
+            smile_composite=float(smile_comp),
+            smile_confidence=float(conf),
+            top_aus=top,
+            speech_prob=sp,
+            blink_prob=bp,
+            smile_phasic=ph_amp,
+            smile_velocity=ph_vel,
+        ))
+
+    return events
+
+
+def _find_shared_events(events_a, events_b, max_lag_s=3.0,
+                        smile_threshold=0.3):
+    """Match co-occurring facial events between two people.
+
+    Returns list of SharedEvent, sorted by joint_smile_confidence descending.
+    """
+    shared = []
+    used_b = set()
+    times_b = np.array([e.time for e in events_b]) if events_b else np.array([])
+
+    for ev_a in events_a:
+        if len(times_b) == 0:
+            break
+        diffs = times_b - ev_a.time
+        in_window = np.where(np.abs(diffs) <= max_lag_s)[0]
+        if len(in_window) == 0:
+            continue
+
+        for j in in_window[np.argsort(np.abs(diffs[in_window]))]:
+            if j in used_b:
+                continue
+            used_b.add(j)
+            ev_b = events_b[j]
+            lag = ev_b.time - ev_a.time
+            joint_conf = np.sqrt(max(ev_a.smile_confidence, 0) *
+                                 max(ev_b.smile_confidence, 0))
+            is_smile = (ev_a.smile_phasic > smile_threshold and
+                        ev_b.smile_phasic > smile_threshold and
+                        ev_a.smile_velocity > 0 and
+                        ev_b.smile_velocity > 0)
+
+            shared.append(SharedEvent(
+                event_a=ev_a, event_b=ev_b,
+                lag=lag,
+                leader='A' if lag > 0 else 'B',
+                joint_smile_confidence=float(joint_conf),
+                is_shared_smile=is_smile,
+            ))
+            break
+
+    shared.sort(key=lambda x: -x.joint_smile_confidence)
+    return shared
+
+
+def facial_event_catalog(p1_raw, p2_raw, fs,
+                         lsl_start=0.0, segment_name='',
+                         smooth_s=0.1, prominence=0.03,
+                         min_iei_s=1.0, max_lag_s=3.0,
+                         smile_threshold=0.1,
+                         speech_gating=True, blink_gating=True):
+    """Detect all facial events, match co-occurrences, score confidence.
+
+    This is the V6 production function for BL coupling analysis.
+    No significance testing — events are facts, confidence is about
+    detection quality.
+
+    Subtractive gating strategy:
+      - speech_gating: suppress articulatory mouth-AU velocity during speech
+      - blink_gating: suppress brow-AU velocity during blinks
+    Together these remove known mechanical contamination, revealing
+    genuine expression events (smiles, frowns, etc.).
+
+    Args:
+        p1_raw, p2_raw: (T, 52) raw blendshapes [0, 1].
+        fs: sampling rate (Hz).
+        lsl_start: LSL timestamp of segment start.
+        segment_name: e.g., 'conv_1'.
+        smooth_s: saliency smoothing.
+        prominence: event detection prominence.
+        min_iei_s: min inter-event interval.
+        max_lag_s: co-occurrence matching window.
+        smile_threshold: min smile composite for shared smile.
+        speech_gating: if True, detect speech and suppress articulatory saliency.
+        blink_gating: if True, detect blinks and suppress brow-AU saliency.
+
+    Returns:
+        FacialEventCatalog.
+    """
+    T = min(p1_raw.shape[0], p2_raw.shape[0])
+    duration = T / fs
+
+    # Speech detection (when enabled)
+    speech_p1 = speech_p2 = None
+    if speech_gating:
+        speech_p1 = _detect_speech_from_blendshapes(p1_raw[:T], fs)
+        speech_p2 = _detect_speech_from_blendshapes(p2_raw[:T], fs)
+
+    # Blink detection (when enabled)
+    blink_p1 = blink_p2 = None
+    if blink_gating:
+        blink_p1 = _detect_blinks(p1_raw[:T], fs)
+        blink_p2 = _detect_blinks(p2_raw[:T], fs)
+
+    events_p1 = _detect_facial_events(p1_raw[:T], fs, smooth_s, prominence,
+                                       min_iei_s, lsl_start,
+                                       speech_mask=speech_p1,
+                                       blink_mask=blink_p1)
+    events_p2 = _detect_facial_events(p2_raw[:T], fs, smooth_s, prominence,
+                                       min_iei_s, lsl_start,
+                                       speech_mask=speech_p2,
+                                       blink_mask=blink_p2)
+
+    shared = _find_shared_events(events_p1, events_p2, max_lag_s,
+                                  smile_threshold)
+    shared_smiles = [s for s in shared if s.is_shared_smile]
+
+    return FacialEventCatalog(
+        events_p1=events_p1,
+        events_p2=events_p2,
+        shared_events=shared,
+        shared_smiles=shared_smiles,
+        n_events_p1=len(events_p1),
+        n_events_p2=len(events_p2),
+        n_shared=len(shared),
+        n_shared_smiles=len(shared_smiles),
+        duration_s=duration,
+        segment_name=segment_name,
+        lsl_start=lsl_start,
+        speech_p1=speech_p1,
+        speech_p2=speech_p2,
+        blink_p1=blink_p1,
+        blink_p2=blink_p2,
     )

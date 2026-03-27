@@ -23,6 +23,7 @@ from scripts.run_session_v6 import (
 )
 from cadence.significance.bl_wavelet import (
     compute_au_cwt, detect_speech, wavelet_coherence, coherence_band_summary,
+    surrogate_coherence_z,
     AFFECT_AUS, SMILE_AUS, BAND_EXPRESSION, BAND_SPEECH, BAND_STATE,
 )
 from cadence.significance.fast_cycles import eeg_coupling_timecourse
@@ -83,7 +84,13 @@ for seg_name, t_start_lsl, t_end_lsl in segments:
         t0 = time.time()
         scal_p1 = compute_au_cwt(p1_bl)
         scal_p2 = compute_au_cwt(p2_bl)
-        coh = wavelet_coherence(scal_p1, scal_p2)
+
+        # Z-scored coherence against 200 circular-shift surrogates
+        z_result = surrogate_coherence_z(scal_p1, scal_p2, n_surrogates=1000,
+                                          aus=AFFECT_AUS, device='auto')
+
+        # Also raw coherence for summary stats
+        coh = wavelet_coherence(scal_p1, scal_p2, device='auto')
         summary = coherence_band_summary(coh, scal_p1.freqs)
         elapsed = time.time() - t0
 
@@ -98,15 +105,29 @@ for seg_name, t_start_lsl, t_end_lsl in segments:
         speech_p1 = scal_p1.speech_power[:T, 34] + scal_p1.speech_power[:T, 35]
         speech_p2 = scal_p2.speech_power[:T, 34] + scal_p2.speech_power[:T, 35]
 
+        # Band-averaged z timecourses
+        freqs = scal_p1.freqs
+        z_map = z_result['z'][:, :T]
+        band_z_tc = {}
+        for bname, (f_lo, f_hi) in [('state', (0, 0.5)), ('expression', (0.5, 2.0)),
+                                      ('speech', (2.0, 7.0))]:
+            mask = (freqs >= f_lo) & (freqs < f_hi)
+            if mask.sum() > 0:
+                band_z_tc[bname] = z_map[mask].mean(axis=0)
+
         bl_wavelet_data[seg_name] = {
-            't': t_arr, 'freqs': scal_p1.freqs,
+            't': t_arr, 'freqs': freqs,
             'expr_p1': expr_p1, 'expr_p2': expr_p2,
             'speech_p1': speech_p1, 'speech_p2': speech_p2,
-            'coh_affect': coh['affect']['coherence'][:, :T],
+            'z_map': z_map,
+            'band_z_tc': band_z_tc,
+            'band_z': z_result['band_z'],
             'summary': summary, 'elapsed': elapsed,
         }
         ec = summary['affect']['expression']['mean']
-        print(f"    BL wavelet: expr_coh={ec:.3f} ({elapsed:.1f}s)", flush=True)
+        ez = z_result['band_z']['expression']
+        print(f"    BL wavelet: expr_coh={ec:.3f}, expr_z={ez:+.2f} ({elapsed:.1f}s)",
+              flush=True)
 
     # EEG
     p1_eeg, p2_eeg, eeg_dur, fs_eeg = extract_eeg_segment(
@@ -208,7 +229,7 @@ ax_speech.set_ylabel(f'Speech\n{p1_role} (+) / {p2_role} (-)', fontsize=9)
 speech_max = max(abs(ax_speech.get_ylim()[0]), abs(ax_speech.get_ylim()[1]))
 ax_speech.set_ylim(-speech_max, speech_max)
 
-# ── Coherence spectrogram (affect AUs) ───────────────────────────────
+# ── Z-scored coherence spectrogram (affect AUs) ─────────────────────
 
 for seg_name, t0, t1 in segments:
     bw = bl_wavelet_data.get(seg_name)
@@ -216,19 +237,25 @@ for seg_name, t0, t1 in segments:
         continue
     t = bw['t']
     freqs = bw['freqs']
-    coh = bw['coh_affect']  # (n_freqs, T)
+    z_map = bw['z_map']  # (n_freqs, T)
 
-    ax_coh_spec.pcolormesh(t, freqs, coh, shading='auto',
-                           cmap='hot', vmin=0, vmax=0.8, zorder=2)
+    # Z-score spectrogram: gray background, significant regions colored
+    # Non-significant as muted gray
+    ax_coh_spec.pcolormesh(t, freqs, z_map, shading='auto',
+                           cmap='RdBu_r', vmin=-4, vmax=4, zorder=2, alpha=0.3)
+
+    # Overlay significant regions (z > 2) at full opacity
+    z_sig = np.where(z_map > 2.0, z_map, np.nan)
+    ax_coh_spec.pcolormesh(t, freqs, z_sig, shading='auto',
+                           cmap='hot', vmin=2, vmax=6, zorder=3)
 
 ax_coh_spec.set_yscale('log')
 ax_coh_spec.set_ylim(0.3, 8)
-ax_coh_spec.set_ylabel('Affect coherence\nFreq (Hz)', fontsize=9)
-# Band boundary lines
+ax_coh_spec.set_ylabel('Coherence z\nFreq (Hz)', fontsize=9)
 for f in [0.5, 2.0]:
-    ax_coh_spec.axhline(f, color='white', linewidth=0.5, linestyle='--', alpha=0.5)
+    ax_coh_spec.axhline(f, color='black', linewidth=0.5, linestyle='--', alpha=0.3)
 
-# ── Per-band coherence timecourses ───────────────────────────────────
+# ── Per-band z-score timecourses ─────────────────────────────────────
 
 band_colors_coh = {'state': '#9C27B0', 'expression': '#E91E63', 'speech': '#FF9800'}
 
@@ -237,14 +264,22 @@ for seg_name, t0, t1 in segments:
     if bw is None:
         continue
     t = bw['t']
-    s = bw['summary']
     for band_name, color in band_colors_coh.items():
-        tc = s['affect'].get(band_name, {}).get('timecourse')
+        tc = bw['band_z_tc'].get(band_name)
         if tc is not None and len(tc) == len(t):
             ax_coh_bands.plot(t, tc, color=color, linewidth=0.7, alpha=0.7)
 
-ax_coh_bands.set_ylabel('Band\ncoherence', fontsize=9)
-ax_coh_bands.set_ylim(0, 1)
+ax_coh_bands.axhline(0, color='black', linewidth=0.3, alpha=0.3)
+# Corrected threshold: z=2 pixel-level / sqrt(n_bins) for band-mean equivalence
+# Use first segment's freqs (all segments share the same freq axis)
+_sample_freqs = next(iter(bl_wavelet_data.values()))['freqs']
+n_expr_bins = ((_sample_freqs >= 0.5) & (_sample_freqs < 2.0)).sum()
+expr_thresh = 2.0 / np.sqrt(max(n_expr_bins, 1))
+ax_coh_bands.axhline(expr_thresh, color='gray', linewidth=0.5, linestyle='--', alpha=0.4)
+ax_coh_bands.text(session_end, expr_thresh, f' z={expr_thresh:.1f}', fontsize=7,
+                  va='bottom', color='gray')
+ax_coh_bands.set_ylabel('Band z', fontsize=9)
+ax_coh_bands.set_ylim(-3, 6)
 ax_coh_bands.set_xlabel('LSL time (s)')
 ax_coh_bands.set_xlim(session_start, session_end)
 
@@ -256,9 +291,9 @@ legend_elements = [
     Line2D([0], [0], color=BAND_COLORS['beta'], label='Beta (13-30 Hz)', linewidth=2),
     Patch(facecolor='#E91E63', alpha=0.6, label=f'{p1_role.capitalize()}'),
     Patch(facecolor='#2196F3', alpha=0.6, label=f'{p2_role.capitalize()}'),
-    Line2D([0], [0], color=band_colors_coh['state'], label='State coh (<0.5 Hz)', linewidth=2),
-    Line2D([0], [0], color=band_colors_coh['expression'], label='Expr coh (0.5-2 Hz)', linewidth=2),
-    Line2D([0], [0], color=band_colors_coh['speech'], label='Speech coh (2-7 Hz)', linewidth=2),
+    Line2D([0], [0], color=band_colors_coh['state'], label='State z (<0.5 Hz)', linewidth=2),
+    Line2D([0], [0], color=band_colors_coh['expression'], label='Expr z (0.5-2 Hz)', linewidth=2),
+    Line2D([0], [0], color=band_colors_coh['speech'], label='Speech z (2-7 Hz)', linewidth=2),
 ]
 for seg_name in ['conv_1', 'meditate_K', 'meditate_B', 'base_EO']:
     legend_elements.append(Patch(facecolor=CONDITION_COLORS.get(seg_name, 'white'),
@@ -278,14 +313,14 @@ plt.close(fig)
 print(f"\nSaved {out_path}")
 
 # Print summary
-print(f"\n{'seg':>12} | {'EEG_z':>8} {'EEG_cf':>8} | {'expr_coh':>8} {'speech_coh':>10} {'state_coh':>9}")
+print(f"\n{'seg':>12} | {'EEG_z':>8} {'EEG_cf':>8} | {'expr_z':>7} {'expr_coh':>8} {'state_z':>7}")
 print("-" * 65)
 for seg_name, t0, t1 in segments:
     tl = eeg_tl_data.get(seg_name)
     bw = bl_wavelet_data.get(seg_name)
     eeg_z = tl['combined']['mean_z'] if tl else 0
     eeg_cf = tl['combined']['coupling_fraction'] if tl else 0
+    ez = bw['band_z']['expression'] if bw else 0
     ec = bw['summary']['affect']['expression']['mean'] if bw else 0
-    sc = bw['summary']['affect']['speech']['mean'] if bw else 0
-    stc = bw['summary']['affect']['state']['mean'] if bw else 0
-    print(f"{seg_name:>12} | {eeg_z:+8.1f} {eeg_cf:7.0%} | {ec:8.3f} {sc:10.3f} {stc:9.3f}")
+    sz = bw['band_z']['state'] if bw else 0
+    print(f"{seg_name:>12} | {eeg_z:+8.1f} {eeg_cf:7.0%} | {ez:+7.2f} {ec:8.3f} {sz:+7.2f}")

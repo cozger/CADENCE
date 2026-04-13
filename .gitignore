@@ -10,6 +10,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Worktrees (per-feature isolated workspaces).
+.claude/worktrees/
+
 # Carve-outs: configuration that should stay tracked.
 !.claude/settings.json
 !.claude/settings.local.json

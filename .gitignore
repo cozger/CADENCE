@@ -1,0 +1,15 @@
+# Generated analysis outputs — too large / binary to track in git.
+# Regenerate via `python scripts/_run_*.py` etc.
+*.png
+*.json
+*.npz
+*.pdf
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Carve-outs: configuration that should stay tracked.
+!.claude/settings.json
+!.claude/settings.local.json

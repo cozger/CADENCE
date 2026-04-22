@@ -16,3 +16,4 @@ __pycache__/
 # Carve-outs: configuration that should stay tracked.
 !.claude/settings.json
 !.claude/settings.local.json
+diagnostics/outputs/

@@ -69,3 +69,24 @@ def test_is_slow_drift_ar1_rho097(rng):
 
 def test_is_slow_drift_white_noise(rng):
     assert is_slow_drift(rng.standard_normal(1200), fs=2.0) is False
+
+
+import os, pandas as pd
+from diagnostics.tier1_screening.module2_feature_diagnostics import run_feature_diagnostics
+from diagnostics.shared.data_loader import load_session
+
+
+def test_run_feature_diagnostics_creates_outputs(fake_session_dir, tmp_path):
+    results_dir, session_name = fake_session_dir
+    sessions = [load_session(session_name, results_dir=str(results_dir))]
+    out_dir = str(tmp_path / 'module2_out')
+    flags = run_feature_diagnostics(sessions, out_dir)
+    assert os.path.exists(os.path.join(out_dir, 'acf_all_channels.png'))
+    assert os.path.exists(os.path.join(out_dir, 'correlation_heatmap.png'))
+    assert os.path.exists(os.path.join(out_dir, 'vif_table.csv'))
+    assert os.path.exists(os.path.join(out_dir, 'n_eff_per_session.csv'))
+    assert os.path.exists(os.path.join(out_dir, 'module2_report.md'))
+    assert isinstance(flags, dict)
+    assert 'slow_drift' in flags
+    assert 'collinear_pairs' in flags
+    assert 'high_vif' in flags

@@ -53,3 +53,22 @@ def test_coincidence_event_locked_transitions_significant(rng):
     _, p = transition_event_ks_test(transition_times, event_times,
                                     session_length_s, n_boot=500, seed=42)
     assert p < 0.05
+
+
+import os
+from diagnostics.tier1_screening.module3_transition_analysis import run_transition_analysis
+from diagnostics.shared.data_loader import load_session
+
+
+def test_run_transition_analysis_creates_outputs(fake_session_dir, tmp_path):
+    results_dir, session_name = fake_session_dir
+    sessions = [load_session(session_name, results_dir=str(results_dir))]
+    out_dir = str(tmp_path / 'm3_out')
+    flags = run_transition_analysis(sessions, out_dir)
+    assert os.path.exists(os.path.join(out_dir, 'dwell_time_distributions.png'))
+    assert os.path.exists(os.path.join(out_dir, 'coincidence_test_results.csv'))
+    assert os.path.exists(os.path.join(out_dir, 'module3_report.md'))
+    assert any(f.endswith('_timeline.png') for f in os.listdir(out_dir))
+    assert isinstance(flags, dict)
+    assert 'dwell_ratio_low' in flags
+    assert 'transitions_event_locked' in flags

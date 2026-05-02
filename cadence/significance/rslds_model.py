@@ -1278,7 +1278,6 @@ def _emit_ll_vectorized(Y, x_sm, P_sm, C_emit, d_emit, F_emit, R_emit, obs_mask)
 
         # Constant or no mask
         if obs_mask is not None:
-            obs_const = _mask_is_constant(obs_mask)
             oi = np.where(obs_mask[0])[0]
             m_obs = len(oi)
             if m_obs < m:
@@ -1338,8 +1337,6 @@ def slds_e_step(Y, U, obs_mask, params, cfg, iohmm):
     # Precompute per-state noise covariances if factor-analyzed
     if use_factors:
         Sigma_noise = np.zeros((K, m, m))
-        Sigma_inv = np.zeros((K, m, m))
-        logdet_noise = np.zeros(K)
         for k in range(K):
             Sigma_noise[k] = (params.F_emit[k] @ params.F_emit[k].T
                               + np.diag(params.R_emit[k]))
@@ -1347,18 +1344,6 @@ def slds_e_step(Y, U, obs_mask, params, cfg, iohmm):
             eigv = np.linalg.eigvalsh(Sigma_noise[k])
             if eigv.min() < 1e-8:
                 Sigma_noise[k] += (1e-8 - eigv.min()) * np.eye(m)
-            Sigma_inv[k] = np.linalg.inv(Sigma_noise[k])
-            logdet_noise[k] = np.linalg.slogdet(Sigma_noise[k])[1]
-
-    # Check if observation mask is constant across time
-    mask_const = True
-    obs_idx_const = None
-    m_obs_const = m
-    if obs_mask is not None:
-        mask_const = np.all(obs_mask == obs_mask[0:1], axis=0).all()
-        if mask_const:
-            obs_idx_const = np.where(obs_mask[0])[0]
-            m_obs_const = len(obs_idx_const)
 
     for inner in range(cfg.n_inner_estep):
         # Step 1: q(z) — compute expected emission LL under q(x)

@@ -3,7 +3,6 @@
 Used as the Tier A+B decision gate. Reports:
   - Wall-time decomposition: Phase 1 init / Phase 4 EM
   - Per-call cumulative time on the sequential pooled M-step transitions
-  - Parallel efficiency estimate: serial_baseline / parallel_observed
 """
 import torch  # noqa: F401  (Windows torch+numpy DLL ordering)
 
@@ -55,8 +54,21 @@ def main():
         print('ERROR: need at least 2 sessions to profile hierarchical fit')
         sys.exit(1)
 
+    # Infer D_obs / D_input from actual scaffold data (avoids hardcode mismatch).
+    # Drop sessions whose D_obs or D_input differ from the first session — the
+    # hierarchical fit requires all sessions to share the same observation shape.
+    d_obs_actual = sess[0][0].shape[1]
+    d_input_actual = sess[0][1].shape[1]
+    sess = [(Y, U, mask) for Y, U, mask in sess
+            if Y.shape[1] == d_obs_actual and U.shape[1] == d_input_actual]
+    if len(sess) < 2:
+        print(f'ERROR: fewer than 2 sessions share D_obs={d_obs_actual}; '
+              'rebuild MVP scaffolds so all sessions match.')
+        sys.exit(1)
+    print(f'  Using {len(sess)} sessions with D_obs={d_obs_actual}, D_input={d_input_actual}')
+
     cfg = IOHMMConfig(
-        K=4, D_obs=len(MVP_OBS_CHANNELS), D_input=len(MVP_COV_CHANNELS),
+        K=4, D_obs=d_obs_actual, D_input=d_input_actual,
         D_latent=3, n_factors=2, recurrent=True, c_shrinkage=0.3,
         n_restarts=1, max_em_iter=10,  # short, representative per-iter
         sticky_strength=3.0, null_state=False, null_sigma2_cap=5.0,
@@ -92,8 +104,10 @@ def main():
         ps = pstats.Stats(profiler, stream=fh)
         # Filter to specific function names that are the load-bearing measurement
         ps.print_stats('_hierarchical_m_step')
-        fh.write('\n# ===== Per-session HMM-init M-step (Phase 1, parallel — for context) =====\n\n')
-        ps.print_stats('_m_step_transitions')
+        fh.write('\n# ===== Per-session HMM-init M-step (Phase 1, parallel — for context) =====\n')
+        fh.write('# Note: runs in Parallel(prefer="threads"); cProfile only captures main thread.\n')
+        fh.write('# Empty section is expected — not a filter miss.\n\n')
+        ps.print_stats('rslds_model.py:561')  # exact line filter — avoids _hierarchical_ collision
         fh.write('\n# ===== rSLDS recurrent M-step (called from Phase 1 _init_one) =====\n\n')
         ps.print_stats('slds_m_step_transitions_recurrent')
 

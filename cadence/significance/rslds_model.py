@@ -1106,6 +1106,213 @@ def _kalman_smoother_weighted(Y, obs_mask, A_t, b_t, Q_t, C_t, d_t, R_t,
     return x_smooth, P_smooth, Plag_smooth
 
 
+# ---------------------------------------------------------------------------
+# Emissions log-likelihood helpers (Task 1: vectorized K loop)
+# ---------------------------------------------------------------------------
+
+def _mask_is_constant(obs_mask):
+    """True iff every row of obs_mask is identical to the first row."""
+    return np.all(obs_mask == obs_mask[0:1], axis=0).all()
+
+
+def _emit_ll_per_k_loop_ref(Y, x_sm, P_sm, C_emit, d_emit, F_emit, R_emit, obs_mask):
+    """Reference implementation: per-K Python loop with three branches.
+
+    Extracted verbatim from the original slds_e_step inner loop so that the
+    validation script can import and diff against _emit_ll_vectorized.
+
+    Args:
+        Y        : (T, m) observations
+        x_sm     : (T, D) latent mean (smoothed)
+        P_sm     : (T, D, D) latent covariance (smoothed)
+        C_emit   : (K, m, D) emission loading matrices
+        d_emit   : (K, m) emission offsets
+        F_emit   : (K, m, n_factors) factor loadings, or None for diagonal
+        R_emit   : (K, m) diagonal residual variances
+        obs_mask : (T, m) bool mask or None
+
+    Returns:
+        log_emit : (T, K) float64 emission log-likelihoods
+    """
+    T, m = Y.shape
+    K = C_emit.shape[0]
+    use_factors = F_emit is not None
+
+    log_emit = np.zeros((T, K), dtype=np.float64)
+
+    # Precompute noise covariances for factor-analyzed case
+    if use_factors:
+        Sigma_noise = np.zeros((K, m, m))
+        Sigma_inv = np.zeros((K, m, m))
+        logdet_noise = np.zeros(K)
+        for k in range(K):
+            Sigma_noise[k] = F_emit[k] @ F_emit[k].T + np.diag(R_emit[k])
+            eigv = np.linalg.eigvalsh(Sigma_noise[k])
+            if eigv.min() < 1e-8:
+                Sigma_noise[k] += (1e-8 - eigv.min()) * np.eye(m)
+            Sigma_inv[k] = np.linalg.inv(Sigma_noise[k])
+            logdet_noise[k] = np.linalg.slogdet(Sigma_noise[k])[1]
+
+    # Determine mask structure once
+    mask_const = True
+    obs_idx_const = None
+    m_obs_const = m
+    if obs_mask is not None:
+        mask_const = _mask_is_constant(obs_mask)
+        if mask_const:
+            obs_idx_const = np.where(obs_mask[0])[0]
+            m_obs_const = len(obs_idx_const)
+
+    if use_factors:
+        for k in range(K):
+            C_k = C_emit[k]
+            d_k = d_emit[k]
+            pred_mean = x_sm @ C_k.T + d_k
+            resid = Y - pred_mean
+
+            if obs_mask is not None and mask_const and m_obs_const < m:
+                oi = obs_idx_const
+                Sig_o = Sigma_noise[k][np.ix_(oi, oi)]
+                Sig_inv_o = np.linalg.inv(Sig_o)
+                logdet_o = np.linalg.slogdet(Sig_o)[1]
+                C_o = C_k[oi]
+                resid_o = resid[:, oi]
+                CPC = np.einsum('di,tij,ej->tde', C_o, P_sm, C_o)
+                quad = np.einsum('ti,ij,tj->t', resid_o, Sig_inv_o, resid_o)
+                trace = np.einsum('ij,tij->t', Sig_inv_o, CPC)
+                log_emit[:, k] = -0.5 * (m_obs_const * np.log(2 * np.pi)
+                                          + logdet_o + quad + trace)
+            elif obs_mask is not None and not mask_const:
+                pair_mask = obs_mask[:, :, None] & obs_mask[:, None, :]
+                pair_mask_f = pair_mask.astype(np.float64)
+                Sigma_eff = Sigma_noise[k][None] * pair_mask_f
+                diag_idx = np.arange(m)
+                diag_add = (~obs_mask).astype(np.float64)
+                Sigma_eff[:, diag_idx, diag_idx] += diag_add
+                Sigma_inv_eff = np.linalg.inv(Sigma_eff)
+                logdet_eff = np.linalg.slogdet(Sigma_eff)[1]
+                n_obs_t = obs_mask.sum(axis=1).astype(np.float64)
+                resid_eff = resid * obs_mask
+                quad = np.einsum('ti,tij,tj->t', resid_eff, Sigma_inv_eff, resid_eff)
+                CPC = np.einsum('di,tij,ej->tde', C_k, P_sm, C_k)
+                CPC_eff = CPC * pair_mask_f
+                trace = np.einsum('tij,tji->t', Sigma_inv_eff, CPC_eff)
+                log_emit[:, k] = -0.5 * (n_obs_t * np.log(2 * np.pi)
+                                          + logdet_eff + quad + trace)
+            else:
+                CPC = np.einsum('di,tij,ej->tde', C_k, P_sm, C_k)
+                quad = np.einsum('ti,ij,tj->t', resid, Sigma_inv[k], resid)
+                trace = np.einsum('ij,tij->t', Sigma_inv[k], CPC)
+                log_emit[:, k] = -0.5 * (m * np.log(2 * np.pi)
+                                          + logdet_noise[k] + quad + trace)
+    else:
+        for k in range(K):
+            pred_mean = x_sm @ C_emit[k].T + d_emit[k]
+            resid = Y - pred_mean
+            var_x = np.einsum('di,tij,dj->td', C_emit[k], P_sm, C_emit[k])
+            R_k = R_emit[k]
+            ll = (-0.5 * np.log(2 * np.pi * R_k)
+                  - 0.5 * (resid ** 2 + var_x) / R_k)
+            if obs_mask is not None:
+                ll = ll * obs_mask
+            log_emit[:, k] = ll.sum(axis=1)
+
+    return log_emit
+
+
+def _emit_ll_vectorized(Y, x_sm, P_sm, C_emit, d_emit, F_emit, R_emit, obs_mask):
+    """Vectorized K-loop emission log-likelihood via batched einsums.
+
+    Numerically equivalent to _emit_ll_per_k_loop_ref (max|delta| < 1e-9).
+    Replaces the per-K Python loop in slds_e_step with a leading K axis,
+    saving ~K-1 einsum dispatch round-trips per inner SMF iteration.
+
+    Signature and return value identical to _emit_ll_per_k_loop_ref.
+    """
+    T, m = Y.shape
+    K = C_emit.shape[0]
+    use_factors = F_emit is not None
+
+    # pred_mean[k, t, :] = C_emit[k] @ x_sm[t] + d_emit[k]
+    # C_emit shape: (K, m, D); x_sm: (T, D) -> einsum gives (K, T, m)
+    pred_mean = np.einsum('kmd,td->ktm', C_emit, x_sm) + d_emit[:, np.newaxis, :]
+    resid = Y[np.newaxis, :, :] - pred_mean   # (K, T, m)
+
+    if use_factors:
+        # Build Sigma_noise[k] = F[k] F[k]' + diag(R[k])  for all k at once
+        # F_emit: (K, m, n_factors)
+        Sigma = np.einsum('kmi,kni->kmn', F_emit, F_emit)     # (K, m, m)
+        Sigma += np.eye(m) * R_emit[:, :, np.newaxis]          # broadcast diag
+
+        # Per-state eigenvalue regularization (preserves per-k logic)
+        eigv = np.linalg.eigvalsh(Sigma)          # (K, m)
+        eigv_min = eigv.min(axis=1)               # (K,)
+        adj = np.maximum(1e-8 - eigv_min, 0.0)   # (K,)
+        Sigma += adj[:, np.newaxis, np.newaxis] * np.eye(m)
+
+        Sigma_inv = np.linalg.inv(Sigma)                         # (K, m, m)
+        logdet = np.linalg.slogdet(Sigma)[1]                     # (K,)
+
+        # CPC[k, t, d, e] = sum_{ij} C[k,d,i] P[t,i,j] C[k,e,j]
+        CPC = np.einsum('kdi,tij,kej->ktde', C_emit, P_sm, C_emit)   # (K, T, m, m)
+
+        if obs_mask is not None and not _mask_is_constant(obs_mask):
+            # Variable mask: identity-replacement trick, batched over K
+            pair_mask = obs_mask[:, :, np.newaxis] & obs_mask[:, np.newaxis, :]  # (T, m, m)
+            pair_mask_f = pair_mask.astype(np.float64)
+            # Sigma_eff[k, t] = Sigma[k] * pair_mask[t] + I * (~obs_mask[t])
+            Sigma_eff = Sigma[:, np.newaxis, :, :] * pair_mask_f[np.newaxis, :, :, :]  # (K, T, m, m)
+            diag_idx = np.arange(m)
+            diag_add = (~obs_mask).astype(np.float64)   # (T, m)
+            Sigma_eff[:, :, diag_idx, diag_idx] += diag_add[np.newaxis, :, :]
+            Sigma_inv_eff = np.linalg.inv(Sigma_eff)    # (K, T, m, m)
+            logdet_eff = np.linalg.slogdet(Sigma_eff)[1]  # (K, T)
+            n_obs_t = obs_mask.sum(axis=1).astype(np.float64)  # (T,)
+            resid_eff = resid * obs_mask[np.newaxis, :, :]     # (K, T, m)
+            quad = np.einsum('kti,ktij,ktj->kt', resid_eff, Sigma_inv_eff, resid_eff)
+            CPC_eff = CPC * pair_mask_f[np.newaxis, :, :, :]   # (K, T, m, m)
+            trace = np.einsum('ktij,ktji->kt', Sigma_inv_eff, CPC_eff)
+            log_emit = -0.5 * (n_obs_t[np.newaxis, :] * np.log(2 * np.pi)
+                               + logdet_eff + quad + trace)
+            return log_emit.T   # (T, K)
+
+        # Constant or no mask
+        if obs_mask is not None:
+            obs_const = _mask_is_constant(obs_mask)
+            oi = np.where(obs_mask[0])[0]
+            m_obs = len(oi)
+            if m_obs < m:
+                # Subselect observed channels
+                Sigma_o = Sigma[:, oi[:, np.newaxis], oi[np.newaxis, :]]   # (K, m_obs, m_obs)
+                Sigma_inv_o = np.linalg.inv(Sigma_o)
+                logdet_o = np.linalg.slogdet(Sigma_o)[1]   # (K,)
+                C_o = C_emit[:, oi, :]                      # (K, m_obs, D)
+                resid_o = resid[:, :, oi]                   # (K, T, m_obs)
+                CPC_o = np.einsum('kdi,tij,kej->ktde', C_o, P_sm, C_o)   # (K, T, m_obs, m_obs)
+                quad = np.einsum('kti,kij,ktj->kt', resid_o, Sigma_inv_o, resid_o)
+                trace = np.einsum('kij,ktij->kt', Sigma_inv_o, CPC_o)
+                log_emit = -0.5 * (m_obs * np.log(2 * np.pi)
+                                   + logdet_o[:, np.newaxis] + quad + trace)
+                return log_emit.T   # (T, K)
+            # All channels observed (all-true constant mask) -> fall through to no-mask path
+
+        # No mask (or all-obs constant mask)
+        quad = np.einsum('kti,kij,ktj->kt', resid, Sigma_inv, resid)
+        trace = np.einsum('kij,ktij->kt', Sigma_inv, CPC)
+        log_emit = -0.5 * (m * np.log(2 * np.pi) + logdet[:, np.newaxis] + quad + trace)
+        return log_emit.T   # (T, K)
+
+    # Diagonal path (n_factors == 0)
+    # var_x[k, t, d] = sum_{ij} C[k,d,i] P[t,i,j] C[k,d,j]
+    var_x = np.einsum('kdi,tij,kdj->ktd', C_emit, P_sm, C_emit)   # (K, T, m)
+    R = R_emit[:, np.newaxis, :]   # (K, 1, m)
+    ll_per_dim = -0.5 * np.log(2 * np.pi * R) - 0.5 * (resid ** 2 + var_x) / R
+    if obs_mask is not None:
+        ll_per_dim = ll_per_dim * obs_mask[np.newaxis, :, :]
+    log_emit = ll_per_dim.sum(axis=2)   # (K, T)
+    return log_emit.T   # (T, K)
+
+
 def slds_e_step(Y, U, obs_mask, params, cfg, iohmm):
     """Structured Mean-Field E-step for SLDS.
 
@@ -1155,69 +1362,15 @@ def slds_e_step(Y, U, obs_mask, params, cfg, iohmm):
 
     for inner in range(cfg.n_inner_estep):
         # Step 1: q(z) — compute expected emission LL under q(x)
-        log_emit = np.zeros((T, K), dtype=np.float64)
-
-        if use_factors:
-            # Factor-analyzed emission LL: E_q(x)[log N(y; Cx+d, Sigma_k)]
-            for k in range(K):
-                C_k = params.C_emit[k]
-                d_k = params.d_emit[k]
-                pred_mean = x_sm @ C_k.T + d_k
-                resid = Y - pred_mean
-
-                if obs_mask is not None and mask_const and m_obs_const < m:
-                    oi = obs_idx_const
-                    Sig_o = Sigma_noise[k][np.ix_(oi, oi)]
-                    Sig_inv_o = np.linalg.inv(Sig_o)
-                    logdet_o = np.linalg.slogdet(Sig_o)[1]
-                    C_o = C_k[oi]
-                    resid_o = resid[:, oi]
-                    CPC = np.einsum('di,tij,ej->tde', C_o, P_sm, C_o)
-                    quad = np.einsum('ti,ij,tj->t', resid_o, Sig_inv_o, resid_o)
-                    trace = np.einsum('ij,tij->t', Sig_inv_o, CPC)
-                    log_emit[:, k] = -0.5 * (m_obs_const * np.log(2 * np.pi)
-                                              + logdet_o + quad + trace)
-                elif obs_mask is not None and not mask_const:
-                    # Vectorized soft-mask path (Phase 0.2d). Identity-
-                    # replace masked rows/cols of Sigma_noise[k] per
-                    # timestep, then batched np.linalg.inv eliminates the
-                    # per-T Python loop. See full notes in docs/dynamax_migration_plan.md §0.
-                    pair_mask = obs_mask[:, :, None] & obs_mask[:, None, :]
-                    pair_mask_f = pair_mask.astype(np.float64)
-                    Sigma_eff = Sigma_noise[k][None] * pair_mask_f
-                    diag_idx = np.arange(m)
-                    diag_add = (~obs_mask).astype(np.float64)
-                    Sigma_eff[:, diag_idx, diag_idx] += diag_add
-                    Sigma_inv_eff = np.linalg.inv(Sigma_eff)
-                    logdet_eff = np.linalg.slogdet(Sigma_eff)[1]
-                    n_obs_t = obs_mask.sum(axis=1).astype(np.float64)
-                    resid_eff = resid * obs_mask
-                    quad = np.einsum('ti,tij,tj->t', resid_eff,
-                                     Sigma_inv_eff, resid_eff)
-                    CPC = np.einsum('di,tij,ej->tde', C_k, P_sm, C_k)
-                    CPC_eff = CPC * pair_mask_f
-                    trace = np.einsum('tij,tji->t', Sigma_inv_eff, CPC_eff)
-                    log_emit[:, k] = -0.5 * (n_obs_t * np.log(2 * np.pi)
-                                              + logdet_eff + quad + trace)
-                else:
-                    CPC = np.einsum('di,tij,ej->tde', C_k, P_sm, C_k)
-                    quad = np.einsum('ti,ij,tj->t', resid, Sigma_inv[k], resid)
-                    trace = np.einsum('ij,tij->t', Sigma_inv[k], CPC)
-                    log_emit[:, k] = -0.5 * (m * np.log(2 * np.pi)
-                                              + logdet_noise[k] + quad + trace)
-        else:
-            # Diagonal emission LL (original path)
-            for k in range(K):
-                pred_mean = x_sm @ params.C_emit[k].T + params.d_emit[k]
-                resid = Y - pred_mean
-                var_x = np.einsum('di,tij,dj->td', params.C_emit[k], P_sm,
-                                  params.C_emit[k])
-                R_k = params.R_emit[k]
-                ll = (-0.5 * np.log(2 * np.pi * R_k)
-                      - 0.5 * (resid ** 2 + var_x) / R_k)
-                if obs_mask is not None:
-                    ll = ll * obs_mask
-                log_emit[:, k] = ll.sum(axis=1)
+        # Vectorized over K states (replaces per-K Python loop; see
+        # _emit_ll_vectorized for branch logic and _emit_ll_per_k_loop_ref
+        # for the numerically equivalent reference implementation).
+        F_emit = params.F_emit if use_factors else None
+        log_emit = _emit_ll_vectorized(
+            Y, x_sm, P_sm,
+            params.C_emit, params.d_emit, F_emit, params.R_emit,
+            obs_mask,
+        )
 
         # Transitions (with optional recurrence from x_{t-1})
         if use_recurrent:

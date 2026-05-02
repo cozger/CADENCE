@@ -2041,7 +2041,19 @@ class CouplingEstimator:
             # race when multiple threads JIT-compile the same kernel.
             _run_pathway(*valid_pathways[0])
 
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            # VRAM-aware cap: each pathway carries CUDA streams + EWLS
+            # workspace; ~2 GB/pathway is the conservative estimate. Falls
+            # back to user-configured n_workers if budget allows.
+            from cadence.io.resources import gpu_chunk_size
+            remaining = max(0, len(valid_pathways) - 1)
+            if remaining > 0:
+                vram_cap = gpu_chunk_size(per_unit_vram_gb=2.0,
+                                            n_units=remaining)
+                effective_workers = max(1, min(n_workers, vram_cap))
+            else:
+                effective_workers = max(1, n_workers)
+
+            with ThreadPoolExecutor(max_workers=effective_workers) as executor:
                 futures = [
                     executor.submit(_run_pathway, sm, tm)
                     for sm, tm in valid_pathways[1:]
@@ -3910,8 +3922,22 @@ class CouplingEstimator:
                         except Exception:
                             pass  # stream may be corrupt; don't cascade
 
-                # VRAM safety: reduce concurrency if GPU memory is tight
-                # Need headroom for concurrent EWLS solves (each ~1-3 GB)
+                # VRAM safety: reduce concurrency if GPU memory is tight.
+                # Each Stage 2 pathway carries EWLS solves ~1-3 GB peak.
+                # Use the resource module's gpu_chunk_size as the primary cap;
+                # fall back to mem_get_info heuristic if the helper sees zero.
+                try:
+                    from cadence.io.resources import gpu_chunk_size
+                    remaining = max(0, len(pathways_to_run) - 1)
+                    if remaining > 0:
+                        cap = gpu_chunk_size(per_unit_vram_gb=3.0,
+                                              n_units=remaining)
+                        if cap < n_stage2_workers:
+                            _log(f"  Stage 2: gpu_chunk_size cap "
+                                 f"{n_stage2_workers} -> {cap} workers")
+                            n_stage2_workers = max(1, cap)
+                except Exception:
+                    pass
                 try:
                     free_vram_now = torch.cuda.mem_get_info(self.device)[0]
                     vram_per_worker_mb = 3000  # conservative: ~3 GB per pathway

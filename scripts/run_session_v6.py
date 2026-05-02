@@ -19,15 +19,17 @@ import time
 os.environ['PYTHONUNBUFFERED'] = '1'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# torch must import before numpy on Windows (torch 2.10 + numpy 2.4 DLL-load order bug: shm.dll)
+import torch  # noqa: F401
 import numpy as np
 import pyxdf
 
 from cadence.significance.fast_cycles import analyze_interbrain_cycles_multiband, eeg_coupling_timecourse
 from cadence.significance.bl_coupling import facial_event_catalog
 from cadence.significance.distributional_stats import distributional_stats
-from cadence.data.xdf_loader import _detect_roles
+from cadence.ingest.roles import resolve_roles as _resolve_roles_streams
 from cadence.config import load_config
-from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
+from cadence.data import discover_cached_sessions, load_session_from_cache
 
 FS_BL = 30.0
 FS_EEG = 256.0
@@ -41,9 +43,9 @@ def load_xdf_session(xdf_path):
     """Load XDF and extract landmarks, EEG, markers, and roles."""
     data, _ = pyxdf.load_xdf(xdf_path, dejitter_timestamps=True)
 
-    roles = _detect_roles(data)
-    p1_role = roles.get('p1_role', 'unknown')
-    p2_role = roles.get('p2_role', 'unknown')
+    role_assignment = _resolve_roles_streams(data)
+    p1_role = role_assignment.p1_role
+    p2_role = role_assignment.p2_role
 
     markers = {}
     for stream in data:

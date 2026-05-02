@@ -28,9 +28,11 @@ class SessionData:
     W_trans: Optional[np.ndarray] = None
     S_trans: Optional[np.ndarray] = None
     state_labels: Optional[List[str]] = None
+    x_smooth: Optional[np.ndarray] = None  # (T, D_latent) latent trajectory
 
 
-def load_session(session_name: str, results_dir: str = 'results/v11') -> SessionData:
+def load_session(session_name: str, results_dir: str = 'results/v11',
+                 rslds_suffix: str = '') -> SessionData:
     sess_dir = os.path.join(results_dir, session_name)
     scaffold_npz = os.path.join(sess_dir, 'scaffold_v11_ztimecourses.npz')
     scaffold_json = os.path.join(sess_dir, 'scaffold_v11_results.json')
@@ -50,8 +52,8 @@ def load_session(session_name: str, results_dir: str = 'results/v11') -> Session
     t_common = npz['t_common']
     segments = [(s[0], float(s[1]), float(s[2])) for s in meta.get('segments', [])]
 
-    rslds_path = os.path.join(sess_dir, 'v11_rslds_results.npz')
-    gamma = path_con = path_uncon = d_emit = C_emit = R_emit = W_trans = S_trans = state_labels = None
+    rslds_path = os.path.join(sess_dir, f'v11_rslds_results{rslds_suffix}.npz')
+    gamma = path_con = path_uncon = d_emit = C_emit = R_emit = W_trans = S_trans = state_labels = x_smooth = None
 
     if os.path.exists(rslds_path):
         r = np.load(rslds_path, allow_pickle=True)
@@ -63,6 +65,7 @@ def load_session(session_name: str, results_dir: str = 'results/v11') -> Session
         R_emit = r['R_emit'] if 'R_emit' in r else None
         W_trans = r['W_trans'] if 'W_trans' in r else None
         S_trans = r['S_trans'] if 'S_trans' in r else None
+        x_smooth = r['x_smooth'] if 'x_smooth' in r else None
         sl = r['state_labels'] if 'state_labels' in r else None
         state_labels = list(sl) if sl is not None else None
 
@@ -74,6 +77,7 @@ def load_session(session_name: str, results_dir: str = 'results/v11') -> Session
         gamma=gamma, path_constrained=path_con, path_unconstrained=path_uncon,
         d_emit=d_emit, C_emit=C_emit, R_emit=R_emit,
         W_trans=W_trans, S_trans=S_trans, state_labels=state_labels,
+        x_smooth=x_smooth,
     )
 
 
@@ -87,5 +91,6 @@ def discover_session_names(results_dir: str = 'results/v11') -> List[str]:
     return names
 
 
-def load_all_sessions(results_dir: str = 'results/v11') -> List[SessionData]:
-    return [load_session(n, results_dir) for n in discover_session_names(results_dir)]
+def load_all_sessions(results_dir: str = 'results/v11',
+                      rslds_suffix: str = '') -> List[SessionData]:
+    return [load_session(n, results_dir, rslds_suffix) for n in discover_session_names(results_dir)]

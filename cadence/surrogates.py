@@ -232,8 +232,17 @@ def iaaft_surrogate_batched(data, n_surrogates, seed=None, max_iter=50):
 
     try:
         from joblib import Parallel, delayed
-        results = Parallel(n_jobs=-1)(
-            delayed(iaaft_surrogate)(data, seed=seed + k if seed else k,
+        from cadence.io.resources import pick_n_jobs, limit_blas_threads
+
+        def _bounded_iaaft(*args, **kwargs):
+            with limit_blas_threads(1):
+                return iaaft_surrogate(*args, **kwargs)
+
+        # IAAFT holds (N, C) data + FFT workspace per worker; ~50 MB realistic.
+        n_jobs = pick_n_jobs(per_worker_ram_gb=0.05, requested=-1,
+                              max_jobs_hard_cap=n_surrogates)
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(_bounded_iaaft)(data, seed=seed + k if seed else k,
                                      max_iter=max_iter)
             for k in range(n_surrogates))
         for k, s in enumerate(results):

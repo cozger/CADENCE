@@ -22,6 +22,8 @@ while amplifying correlated coupling signal.
 import numpy as np
 from joblib import Parallel, delayed
 
+from cadence.io.resources import pick_n_jobs, limit_blas_threads
+
 
 def _estimate_ar(y, ar_order, valid=None):
     """Estimate AR coefficients for one channel via OLS."""
@@ -398,14 +400,21 @@ def kim_filter_batched(y_mc, x_basis_mc, ar_order=3,
     else:
         # Independent per-channel (legacy)
         C, T = y_mc.shape
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(_kim_filter_single_channel)(
-                y_mc[c], x_basis_mc[c], ar_order=ar_order,
-                p_stay_coupled=p_stay_coupled,
-                p_stay_uncoupled=p_stay_uncoupled,
-                Q_coeff=Q_coeff, em_iterations=em_iterations,
-                valid=valid, complexity_penalty=complexity_penalty)
-            for c in range(C))
+
+        def _bounded_kim(c_idx):
+            with limit_blas_threads(1):
+                return _kim_filter_single_channel(
+                    y_mc[c_idx], x_basis_mc[c_idx], ar_order=ar_order,
+                    p_stay_coupled=p_stay_coupled,
+                    p_stay_uncoupled=p_stay_uncoupled,
+                    Q_coeff=Q_coeff, em_iterations=em_iterations,
+                    valid=valid, complexity_penalty=complexity_penalty)
+
+        # Per-channel Kim filter holds AR coeffs + basis matrices; ~0.2 GB peak.
+        n_jobs_eff = pick_n_jobs(per_worker_ram_gb=0.2, requested=n_jobs,
+                                  max_jobs_hard_cap=C)
+        results = Parallel(n_jobs=n_jobs_eff, prefer='threads')(
+            delayed(_bounded_kim)(c) for c in range(C))
         posterior_mc = np.array([r[0] for r in results])
         params_list = [r[1] for r in results]
         params = {

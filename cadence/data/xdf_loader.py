@@ -34,14 +34,20 @@ def load_session(xdf_path, p1_eeg_index=0, p2_eeg_index=1):
         stype = s['info']['type'][0]
         timestamps = np.array(s['time_stamps'], dtype=np.float64)
 
-        # Marker streams contain strings, not numeric data
+        # Marker streams contain strings, not numeric data.
+        # Accumulate ALL Markers streams (newer sessions split protocol markers
+        # into YouQuantiPy_EventMarkers and gesture events into
+        # YouQuantiPy_BehavioralMarkers — we merge both so neither is lost).
         if stype == MARKER_TYPE:
             marker_data = s['time_series']
             if len(timestamps) > 0:
-                session['markers'] = list(zip(
+                new_markers = list(zip(
                     timestamps.tolist(),
                     [row[0] if isinstance(row, list) else str(row) for row in marker_data]
                 ))
+                existing = session.get('markers', [])
+                merged = sorted(existing + new_markers, key=lambda x: x[0])
+                session['markers'] = merged
             continue
 
         try:

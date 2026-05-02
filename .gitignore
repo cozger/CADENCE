@@ -4,16 +4,41 @@
 *.json
 *.npz
 *.pdf
+*.mat
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.txt.gz
+*.csv.gz
+
+# Large output directories (regeneratable from raw + scripts).
+data/
+analysis/
+results/
+
+# Raw recordings (each XDF is GB-scale; provenance lives outside git).
+raw sessions/
+*.xdf
+*.xdf.gz
 
 # Python bytecode
 __pycache__/
 *.pyc
 *.pyo
 
+# Backup/scratch files.
+*.patched_backup
+*.bak
+*~
+.claire/
+
 # Worktrees (per-feature isolated workspaces).
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # Carve-outs: configuration that should stay tracked.
 !.claude/settings.json
 !.claude/settings.local.json
+!configs/session_quality.yaml
 diagnostics/outputs/

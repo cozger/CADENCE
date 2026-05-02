@@ -414,7 +414,7 @@ def build_synthetic_session_permod(duration, kappa_dict, seed=42,
         Session dict with all modality data, timestamps, validity, and
         coupling_gates for ground truth.
     """
-    from cadence.data.preprocessors import compute_activity_channel
+    from cadence.preprocess.common import compute_activity_channel
 
     session = {'duration': float(duration)}
     session['p1_role'] = 'therapist'
@@ -618,7 +618,7 @@ def build_synthetic_interbrain_session(duration, coupling_freq=10.0,
         session dict with raw EEG and synthetic face/pose data.
     """
     from cadence.constants import EEG_ROIS, SYNTH_MODALITY_CONFIG_V2, COUPLING_PROFILES_V2
-    from cadence.data.preprocessors import compute_activity_channel
+    from cadence.preprocess.common import compute_activity_channel
 
     rng = np.random.default_rng(seed)
     srate = 256
@@ -767,7 +767,7 @@ def build_synthetic_session_v2(duration, kappa_dict, seed=42,
         Session dict with V2 modality data, timestamps, validity, and
         coupling_gates for ground truth.
     """
-    from cadence.data.preprocessors import compute_activity_channel
+    from cadence.preprocess.common import compute_activity_channel
 
     session = {'duration': float(duration)}
     session['p1_role'] = 'therapist'
@@ -787,7 +787,7 @@ def build_synthetic_session_v2(duration, kappa_dict, seed=42,
         # catastrophically violating group lasso's assumption of approximately
         # full-rank features. Use realistic sinusoidal EEG → wavelet CWT instead.
         if mod == 'eeg_wavelet' and kappa > 0:
-            from cadence.data.wavelet_features import extract_wavelet_features
+            from cadence.preprocess.eeg.wavelet import extract_wavelet_features
 
             wav_session = build_synthetic_wavelet_session(
                 duration, coupling_freq=6.5, coupling_roi='frontal',
@@ -893,7 +893,7 @@ def build_synthetic_session_v2(duration, kappa_dict, seed=42,
         # Without this, derivative channels are pure noise, diluting the
         # source-side group lasso gradient for behavioral modalities.
         if kappa > 0 and cfg.get('has_derivatives'):
-            from cadence.data.preprocessors import _compute_temporal_derivatives
+            from cadence.preprocess.common import compute_temporal_derivatives as _compute_temporal_derivatives
             n_pca = cfg.get('n_pca', 15)
             for feat_arr in [feat_p1, feat_p2]:
                 if feat_arr.shape[1] >= 2 * n_pca:
@@ -1243,7 +1243,7 @@ def build_semisynthetic_base(session_a, session_b, t_start, t_end):
             eeg_valid_p2 = eeg_valid_p2[p2_mask]
 
         try:
-            from cadence.data.interbrain_features import (
+            from cadence.coupling.interbrain import (
                 extract_interbrain_features,
             )
             ib_feats, ib_valid, ib_ts = extract_interbrain_features(
@@ -1312,7 +1312,7 @@ def _recompute_bl_derivatives(feat_p2, hz):
     This ensures derivative channels carry the coupling signal too,
     matching the pre-grouping structure that pairs PCA_i with PCA_i_dt.
     """
-    from cadence.data.preprocessors import _compute_temporal_derivatives
+    from cadence.preprocess.common import compute_temporal_derivatives as _compute_temporal_derivatives
     n_pca = 15
     pca_part = feat_p2[:, :n_pca]
     deriv = _compute_temporal_derivatives(pca_part, hz, sigma_s=0.5)

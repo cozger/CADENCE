@@ -8,6 +8,10 @@ Usage:
 import argparse, os, sys, json, re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
+# torch must import before numpy on Windows (torch 2.10 + numpy 2.4 DLL-load order bug: shm.dll)
+import torch  # noqa: F401
+
+from joblib import parallel_backend
 from diagnostics.shared.data_loader import load_session, load_all_sessions
 from diagnostics.shared.report_utils import make_output_dir
 from diagnostics.tier2_deepdive.module1_obs_space import run_obs_space_analysis
@@ -44,36 +48,47 @@ def main():
                         help='Module numbers to skip (e.g. --skip-modules 4)')
     parser.add_argument('--n-neighbors', type=int, default=30)
     parser.add_argument('--min-dist', type=float, default=0.1)
+    parser.add_argument('--rslds-suffix', default='',
+                        help='Suffix on per-session rslds npz (e.g. "_k4_nonull" for refit variants)')
+    parser.add_argument('--tag', default='',
+                        help='Tag appended to Tier 2 output directory name')
     args = parser.parse_args()
 
     if args.session:
-        sessions = [load_session(args.session, results_dir=args.results_dir)]
+        sessions = [load_session(args.session, results_dir=args.results_dir,
+                                 rslds_suffix=args.rslds_suffix)]
     else:
-        sessions = load_all_sessions(results_dir=args.results_dir)
+        sessions = load_all_sessions(results_dir=args.results_dir,
+                                     rslds_suffix=args.rslds_suffix)
     print(f'Loaded {len(sessions)} session(s)')
 
     flags = _read_flags_from_screening_report(args.screening_report)
     if args.screening_report is None:
         print('Warning: no --screening-report provided. Module 5 will not exclude flagged channels.')
 
-    out_root = make_output_dir(args.outputs_dir, 'tier2_deepdive')
+    tier_tag = 'tier2_deepdive' + (f'_{args.tag}' if args.tag else '')
+    out_root = make_output_dir(args.outputs_dir, tier_tag)
 
-    if 1 not in args.skip_modules:
-        print('Running Module 1 (observation space)...')
-        run_obs_space_analysis(sessions, os.path.join(out_root, 'module1'),
-                               n_neighbors=args.n_neighbors, min_dist=args.min_dist)
+    # Force threading backend for any joblib.Parallel calls inside the modules —
+    # loky worker spawn triggers torch/numpy DLL-load bug on Windows (see
+    # scripts/_run_v11_hierarchical.py for details).
+    with parallel_backend('threading'):
+        if 1 not in args.skip_modules:
+            print('Running Module 1 (observation space)...')
+            run_obs_space_analysis(sessions, os.path.join(out_root, 'module1'),
+                                   n_neighbors=args.n_neighbors, min_dist=args.min_dist)
 
-    if 4 not in args.skip_modules:
-        print('Running Module 4 (model comparison — may take 20-40 min)...')
-        run_model_comparison(sessions, os.path.join(out_root, 'module4'))
+        if 4 not in args.skip_modules:
+            print('Running Module 4 (model comparison — may take 20-40 min)...')
+            run_model_comparison(sessions, os.path.join(out_root, 'module4'))
 
-    if 5 not in args.skip_modules:
-        print('Running Module 5 (block PCA)...')
-        run_block_pca(sessions, flags, os.path.join(out_root, 'module5'))
+        if 5 not in args.skip_modules:
+            print('Running Module 5 (block PCA)...')
+            run_block_pca(sessions, flags, os.path.join(out_root, 'module5'))
 
-    if 6 not in args.skip_modules:
-        print('Running Module 6 (null-state ablation)...')
-        run_null_ablation(sessions, os.path.join(out_root, 'module6'))
+        if 6 not in args.skip_modules:
+            print('Running Module 6 (null-state ablation)...')
+            run_null_ablation(sessions, os.path.join(out_root, 'module6'))
 
     print(f'Tier 2 complete. Outputs: {out_root}')
 

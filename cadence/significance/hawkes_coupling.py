@@ -293,6 +293,224 @@ def fit_hawkes_pathway(source_times, target_times, T,
     return mu, alpha, beta, log_lik, log_lik_null, llr, p_value
 
 
+# ── 2a. Sliding-window Hawkes for time-varying coupling ──────────────
+#
+# A single (μ, α, β) per session yields only a deterministic convolution
+# of source events with a fixed kernel — λ(t) varies through events but
+# the *coupling strength* α is constant. To get a genuinely time-varying
+# coupling timecourse for an rSLDS observation channel, fit α(t) per
+# sliding window with β fixed globally (β is hard to fit on small N).
+
+def _fit_alpha_mu_given_beta(target_times, source_times, T, beta):
+    """Fit (μ, α) with β fixed. Used inside sliding-window fits."""
+    if len(target_times) < 3:
+        return float(len(target_times) / max(T, 1e-6)), 0.0, _poisson_log_likelihood(target_times, T)
+    mu_init = max(len(target_times) / max(T, 1e-6), 1e-3)
+
+    def neg_ll(params):
+        mu, alpha = params
+        if mu <= 0 or alpha < 0:
+            return 1e15
+        R = _hawkes_R_vectorized(target_times, source_times, beta)
+        intensities = np.maximum(mu + alpha * R, 1e-15)
+        ll_events = np.sum(np.log(intensities))
+        integral = mu * T
+        if len(source_times) > 0:
+            integral += (alpha / beta) * np.sum(1.0 - np.exp(-beta * (T - source_times)))
+        return -(ll_events - integral)
+
+    res = minimize(
+        neg_ll, x0=[mu_init, 0.1],
+        bounds=[(1e-4, 5.0), (0.0, 5.0)],
+        method='L-BFGS-B',
+    )
+    mu, alpha = res.x
+    return float(mu), float(alpha), float(-res.fun)
+
+
+def fit_hawkes_sliding(
+    source_times, target_times, T_total,
+    win_s=60.0, hop_s=15.0, beta_global=None,
+    min_events_per_window=3,
+):
+    """Sliding-window time-varying Hawkes coupling α(t).
+
+    β is fit globally first (or supplied), then fixed per window.
+
+    Args:
+        source_times, target_times: (Ns,), (Nt,) event times in seconds.
+        T_total: full session duration in seconds.
+        win_s: window length.
+        hop_s: window hop.
+        beta_global: if None, fit β on full session via fit_hawkes_pathway.
+        min_events_per_window: NaN α(t) if fewer target events in window.
+
+    Returns:
+        dict:
+            t_centers: (N_win,) window center times.
+            mu_t: (N_win,) baseline rate per window.
+            alpha_t: (N_win,) coupling strength per window (NaN if too few events).
+            beta: scalar global decay.
+            n_events_per_window: (N_win,) number of target events in window.
+    """
+    source_times = np.asarray(source_times, dtype=np.float64)
+    target_times = np.asarray(target_times, dtype=np.float64)
+
+    if beta_global is None:
+        if len(target_times) >= 3 and len(source_times) >= 1:
+            _, _, beta_global, _, _, _, _ = fit_hawkes_pathway(
+                source_times, target_times, T_total)
+        else:
+            beta_global = 0.4
+    beta_global = float(beta_global)
+
+    centers = np.arange(win_s / 2.0, T_total - win_s / 2.0 + 1e-6, hop_s)
+    if len(centers) == 0:
+        centers = np.array([T_total / 2.0])
+
+    mu_t = np.full(len(centers), np.nan, dtype=np.float64)
+    alpha_t = np.full(len(centers), np.nan, dtype=np.float64)
+    n_events = np.zeros(len(centers), dtype=np.int64)
+
+    for i, c in enumerate(centers):
+        t0 = max(0.0, c - win_s / 2.0)
+        t1 = min(T_total, c + win_s / 2.0)
+        # Source events: include those within the window AND short prefix
+        # so the kernel from earlier events isn't truncated. ~3/β prefix.
+        prefix = 3.0 / max(beta_global, 1e-3)
+        s_in = source_times[(source_times >= t0 - prefix) & (source_times <= t1)]
+        # Target events: within window
+        tgt_in = target_times[(target_times >= t0) & (target_times <= t1)]
+        n_events[i] = len(tgt_in)
+        if len(tgt_in) < min_events_per_window:
+            continue
+
+        # Shift to window-local coords for stable optimization
+        T_win = t1 - t0 + prefix
+        mu, alpha, _ = _fit_alpha_mu_given_beta(
+            tgt_in - (t0 - prefix), s_in - (t0 - prefix),
+            T_win, beta_global,
+        )
+        mu_t[i] = mu
+        alpha_t[i] = alpha
+
+    return dict(
+        t_centers=centers, mu_t=mu_t, alpha_t=alpha_t,
+        beta=beta_global, n_events_per_window=n_events,
+    )
+
+
+def hawkes_intensity_timecourse(
+    source_times, t_grid, mu_t=None, alpha_t=None, beta=0.4,
+    t_centers=None, mu_const=None, alpha_const=None,
+):
+    """Continuous intensity λ(t) = μ(t) + α(t) Σ_{s_k < t} exp(-β(t - s_k)).
+
+    Either supply per-window (mu_t, alpha_t, t_centers) which are linearly
+    interpolated to t_grid, or supply scalar (mu_const, alpha_const).
+
+    Args:
+        source_times: (Ns,) event times in seconds.
+        t_grid: (T,) time points to evaluate at.
+        mu_t, alpha_t, t_centers: per-window fits from fit_hawkes_sliding.
+        beta: decay rate (scalar).
+        mu_const, alpha_const: scalar baseline / coupling for stationary mode.
+
+    Returns:
+        lam: (T,) continuous intensity.
+    """
+    source_times = np.asarray(source_times, dtype=np.float64)
+    t_grid = np.asarray(t_grid, dtype=np.float64)
+
+    if mu_t is not None and alpha_t is not None and t_centers is not None:
+        mu_t = np.asarray(mu_t)
+        alpha_t = np.asarray(alpha_t)
+        t_centers = np.asarray(t_centers)
+        # Interpolate, treating NaNs as linear extension from valid neighbors
+        valid = np.isfinite(mu_t) & np.isfinite(alpha_t)
+        if valid.sum() == 0:
+            mu_grid = np.zeros_like(t_grid)
+            alpha_grid = np.zeros_like(t_grid)
+        else:
+            mu_grid = np.interp(t_grid, t_centers[valid], mu_t[valid])
+            alpha_grid = np.interp(t_grid, t_centers[valid], alpha_t[valid])
+    elif mu_const is not None and alpha_const is not None:
+        mu_grid = np.full_like(t_grid, mu_const, dtype=np.float64)
+        alpha_grid = np.full_like(t_grid, alpha_const, dtype=np.float64)
+    else:
+        raise ValueError("Supply either (mu_t, alpha_t, t_centers) or (mu_const, alpha_const)")
+
+    # R(t) = Σ exp(-β(t - s_k)) for s_k < t — vectorize via outer
+    if len(source_times) == 0:
+        return mu_grid
+
+    # (T, Ns) lag matrix; mask future events. Clip dt before exp to avoid
+    # overflow for large negative dt (would not contribute anyway after mask).
+    dt = t_grid[:, None] - source_times[None, :]
+    valid_kernel = dt > 0
+    dt_clipped = np.where(valid_kernel, dt, 0.0)
+    R = np.where(valid_kernel, np.exp(-beta * dt_clipped), 0.0).sum(axis=1)
+    return mu_grid + alpha_grid * R
+
+
+def hawkes_sliding_surrogate_z(
+    source_times, target_times, T_total,
+    real_alpha_t, t_centers, beta_global,
+    n_surrogates=200, win_s=60.0, hop_s=15.0,
+    min_events_per_window=3, seed=42,
+):
+    """Surrogate z-score for α(t) via circular shifts of source events.
+
+    Welford accumulator over n_surrogates refits.
+
+    Returns:
+        z_t: (N_win,) per-window z-score (NaN where real α is NaN).
+    """
+    source_times = np.asarray(source_times, dtype=np.float64)
+    target_times = np.asarray(target_times, dtype=np.float64)
+    real_alpha = np.asarray(real_alpha_t, dtype=np.float64)
+    n_win = len(t_centers)
+
+    if T_total <= 0 or n_win == 0:
+        return np.full(n_win, np.nan)
+
+    rng = np.random.default_rng(seed)
+    min_shift = max(5.0, T_total * 0.05)
+    max_shift = T_total - min_shift
+    if max_shift <= min_shift:
+        max_shift = min_shift + 1.0
+
+    mean = np.zeros(n_win)
+    m2 = np.zeros(n_win)
+    counts = np.zeros(n_win, dtype=np.int64)
+
+    for si in range(n_surrogates):
+        shift = float(rng.uniform(min_shift, max_shift))
+        s_shift = np.mod(source_times + shift, T_total)
+        s_shift.sort()
+        surr = fit_hawkes_sliding(
+            s_shift, target_times, T_total,
+            win_s=win_s, hop_s=hop_s, beta_global=beta_global,
+            min_events_per_window=min_events_per_window,
+        )
+        a = surr['alpha_t']
+        valid = np.isfinite(a)
+        if valid.any():
+            counts[valid] += 1
+            n_i = counts[valid]
+            d = a[valid] - mean[valid]
+            mean[valid] = mean[valid] + d / n_i
+            m2[valid] = m2[valid] + d * (a[valid] - mean[valid])
+
+    var = np.where(counts > 1, m2 / np.maximum(counts - 1, 1), 0.0)
+    std = np.sqrt(var)
+    std = np.where(std > 1e-10, std, 1e-10)
+    z = (real_alpha - mean) / std
+    z = np.where(np.isfinite(real_alpha), z, np.nan)
+    z = np.clip(z, -10, 10)
+    return z
+
+
 # ── 2b. Group-Sparse Multivariate Hawkes (Xu et al. 2016) ────────────
 #
 # Fits ALL pathways jointly with group-L2 penalty.  Each pathway i→j

@@ -5,8 +5,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 print('=== Deep Import Test ===')
 
 print('Phase A: wavelet + interbrain...')
-from cadence.data.wavelet_features import extract_wavelet_features, _morlet_wavelet_bank, _cwt_gpu, _build_roi_signals
-from cadence.data.interbrain_features import extract_interbrain_features
+from cadence.preprocess.eeg.wavelet import extract_wavelet_features, _morlet_wavelet_bank, _cwt_gpu, _build_roi_signals
+from cadence.coupling.interbrain import extract_interbrain_features
 print('  OK')
 
 print('Phase B: preprocessors v2...')

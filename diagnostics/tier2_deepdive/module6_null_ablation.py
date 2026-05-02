@@ -53,7 +53,7 @@ def run_null_ablation(sessions: list, output_dir: str) -> dict:
             all_d_constrained.append(sess.d_emit)
 
     if not all_d_constrained:
-        with open(os.path.join(output_dir, 'module6_report.md'), 'w') as f:
+        with open(os.path.join(output_dir, 'module6_report.md'), 'w', encoding='utf-8') as f:
             f.write('# Module 6: Null-State Ablation\n\nNo rSLDS fits found.\n')
         pd.DataFrame().to_csv(os.path.join(output_dir, 'hungarian_alignment.csv'), index=False)
         fig, axes = plt.subplots(1, 2, figsize=(10, 4))
@@ -64,6 +64,7 @@ def run_null_ablation(sessions: list, output_dir: str) -> dict:
     d_con_mean = np.mean(all_d_constrained, axis=0)  # (K, D)
     norms_con = np.linalg.norm(d_con_mean, axis=1)
     null_idx_con = int(np.argmin(norms_con))
+    K_fit = d_con_mean.shape[0]  # match whatever K the loaded fit has
 
     # ── Attempt unconstrained re-fit ─────────────────────────────────────
     d_uncon_mean = None
@@ -74,7 +75,7 @@ def run_null_ablation(sessions: list, output_dir: str) -> dict:
     try:
         from cadence.significance.rslds_model import IOHMM, IOHMMConfig
         cfg = IOHMMConfig(
-            K=4, D_obs=sessions[0].Y_pw.shape[1],
+            K=K_fit, D_obs=sessions[0].Y_pw.shape[1],
             D_input=sessions[0].U.shape[1],
             D_latent=3, n_factors=2,
             recurrent=True, sticky_strength=3.0,
@@ -94,7 +95,7 @@ def run_null_ablation(sessions: list, output_dir: str) -> dict:
         print(f'  Warning: unconstrained re-fit skipped ({e}). Reporting constrained-only stats.')
 
     # ── Emission norms plot ───────────────────────────────────────────────
-    labels = sessions[0].state_labels or [f'S{k}' for k in range(4)]
+    labels = sessions[0].state_labels or [f'S{k}' for k in range(K_fit)]
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for ax, d_emit, title in [
         (axes[0], d_con_mean, 'Constrained (null_state=True)'),
@@ -137,7 +138,7 @@ def run_null_ablation(sessions: list, output_dir: str) -> dict:
         interp = ('Low cosine similarity for some states. '
                   'Unconstrained model found different structure — null constraint may be forcing.')
 
-    with open(os.path.join(output_dir, 'module6_report.md'), 'w') as f:
+    with open(os.path.join(output_dir, 'module6_report.md'), 'w', encoding='utf-8') as f:
         f.write('# Module 6: Null-State Ablation\n\n')
         f.write(f'Constrained null-state norm: {null_norm_con:.3f}\n')
         if not np.isnan(null_norm_uncon):

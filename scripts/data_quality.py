@@ -26,8 +26,8 @@ import sys
 import numpy as np
 
 from cadence.config import load_config
-from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
-from cadence.data.preprocessors import compute_activity_channel
+from cadence.data import discover_cached_sessions, load_session_from_cache
+from cadence.preprocess.common import compute_activity_channel
 
 
 # ---------------------------------------------------------------------------

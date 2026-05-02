@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 from cadence.config import load_config
-from cadence.data.alignment import discover_cached_sessions, load_session_from_cache
+from cadence.data import discover_cached_sessions, load_session_from_cache
 from cadence.coupling.estimator import CouplingEstimator
 from cadence.constants import MOD_SHORT_V2, MODALITY_ORDER_V2, INTERBRAIN_MODALITY
 
@@ -61,7 +61,6 @@ def create_pseudo_session(session_a, session_b, name_a, name_b):
     # The key insight: these two EEGs should have NO genuine phase coupling
     # since the participants were never in the same room.
     try:
-        from cadence.data.preprocessors import compute_interbrain_features
         eeg1 = session_a.get('p1_eeg_wavelet')
         eeg2 = session_b.get('p2_eeg_wavelet')
         ts1 = session_a.get('p1_eeg_wavelet_ts')

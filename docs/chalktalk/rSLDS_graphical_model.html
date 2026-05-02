@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rSLDS Graphical Model — CADENCE V11</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Georgia', serif;
+    background: #fafaf7;
+    color: #1a1a1a;
+    padding: 40px 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 6px; letter-spacing: -0.02em; }
+  .subtitle { color: #666; font-size: 0.95rem; margin-bottom: 36px; }
+
+  /* --- diagram section --- */
+  .diagram-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 32px 24px 24px;
+    margin-bottom: 36px;
+  }
+  .diagram-section h2 {
+    font-size: 1.15rem;
+    margin-bottom: 20px;
+    color: #333;
+  }
+  svg { display: block; margin: 0 auto; }
+
+  /* --- equations section --- */
+  .eq-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 32px 28px;
+    margin-bottom: 36px;
+  }
+  .eq-section h2 {
+    font-size: 1.15rem;
+    margin-bottom: 20px;
+    color: #333;
+  }
+  .eq-block {
+    background: #f7f5f0;
+    border-left: 3px solid #b8a88a;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    border-radius: 0 6px 6px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+  .eq-block .label {
+    font-family: 'Georgia', serif;
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .eq-block .note {
+    font-family: 'Georgia', serif;
+    font-size: 0.85rem;
+    color: #777;
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* --- legend --- */
+  .legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+  }
+  .legend-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* --- whiteboard tips --- */
+  .tips {
+    background: #fffbe6;
+    border: 1px solid #e8d87a;
+    border-radius: 10px;
+    padding: 24px 28px;
+  }
+  .tips h2 { font-size: 1.05rem; margin-bottom: 12px; color: #7a6c1e; }
+  .tips p { font-size: 0.9rem; color: #5a5019; margin-bottom: 8px; }
+  .tips p:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<h1>rSLDS Graphical Model — CADENCE V11</h1>
+<p class="subtitle">Reference diagram and equations for the chalk talk (Minutes 10–15)</p>
+
+<!-- ==================== 28D FEATURE PIPELINE ==================== -->
+<div class="diagram-section">
+  <h2>28D Feature Pipeline — from raw signals to model inputs</h2>
+  <svg viewBox="0 0 920 720" width="920" height="720" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="parr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#555"/>
+      </marker>
+      <marker id="parr-grn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#2d8630"/>
+      </marker>
+      <marker id="parr-org" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#e67e22"/>
+      </marker>
+    </defs>
+
+    <!-- ============================================================ -->
+    <!-- COLUMN 1: RAW MODALITIES                                      -->
+    <!-- ============================================================ -->
+    <text x="100" y="30" font-family="Georgia" font-size="14" fill="#888"
+          text-anchor="middle" font-weight="bold" text-decoration="underline">RAW SIGNALS</text>
+
+    <!-- EEG -->
+    <rect x="20" y="50" width="160" height="44" rx="6" fill="#e8f0fe" stroke="#3b7dd8" stroke-width="1.5"/>
+    <text x="100" y="68" font-family="Georgia" font-size="12" fill="#3b7dd8" text-anchor="middle" font-weight="bold">EEG</text>
+    <text x="100" y="84" font-family="Georgia" font-size="10" fill="#6a9fd8" text-anchor="middle">256 Hz, 14ch × 2 people</text>
+
+    <!-- ECG -->
+    <rect x="20" y="106" width="160" height="44" rx="6" fill="#fce4ec" stroke="#c0392b" stroke-width="1.5"/>
+    <text x="100" y="124" font-family="Georgia" font-size="12" fill="#c0392b" text-anchor="middle" font-weight="bold">ECG</text>
+    <text x="100" y="140" font-family="Georgia" font-size="10" fill="#e57373" text-anchor="middle">130 Hz, 1ch × 2</text>
+
+    <!-- Face -->
+    <rect x="20" y="162" width="160" height="44" rx="6" fill="#fff3e0" stroke="#e67e22" stroke-width="1.5"/>
+    <text x="100" y="180" font-family="Georgia" font-size="12" fill="#e67e22" text-anchor="middle" font-weight="bold">Facial AUs</text>
+    <text x="100" y="196" font-family="Georgia" font-size="10" fill="#ffb74d" text-anchor="middle">30 Hz, 52 AUs × 2</text>
+
+    <!-- Pose -->
+    <rect x="20" y="218" width="160" height="44" rx="6" fill="#e8f5e9" stroke="#2d8630" stroke-width="1.5"/>
+    <text x="100" y="236" font-family="Georgia" font-size="12" fill="#2d8630" text-anchor="middle" font-weight="bold">Body Pose</text>
+    <text x="100" y="252" font-family="Georgia" font-size="10" fill="#66bb6a" text-anchor="middle">30 Hz, 33 joints × 2</text>
+
+    <!-- Markers -->
+    <rect x="20" y="274" width="160" height="44" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+    <text x="100" y="292" font-family="Georgia" font-size="12" fill="#7b1fa2" text-anchor="middle" font-weight="bold">Condition Markers</text>
+    <text x="100" y="308" font-family="Georgia" font-size="10" fill="#ab47bc" text-anchor="middle">6 blocks per session</text>
+
+    <!-- ============================================================ -->
+    <!-- ARROWS: Raw → Feature Extraction                              -->
+    <!-- ============================================================ -->
+    <line x1="182" y1="72" x2="248" y2="72" stroke="#555" stroke-width="1.5" marker-end="url(#parr)"/>
+    <line x1="182" y1="128" x2="248" y2="175" stroke="#555" stroke-width="1.5" marker-end="url(#parr)"/>
+    <line x1="182" y1="184" x2="248" y2="200" stroke="#555" stroke-width="1.5" marker-end="url(#parr)"/>
+    <line x1="182" y1="240" x2="248" y2="232" stroke="#555" stroke-width="1.5" marker-end="url(#parr)"/>
+    <line x1="182" y1="296" x2="248" y2="265" stroke="#555" stroke-width="1.5" marker-end="url(#parr)"/>
+
+    <!-- ============================================================ -->
+    <!-- COLUMN 2: FEATURE EXTRACTION (the 28 channels)                -->
+    <!-- ============================================================ -->
+    <text x="360" y="30" font-family="Georgia" font-size="14" fill="#888"
+          text-anchor="middle" font-weight="bold" text-decoration="underline">COUPLING FEATURES</text>
+
+    <!-- Feature group boxes -->
+    <!-- ImCoh -->
+    <rect x="258" y="48" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="69" font-family="Courier New" font-size="11" fill="#333">ImCoh θ/α/β</text>
+    <text x="454" y="69" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(3)</text>
+
+    <!-- Concordance -->
+    <rect x="258" y="86" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="107" font-family="Courier New" font-size="11" fill="#333">Concordance + Dyn + Asym</text>
+    <text x="454" y="107" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(9)</text>
+
+    <!-- LZ complexity -->
+    <rect x="258" y="124" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="145" font-family="Courier New" font-size="11" fill="#333">LZ concordance + asym</text>
+    <text x="454" y="145" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(4)</text>
+
+    <!-- Face -->
+    <rect x="258" y="162" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="183" font-family="Courier New" font-size="11" fill="#333">Facial expression + activity</text>
+    <text x="454" y="183" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(2)</text>
+
+    <!-- Body -->
+    <rect x="258" y="200" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="221" font-family="Courier New" font-size="11" fill="#333">ECG LF/HF + Resp + Pose</text>
+    <text x="454" y="221" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(4)</text>
+
+    <!-- Graph -->
+    <rect x="258" y="238" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="259" font-family="Courier New" font-size="11" fill="#333">Graph modularity</text>
+    <text x="454" y="259" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(1)</text>
+
+    <!-- TE -->
+    <rect x="258" y="276" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="297" font-family="Courier New" font-size="11" fill="#333">TE concordance</text>
+    <text x="454" y="297" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(2)</text>
+
+    <!-- Burst -->
+    <rect x="258" y="314" width="204" height="32" rx="5" fill="#f9f9f9" stroke="#aaa" stroke-width="1"/>
+    <text x="266" y="335" font-family="Courier New" font-size="11" fill="#333">Burst coincidence θ/α/β</text>
+    <text x="454" y="335" font-family="Georgia" font-size="10" fill="#999" text-anchor="end">(3)</text>
+
+    <!-- Total count -->
+    <text x="360" y="368" font-family="Georgia" font-size="12" fill="#555"
+          text-anchor="middle" font-style="italic">28 channels total</text>
+
+    <!-- ============================================================ -->
+    <!-- STEP 1 ARROW: Features → Resample to 2 Hz                    -->
+    <!-- ============================================================ -->
+    <line x1="464" y1="195" x2="520" y2="195" stroke="#555" stroke-width="2" marker-end="url(#parr)"/>
+
+    <!-- ============================================================ -->
+    <!-- COLUMN 3: RESAMPLE @ 2 Hz                                     -->
+    <!-- ============================================================ -->
+    <rect x="528" y="168" width="120" height="54" rx="8" fill="#f0f0f0" stroke="#777" stroke-width="1.8"/>
+    <text x="588" y="190" font-family="Georgia" font-size="13" fill="#444" text-anchor="middle" font-weight="bold">Resample</text>
+    <text x="588" y="208" font-family="Georgia" font-size="12" fill="#777" text-anchor="middle">→ 2 Hz</text>
+
+    <!-- ============================================================ -->
+    <!-- STEP 2 ARROW: Resample → Surrogate z-score                    -->
+    <!-- ============================================================ -->
+    <line x1="588" y1="224" x2="588" y2="290" stroke="#555" stroke-width="2" marker-end="url(#parr)"/>
+
+    <!-- ============================================================ -->
+    <!-- COLUMN 3 ROW 2: SURROGATE Z-SCORE                            -->
+    <!-- ============================================================ -->
+    <rect x="498" y="298" width="180" height="80" rx="8" fill="#fffde7" stroke="#f9a825" stroke-width="2"/>
+    <text x="588" y="322" font-family="Georgia" font-size="13" fill="#f57f17" text-anchor="middle" font-weight="bold">Surrogate z-score</text>
+    <text x="588" y="342" font-family="Courier New" font-size="11" fill="#666" text-anchor="middle">z = (x − μ_null) / σ_null</text>
+    <text x="588" y="362" font-family="Georgia" font-size="10" fill="#999" text-anchor="middle">200 circular-shift surrogates</text>
+
+    <!-- Annotation: what the surrogate does -->
+    <rect x="700" y="305" width="200" height="68" rx="6" fill="#fff9e6" stroke="#e8d87a" stroke-width="1"/>
+    <text x="800" y="324" font-family="Georgia" font-size="10" fill="#7a6c1e" text-anchor="middle" font-style="italic">Circular shift preserves</text>
+    <text x="800" y="338" font-family="Georgia" font-size="10" fill="#7a6c1e" text-anchor="middle" font-style="italic">autocorrelation structure.</text>
+    <text x="800" y="356" font-family="Georgia" font-size="10" fill="#7a6c1e" text-anchor="middle" font-style="italic">z > 0 means coupling above</text>
+    <text x="800" y="370" font-family="Georgia" font-size="10" fill="#7a6c1e" text-anchor="middle" font-style="italic">chance for that metric.</text>
+
+    <!-- ============================================================ -->
+    <!-- STEP 3 ARROW: z-score → AR(1) prewhiten                      -->
+    <!-- ============================================================ -->
+    <line x1="588" y1="380" x2="588" y2="430" stroke="#555" stroke-width="2" marker-end="url(#parr)"/>
+
+    <!-- ============================================================ -->
+    <!-- COLUMN 3 ROW 3: AR(1) PREWHITENING                           -->
+    <!-- ============================================================ -->
+    <rect x="498" y="438" width="180" height="80" rx="8" fill="#e8eaf6" stroke="#5c6bc0" stroke-width="2"/>
+    <text x="588" y="462" font-family="Georgia" font-size="13" fill="#3949ab" text-anchor="middle" font-weight="bold">AR(1) prewhiten</text>
+    <text x="588" y="482" font-family="Courier New" font-size="11" fill="#666" text-anchor="middle">x̃_t = x_t − φ·x_{t-1}</text>
+    <text x="588" y="502" font-family="Georgia" font-size="10" fill="#999" text-anchor="middle">removes serial correlation</text>
+
+    <!-- Annotation: why prewhiten -->
+    <rect x="700" y="445" width="200" height="68" rx="6" fill="#eef0fa" stroke="#b0bec5" stroke-width="1"/>
+    <text x="800" y="464" font-family="Georgia" font-size="10" fill="#546e7a" text-anchor="middle" font-style="italic">Prevents the model from</text>
+    <text x="800" y="478" font-family="Georgia" font-size="10" fill="#546e7a" text-anchor="middle" font-style="italic">confusing autocorrelation</text>
+    <text x="800" y="492" font-family="Georgia" font-size="10" fill="#546e7a" text-anchor="middle" font-style="italic">with state persistence.</text>
+    <text x="800" y="506" font-family="Georgia" font-size="10" fill="#546e7a" text-anchor="middle" font-style="italic">(Open Q: let model absorb it?)</text>
+
+    <!-- ============================================================ -->
+    <!-- STEP 4: SPLIT into observations vs covariates                 -->
+    <!-- ============================================================ -->
+    <!-- Main arrow down from prewhiten -->
+    <line x1="588" y1="520" x2="588" y2="568" stroke="#555" stroke-width="2"/>
+
+    <!-- Fork point -->
+    <circle cx="588" cy="572" r="4" fill="#555"/>
+
+    <!-- Left fork → observations -->
+    <line x1="588" y1="572" x2="440" y2="572" stroke="#2d8630" stroke-width="2"/>
+    <line x1="440" y1="572" x2="440" y2="610" stroke="#2d8630" stroke-width="2" marker-end="url(#parr-grn)"/>
+
+    <!-- Right fork → covariates -->
+    <line x1="588" y1="572" x2="730" y2="572" stroke="#e67e22" stroke-width="2"/>
+    <line x1="730" y1="572" x2="730" y2="610" stroke="#e67e22" stroke-width="2" marker-end="url(#parr-org)"/>
+
+    <!-- Split label -->
+    <text x="588" y="562" font-family="Georgia" font-size="12" fill="#555"
+          text-anchor="middle" font-weight="bold">OBS / COV SPLIT</text>
+
+    <!-- ============================================================ -->
+    <!-- OBSERVATIONS BOX                                              -->
+    <!-- ============================================================ -->
+    <rect x="340" y="618" width="200" height="86" rx="8" fill="#d5e8d4" stroke="#2d8630" stroke-width="2"/>
+    <text x="440" y="642" font-family="Georgia" font-size="14" fill="#2d8630" text-anchor="middle" font-weight="bold">Observations y_t</text>
+    <text x="440" y="662" font-family="Georgia" font-size="11" fill="#555" text-anchor="middle">28D — symmetric / magnitude</text>
+    <text x="440" y="680" font-family="Georgia" font-size="10" fill="#888" text-anchor="middle" font-style="italic">"what state are we in?"</text>
+    <text x="440" y="696" font-family="Georgia" font-size="10" fill="#2d8630" text-anchor="middle">→ feeds emission model</text>
+
+    <!-- ============================================================ -->
+    <!-- COVARIATES BOX                                                -->
+    <!-- ============================================================ -->
+    <rect x="630" y="618" width="200" height="86" rx="8" fill="#fef3e0" stroke="#e67e22" stroke-width="2"/>
+    <text x="730" y="642" font-family="Georgia" font-size="14" fill="#e67e22" text-anchor="middle" font-weight="bold">Covariates u_t</text>
+    <text x="730" y="662" font-family="Georgia" font-size="11" fill="#555" text-anchor="middle">7D — signed / directional</text>
+    <text x="730" y="680" font-family="Georgia" font-size="10" fill="#888" text-anchor="middle" font-style="italic">"what drives transitions?"</text>
+    <text x="730" y="696" font-family="Georgia" font-size="10" fill="#e67e22" text-anchor="middle">→ feeds softmax logits</text>
+
+  </svg>
+</div>
+
+<!-- ==================== GRAPHICAL MODEL ==================== -->
+<div class="diagram-section">
+  <h2>Graphical Model</h2>
+  <svg viewBox="0 0 820 520" width="820" height="520" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#555"/>
+      </marker>
+      <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#3b7dd8"/>
+      </marker>
+      <marker id="arr-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/>
+      </marker>
+    </defs>
+
+    <!-- ===== SESSION PLATE ===== -->
+    <rect x="50" y="30" width="720" height="400" rx="12" ry="12"
+          fill="none" stroke="#bbb" stroke-width="1.5" stroke-dasharray="8,4"/>
+    <text x="730" y="415" font-family="Georgia" font-size="15" fill="#999"
+          text-anchor="end" font-style="italic">session s = 1…S</text>
+
+    <!-- ===== TIME PLATE ===== -->
+    <rect x="90" y="60" width="640" height="340" rx="10" ry="10"
+          fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="5,3"/>
+    <text x="695" y="387" font-family="Georgia" font-size="13" fill="#bbb"
+          text-anchor="end" font-style="italic">t = 1…T</text>
+
+    <!-- ============================================================ -->
+    <!-- DISCRETE STATES  z_{t-1}, z_t, z_{t+1}                      -->
+    <!-- Rounded squares (discrete)                                    -->
+    <!-- ============================================================ -->
+    <!-- z_{t-1} -->
+    <rect x="140" y="120" width="60" height="60" rx="8" ry="8"
+          fill="#e8f0fe" stroke="#3b7dd8" stroke-width="2"/>
+    <text x="170" y="157" font-family="Georgia" font-size="17" fill="#3b7dd8"
+          text-anchor="middle" font-weight="bold">z</text>
+    <text x="182" y="164" font-family="Georgia" font-size="11" fill="#3b7dd8">t−1</text>
+
+    <!-- z_t -->
+    <rect x="370" y="120" width="60" height="60" rx="8" ry="8"
+          fill="#e8f0fe" stroke="#3b7dd8" stroke-width="2"/>
+    <text x="400" y="157" font-family="Georgia" font-size="17" fill="#3b7dd8"
+          text-anchor="middle" font-weight="bold">z</text>
+    <text x="412" y="164" font-family="Georgia" font-size="11" fill="#3b7dd8">t</text>
+
+    <!-- z_{t+1} -->
+    <rect x="600" y="120" width="60" height="60" rx="8" ry="8"
+          fill="#e8f0fe" stroke="#3b7dd8" stroke-width="2"/>
+    <text x="630" y="157" font-family="Georgia" font-size="17" fill="#3b7dd8"
+          text-anchor="middle" font-weight="bold">z</text>
+    <text x="642" y="164" font-family="Georgia" font-size="11" fill="#3b7dd8">t+1</text>
+
+    <!-- z-to-z arrows (shared transitions) -->
+    <line x1="202" y1="150" x2="362" y2="150" stroke="#3b7dd8" stroke-width="2" marker-end="url(#arr-blue)"/>
+    <line x1="432" y1="150" x2="592" y2="150" stroke="#3b7dd8" stroke-width="2" marker-end="url(#arr-blue)"/>
+
+    <!-- Label: "shared W" on transition arrow -->
+    <text x="282" y="140" font-family="Georgia" font-size="12" fill="#3b7dd8"
+          text-anchor="middle" font-style="italic">W (shared)</text>
+
+    <!-- ============================================================ -->
+    <!-- OBSERVATIONS  y_{t-1}, y_t, y_{t+1}                          -->
+    <!-- Shaded circles (observed)                                     -->
+    <!-- ============================================================ -->
+    <!-- y_{t-1} -->
+    <circle cx="170" cy="290" r="32" fill="#d5e8d4" stroke="#2d8630" stroke-width="2"/>
+    <text x="170" y="296" font-family="Georgia" font-size="17" fill="#2d8630"
+          text-anchor="middle" font-weight="bold">y</text>
+    <text x="182" y="303" font-family="Georgia" font-size="11" fill="#2d8630">t−1</text>
+
+    <!-- y_t -->
+    <circle cx="400" cy="290" r="32" fill="#d5e8d4" stroke="#2d8630" stroke-width="2"/>
+    <text x="400" y="296" font-family="Georgia" font-size="17" fill="#2d8630"
+          text-anchor="middle" font-weight="bold">y</text>
+    <text x="412" y="303" font-family="Georgia" font-size="11" fill="#2d8630">t</text>
+
+    <!-- y_{t+1} -->
+    <circle cx="630" cy="290" r="32" fill="#d5e8d4" stroke="#2d8630" stroke-width="2"/>
+    <text x="630" y="296" font-family="Georgia" font-size="17" fill="#2d8630"
+          text-anchor="middle" font-weight="bold">y</text>
+    <text x="642" y="303" font-family="Georgia" font-size="11" fill="#2d8630">t+1</text>
+
+    <!-- z → y arrows (emissions, session-specific) -->
+    <line x1="170" y1="182" x2="170" y2="255" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+    <line x1="400" y1="182" x2="400" y2="255" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+    <line x1="630" y1="182" x2="630" y2="255" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+
+    <!-- Label on one emission arrow -->
+    <text x="420" y="225" font-family="Georgia" font-size="12" fill="#666"
+          font-style="italic">μ, Σ (per session)</text>
+
+    <!-- ============================================================ -->
+    <!-- RECURRENT CONNECTIONS  y_{t-1} → z_t  (the "r" in rSLDS)     -->
+    <!-- ============================================================ -->
+    <!-- y_{t-1} → z_t  (curved upward) -->
+    <path d="M 200,275 C 260,210 310,210 368,155"
+          fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6,3"
+          marker-end="url(#arr-red)"/>
+    <text x="275" y="215" font-family="Georgia" font-size="12" fill="#c0392b"
+          text-anchor="middle" font-weight="bold">R (recurrent)</text>
+
+    <!-- y_t → z_{t+1} -->
+    <path d="M 430,275 C 490,210 540,210 598,155"
+          fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6,3"
+          marker-end="url(#arr-red)"/>
+
+    <!-- ============================================================ -->
+    <!-- COVARIATES  u_t                                               -->
+    <!-- Diamond (exogenous input)                                     -->
+    <!-- ============================================================ -->
+    <!-- u_t diamond -->
+    <polygon points="400,70 430,95 400,120 370,95"
+             fill="#fef3e0" stroke="#e67e22" stroke-width="2"/>
+    <text x="400" y="100" font-family="Georgia" font-size="15" fill="#e67e22"
+          text-anchor="middle" font-weight="bold">u</text>
+    <text x="412" y="107" font-family="Georgia" font-size="10" fill="#e67e22">t</text>
+
+    <!-- u → z_t arrow (into top of z_t square) -->
+    <line x1="400" y1="120" x2="400" y2="120" stroke="none"/>
+    <!-- u is directly above z_t, diamond bottom touches z_t top -->
+
+    <!-- u_{t+1} diamond -->
+    <polygon points="630,70 660,95 630,120 600,95"
+             fill="#fef3e0" stroke="#e67e22" stroke-width="2"/>
+    <text x="630" y="100" font-family="Georgia" font-size="15" fill="#e67e22"
+          text-anchor="middle" font-weight="bold">u</text>
+    <text x="642" y="107" font-family="Georgia" font-size="10" fill="#e67e22">t+1</text>
+
+    <!-- Label for covariates -->
+    <text x="515" y="72" font-family="Georgia" font-size="12" fill="#e67e22"
+          text-anchor="middle" font-style="italic">7D covariates</text>
+
+    <!-- ============================================================ -->
+    <!-- ANNOTATION: 28D label on observations                         -->
+    <!-- ============================================================ -->
+    <text x="400" y="345" font-family="Georgia" font-size="12" fill="#2d8630"
+          text-anchor="middle" font-style="italic">28D observations</text>
+
+    <!-- K=4 label on states -->
+    <text x="170" y="112" font-family="Georgia" font-size="12" fill="#3b7dd8"
+          text-anchor="middle" font-style="italic">K = 4 states</text>
+
+  </svg>
+
+  <!-- Legend -->
+  <div class="legend" style="margin-top: 20px;">
+    <div class="legend-item">
+      <div class="legend-swatch" style="border: 2px solid #3b7dd8; background: #e8f0fe; border-radius: 4px;">
+        <span style="font-size: 11px; color: #3b7dd8;">z</span>
+      </div>
+      <span><strong>Discrete latent state</strong> — which coupling regime (NULL, COUP, SHARED, OTHER)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="border: 2px solid #2d8630; background: #d5e8d4; border-radius: 50%;">
+        <span style="font-size: 11px; color: #2d8630;">y</span>
+      </div>
+      <span><strong>Observed emissions</strong> — 28D surrogate-calibrated coupling features</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="border: 2px solid #e67e22; background: #fef3e0; border-radius: 2px; transform: rotate(45deg); width: 20px; height: 20px;">
+      </div>
+      <span><strong>Exogenous covariates</strong> — 7D inputs that modulate transitions</span>
+    </div>
+    <div class="legend-item">
+      <div style="width: 28px; display: flex; align-items: center;">
+        <svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="#c0392b" stroke-width="2" stroke-dasharray="4,2"/></svg>
+      </div>
+      <span><strong style="color: #c0392b;">Recurrent link</strong> — y feeds back into next z (the "r" in rSLDS)</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== EQUATIONS ==================== -->
+<div class="eq-section">
+  <h2>Mock Equations (whiteboard-friendly)</h2>
+
+  <div class="eq-block">
+    <span class="label">1 · Transition (how states switch)</span>
+    P(z_t = k | z_{t-1} = j, y_{t-1}, u_t)  ∝  exp( W_jk  +  R_k · y_{t-1}  +  S_k · u_t )
+    <div class="note">
+      W_jk = baseline transition weight from state j → k (shared across sessions)<br>
+      R_k · y_{t-1} = recurrent term — previous <em>observations</em> influence which state comes next<br>
+      S_k · u_t = covariate modulation — the 7D inputs (flexibility, asymmetry, …) push transitions
+    </div>
+  </div>
+
+  <div class="eq-block">
+    <span class="label">2 · Emission (what you observe in each state)</span>
+    y_t | z_t = k  ~  𝒩( μ_k^(s),  Σ_k^(s) )
+    <div class="note">
+      Session-specific mean μ and covariance Σ — each dyad's physiology is different,<br>
+      but the <em>state identities</em> and <em>transition rules</em> are shared.
+    </div>
+  </div>
+
+  <div class="eq-block">
+    <span class="label">3 · Null state constraint</span>
+    State k = 0 (NULL):   μ_0  ≡  0,   diag(Σ_0) ≤ σ²_max
+    <div class="note">
+      The null state is <em>not</em> learned — its mean is pinned at zero and its variance is capped.<br>
+      This anchors the model: "no coupling" has a fixed definition, the other 3 states define themselves relative to it.
+    </div>
+  </div>
+
+  <div class="eq-block">
+    <span class="label">4 · Fitting (one line summary)</span>
+    Per-session init → Hungarian alignment → hierarchical EM
+    ( shared {W, R, S}  ⟷  session-specific {μ_k^(s), Σ_k^(s)} )
+    → constrained Viterbi (10 s min dwell)
+    <div class="note">
+      Hungarian alignment solves label switching across sessions before pooling.<br>
+      10-second minimum dwell is applied post-hoc via constrained Viterbi, not during EM.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== WHITEBOARD TIPS ==================== -->
+<div class="tips">
+  <h2>Whiteboard drawing tips</h2>
+  <p><strong>Draw order:</strong> Start with the z chain (3 squares, left to right). Then drop the y circles below. Then add the u diamonds above. Finally add the red dashed recurrent arrows — save those for last because they're the punchline ("this is what makes it <em>recurrent</em>").</p>
+  <p><strong>Keep it to one time-slice:</strong> On a real whiteboard, you may only need z_{t-1}, z_t with y_{t-1}, y_t, and u_t. Three time steps look cleaner in a reference doc but can clutter a whiteboard.</p>
+  <p><strong>The one equation to write:</strong> If you only write one thing, write the transition equation (Equation 1). It encodes the three key ideas — Markov chain (W), recurrence (R·y), covariate modulation (S·u) — in a single line. Point at each term as you explain it.</p>
+  <p><strong>Color code if possible:</strong> Use blue for the discrete state chain, green for observations, red/orange for the recurrent link. Even with just two marker colors (black + one other), highlight the recurrent arrow — it's what distinguishes this from a vanilla HMM.</p>
+</div>
+
+</body>
+</html>

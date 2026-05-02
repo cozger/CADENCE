@@ -26,11 +26,17 @@ def align_session(session):
     all_starts = []
     all_ends = []
 
-    ALL_MODALITIES = ['eeg', 'ecg', 'blendshapes', 'pose',
-                      'ecg_features', 'pose_features', 'eeg_features',
-                      'eeg_wavelet', 'ecg_features_v2', 'blendshapes_v2']
+    # Core modalities define session boundaries; optional modalities (pose)
+    # are trimmed but do NOT constrain the session range — they get masked
+    # as invalid after their stream ends.
+    CORE_MODALITIES = ['eeg', 'ecg', 'blendshapes',
+                       'ecg_features', 'eeg_features',
+                       'eeg_wavelet', 'ecg_features_v2', 'blendshapes_v2']
+    OPTIONAL_MODALITIES = ['pose', 'pose_features']
+    ALL_MODALITIES = CORE_MODALITIES + OPTIONAL_MODALITIES
+
     for p in ['p1', 'p2']:
-        for mod in ALL_MODALITIES:
+        for mod in CORE_MODALITIES:
             ts_key = f'{p}_{mod}_ts'
             if ts_key in session and len(session[ts_key]) > 0:
                 all_starts.append(session[ts_key][0])
@@ -169,7 +175,7 @@ def load_and_preprocess(xdf_path, p1_eeg_index=0, p2_eeg_index=1):
     return session
 
 
-_CACHE_VERSION = 'v7'
+_CACHE_VERSION = 'v8'
 
 
 def _cache_key(xdf_path):
@@ -399,8 +405,16 @@ def _ensure_activity_channels(session):
 
 
 # Known bad modalities per session (anomalous capture rates etc.)
+# Validated by scripts/_validate_session_modalities.py
 EXCLUDED_MODALITIES = {
-    'y24_022526': {'p2': ['pose_features', 'pose']},
+    'y24_022526': {'p1': ['ecg', 'ecg_features'],
+                   'p2': ['ecg', 'ecg_features', 'pose_features', 'pose']},
+    'y11_022526': {'p1': ['ecg', 'ecg_features'],
+                   'p2': ['ecg', 'ecg_features']},
+    'Y_45_03302026': {'p1': ['pose', 'pose_features']},
+    'y_33_04032026': {'p2': ['pose', 'pose_features']},
+    'y_19_3242026': {'p1': ['eeg', 'eeg_features'],
+                     'p2': ['eeg', 'eeg_features']},
 }
 
 

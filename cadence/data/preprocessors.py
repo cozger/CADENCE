@@ -145,8 +145,9 @@ def preprocess_blendshapes(data, timestamps, srate=30):
     valid = face_present.copy()
     gap_starts, gap_lengths = _find_gaps(face_present)
 
+    max_interp_samples = max(1, int(0.5 * srate))  # 0.5s at any rate
     for start, length in zip(gap_starts, gap_lengths):
-        if length <= 15:  # <= 0.5s at 30 Hz
+        if length <= max_interp_samples:
             end = start + length
             if start > 0 and end < len(blendshapes):
                 for ch in range(52):
@@ -333,14 +334,14 @@ def extract_ecg_features(ecg_filtered, ecg_valid, ecg_ts, srate=130):
     # --- Ch0: Instantaneous HR ---
     features[:, 0] = hr_interp
 
-    # --- Ch1: IBI deviation from 10s running mean ---
-    w10 = min(20, n_out)  # 10s at 2 Hz
+    # --- Ch1: IBI deviation from 5s running mean ---
+    w10 = min(10, n_out)  # 5s at 2 Hz
     if w10 > 0:
         kernel10 = np.ones(w10) / w10
         ibi_mean = np.convolve(ibi_interp, kernel10, mode='same')
         features[:, 1] = ibi_interp - ibi_mean
 
-    # --- Ch2: RMSSD (rolling 10s window) ---
+    # --- Ch2: RMSSD (rolling 5s window) ---
     if len(ibis) >= 2:
         succ_diff_sq = np.diff(ibis) ** 2
         sd_times = ibi_times[1:]
@@ -348,8 +349,8 @@ def extract_ecg_features(ecg_filtered, ecg_valid, ecg_ts, srate=130):
         if w10 > 0:
             features[:, 2] = np.sqrt(np.convolve(sd_interp, kernel10, mode='same'))
 
-    # --- Ch3: HR acceleration (gradient of 5s-smoothed HR) ---
-    w5 = min(10, n_out)  # 5s at 2 Hz
+    # --- Ch3: HR acceleration (gradient of 2s-smoothed HR) ---
+    w5 = min(4, n_out)  # 2s at 2 Hz
     if w5 > 1:
         kernel5 = np.ones(w5) / w5
         hr_smooth = np.convolve(hr_interp, kernel5, mode='same')
@@ -360,8 +361,8 @@ def extract_ecg_features(ecg_filtered, ecg_valid, ecg_ts, srate=130):
                            left=peak_heights[0], right=peak_heights[-1])
     features[:, 4] = amp_interp
 
-    # --- Ch5: HR trend (30s linear slope via convolution) ---
-    w30 = min(60, n_out)  # 30s at 2 Hz
+    # --- Ch5: HR trend (10s linear slope via convolution) ---
+    w30 = min(20, n_out)  # 10s at 2 Hz
     if w30 >= 4:
         x = np.arange(w30) - (w30 - 1) / 2.0
         denom = np.sum(x ** 2)

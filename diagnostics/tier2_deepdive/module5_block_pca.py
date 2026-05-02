@@ -8,17 +8,17 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
-# Default modality groups for V11 28-channel scaffold
+# Default modality groups for V11 26-channel scaffold (dyn_theta/alpha/beta collapsed to dyn_mean)
 V11_MODALITY_GROUPS: Dict[str, List[str]] = {
     'EEG_phase':    ['imcoh_theta', 'imcoh_alpha', 'imcoh_beta'],
     'EEG_shared':   ['conc_theta', 'conc_alpha', 'conc_beta'],
-    'EEG_dynamics': ['dyn_theta', 'dyn_alpha', 'dyn_beta'],
+    'EEG_dynamics': ['dyn_mean'],
     'EEG_asymmetry':['asym_theta', 'asym_alpha', 'asym_beta'],
-    'Facial':       ['bl_expr', 'bl_act_conc'],
+    'Facial':       ['bl_expr', 'bl_activity_conc'],
     'Autonomic':    ['ecg_lf', 'ecg_hf', 'resp'],
     'Body':         ['pose'],
     'Complexity':   ['lz_conc_theta', 'lz_conc_alpha', 'lz_asym_theta', 'lz_asym_alpha'],
-    'Graph':        ['graph_mod'],
+    'Graph':        ['graph_modularity'],
     'Burst_TE':     ['te_conc_theta', 'te_conc_alpha',
                      'burst_coinc_theta', 'burst_coinc_alpha', 'burst_coinc_beta'],
 }
@@ -89,7 +89,7 @@ def run_block_pca(sessions: list, flags: dict, output_dir: str) -> dict:
     Y_all = np.vstack([s.Y_raw for s in sessions])
     Y_red, loadings = fit_block_pca(Y_all, keys, groups, flags)
 
-    with open(os.path.join(output_dir, 'block_pca_loadings.md'), 'w') as f:
+    with open(os.path.join(output_dir, 'block_pca_loadings.md'), 'w', encoding='utf-8') as f:
         f.write('# Block PCA Loadings\n\n')
         for pc_name, formula in loadings.items():
             f.write(f'**{pc_name}**: {formula}\n\n')
@@ -97,7 +97,7 @@ def run_block_pca(sessions: list, flags: dict, output_dir: str) -> dict:
     n_in = Y_all.shape[1]
     n_out = Y_red.shape[1]
 
-    with open(os.path.join(output_dir, 'module5_report.md'), 'w') as f:
+    with open(os.path.join(output_dir, 'module5_report.md'), 'w', encoding='utf-8') as f:
         f.write('# Module 5: Block PCA Preprocessing Variant\n\n')
         f.write(f'Input dims: {n_in} → Reduced dims: {n_out}\n')
         f.write(f'Excluded (flagged): {flags.get("slow_drift", [])} + {flags.get("high_vif", [])}\n\n')

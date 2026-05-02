@@ -18,7 +18,7 @@ def write_md_report(output_dir: str, filename: str, sections: List[Tuple[str, st
         lines.append(f'## {title}\n')
         lines.append(body.strip())
         lines.append('\n')
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
 
 

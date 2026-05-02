@@ -1510,8 +1510,13 @@ def xcorr_temporal_localization(p1_signal, p2_signal, fs,
     lags = list(range(0, max_lag_samp + 1, lag_step))
     n_lags = len(lags)
 
-    # Decimate output to ~4 Hz for memory (native rate is too large)
-    dec = max(1, int(fs / 4))
+    # Decimate: output rate = 4 × (3/smooth_s) Hz, clamped to [4, fs].
+    # This scales inversely with smooth_s: shorter smooth → higher output.
+    #   30 Hz / 3.0s smooth → 4.0 Hz output (same as original)
+    #   60 Hz / 1.5s smooth → 8.0 Hz output (2× from 2× fs)
+    #   58 Hz / 1.55s smooth → 7.7 Hz output
+    out_hz = min(fs, max(4.0, 4.0 * 3.0 / smooth_s)) if smooth_s > 0 else 4.0
+    dec = max(1, int(fs / out_hz))
     T_out = (T + dec - 1) // dec
 
     # Move to GPU

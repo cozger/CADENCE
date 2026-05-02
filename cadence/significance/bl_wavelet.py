@@ -126,7 +126,14 @@ def _cwt_cpu(signal, fs, freqs, omega):
 
 def _cwt_gpu(signal, fs, freqs, omega):
     """FFT-based Morlet CWT on GPU via torch, vectorized across all channels
-    AND all frequencies simultaneously."""
+    AND all frequencies simultaneously.
+
+    P2.2 — for long sessions / many AUs, the (n_freqs, T, n_ch) complex128
+    intermediate can exceed VRAM budget. We chunk along the frequency axis
+    so the per-chunk tensor stays under the gpu_chunk_size budget. Peak VRAM
+    per chunk is approximately (chunk_freqs * T * n_ch * 16 bytes) for the
+    XW intermediate plus the same for the ifft output.
+    """
     T, n_ch = signal.shape
     n_freqs = len(freqs)
 
@@ -140,17 +147,37 @@ def _cwt_gpu(signal, fs, freqs, omega):
     freqs_t = torch.tensor(freqs, dtype=torch.float64, device='cuda')  # (n_freqs,)
     sigma_f = freqs_t / omega  # (n_freqs,)
 
-    # Vectorize across frequencies: (n_freqs, T) Gaussian kernels
-    # f_fft: (T,) -> (1, T), freqs: (n_freqs, 1)
-    W = torch.exp(-0.5 * ((f_fft[None, :] - freqs_t[:, None]) / sigma_f[:, None]) ** 2)
+    # Adaptive chunk size — keep peak VRAM bounded. Two complex128 tensors
+    # (XW + coeffs) so cost per freq is 2 * T * n_ch * 16 bytes.
+    bytes_per_freq = 2 * T * n_ch * 16
+    per_freq_gb = max(bytes_per_freq / 1e9, 1e-6)
+    try:
+        from cadence.io.resources import gpu_chunk_size
+        chunk = gpu_chunk_size(per_unit_vram_gb=per_freq_gb, n_units=n_freqs)
+    except Exception:
+        chunk = n_freqs
+    chunk = max(1, min(chunk, n_freqs))
 
-    # Multiply: (n_freqs, T, 1) * (1, T, n_ch) -> (n_freqs, T, n_ch)
-    XW = X[None, :, :] * W[:, :, None]
+    coeffs_out = np.empty((n_freqs, T, n_ch), dtype=np.complex64)
 
-    # Inverse FFT all at once
-    coeffs = torch.fft.ifft(XW, dim=1)
+    for start in range(0, n_freqs, chunk):
+        stop = min(start + chunk, n_freqs)
+        f_chunk = freqs_t[start:stop]      # (chunk,)
+        s_chunk = sigma_f[start:stop]      # (chunk,)
 
-    return coeffs.cpu().numpy().astype(np.complex64)
+        # Per-chunk Gaussian filters in freq domain
+        W = torch.exp(-0.5 * ((f_fft[None, :] - f_chunk[:, None])
+                                / s_chunk[:, None]) ** 2)
+        XW = X[None, :, :] * W[:, :, None]
+        coeffs_chunk = torch.fft.ifft(XW, dim=1)
+        coeffs_out[start:stop] = coeffs_chunk.cpu().numpy().astype(np.complex64)
+        del W, XW, coeffs_chunk
+        torch.cuda.empty_cache()
+
+    del X, x, f_fft, freqs_t, sigma_f
+    torch.cuda.empty_cache()
+
+    return coeffs_out
 
 
 def _band_power(power, freqs, f_lo, f_hi):

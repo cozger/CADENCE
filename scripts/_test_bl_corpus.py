@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pyxdf
 from joblib import Parallel, delayed
 from cadence.significance.bl_coupling import bl_two_stage_coupling
-from cadence.data.xdf_loader import _detect_roles
+from cadence.ingest.roles import roles_dict_from_session as _detect_roles
 
 FS = 30.0
 RAW_DIR = r'C:\Users\optilab\Desktop\CADENCE\raw sessions'

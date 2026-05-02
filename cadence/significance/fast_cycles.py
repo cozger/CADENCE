@@ -1,9 +1,11 @@
-"""Fast GPU-accelerated theta cycle analysis for inter-brain coupling.
+"""Fast GPU-accelerated cycle analysis for inter-brain coupling.
 
 Replaces bycycle with a lean torch-native implementation that processes
 all channels simultaneously on GPU.  Extracts per-cycle: amplitude,
-period, rise-decay symmetry, burst status.  Cross-correlates features
-between participants with vectorized surrogates.
+period, rise-decay symmetry, burst status, and instantaneous phase.
+Cross-correlates features between participants with vectorized surrogates.
+Cycle-PLV computes phase-locking from cycle-derived phase landmarks,
+avoiding Hilbert artifacts and naturally gating to real oscillatory cycles.
 
 Typical speedup: 50-100× over bycycle (seconds vs minutes).
 """
@@ -11,6 +13,8 @@ Typical speedup: 50-100× over bycycle (seconds vs minutes).
 import numpy as np
 import torch
 from scipy.signal import find_peaks
+
+from cadence.io.resources import limit_blas_threads, pick_n_jobs
 
 
 def _fft_bandpass(sigs, fs, band, device):
@@ -96,7 +100,16 @@ def extract_cycle_features(sig_raw, sig_filt, fs, band):
     rise_samp = peaks - troughs[:-1]
     time_rdsym = rise_samp.astype(np.float32) / periods
 
-    # ── Burst detection (simplified bycycle criteria) ────────────────────
+    # ── Burst detection ───────────────────────────────────────────────────
+    # Band-specific criteria. Beta (>13 Hz) uses tighter thresholds because
+    # short cycles (~10 samples) make monotonicity non-selective at 0.7.
+    # Theta/alpha keep permissive thresholds — surrogate z-scoring
+    # normalizes base rate for relative comparisons.
+    # See docs/burst_detection_literature.md for literature review.
+    is_beta = band[0] >= 13.0
+    mono_thresh = 0.8 if is_beta else 0.7   # Cole & Voytek 2019 default for beta
+    min_consec = 3 if is_beta else 2         # Sherman 2016: beta bursts ~3 cycles
+
     # Amplitude: above 25th percentile
     amp_ok = volt_amp > np.percentile(volt_amp, 25)
 
@@ -135,27 +148,80 @@ def extract_cycle_features(sig_raw, sig_filt, fs, band):
     mono_decay = d_neg.sum(axis=1) / np.maximum(d_mask.sum(axis=1), 1)
 
     mono = (mono_rise + mono_decay) / 2
-    mono_ok = mono > 0.7
+    mono_ok = mono > mono_thresh
 
     is_burst = amp_ok & period_ok & in_band & mono_ok
 
-    # Require min 3 consecutive burst cycles (vectorized)
-    is_burst[0] = False
-    is_burst[-1] = False
-    # Remove isolated bursts: need neighbor on at least one side
-    isolated = is_burst.copy()
-    isolated[1:] &= ~is_burst[:-1]   # no left neighbor
-    isolated[:-1] &= ~is_burst[1:]   # no right neighbor
-    is_burst[isolated] = False
+    # Consecutive cycle filter (band-specific minimum)
+    if min_consec >= 3:
+        # Remove runs shorter than min_consec cycles
+        padded = np.concatenate([[False], is_burst, [False]])
+        starts = np.where(~padded[:-1] & padded[1:])[0]
+        ends = np.where(padded[:-1] & ~padded[1:])[0]
+        is_burst[:] = False
+        for s, e in zip(starts, ends):
+            if e - s >= min_consec:
+                is_burst[s:e] = True
+    else:
+        # Original: remove isolated cycles (need >=1 neighbor)
+        is_burst[0] = False
+        is_burst[-1] = False
+        isolated = is_burst.copy()
+        isolated[1:] &= ~is_burst[:-1]
+        isolated[:-1] &= ~is_burst[1:]
+        is_burst[isolated] = False
 
     return {
         'peak_sample': peaks,
+        'trough_sample': troughs,
         'period': periods,
         'volt_amp': volt_amp.astype(np.float32),
         'time_rdsym': time_rdsym,
         'is_burst': is_burst.astype(np.float32),
         'n_cycles': n_cycles,
     }
+
+
+def _reconstruct_cycle_phase(troughs, peaks, n_cycles, fs, t_grid):
+    """Reconstruct piecewise-linear phase from cycle landmarks, resampled to grid.
+
+    Phase convention (uniform, matching Hilbert for sinusoids):
+      trough[k]  → 2πk        (cycle start)
+      peak[k]    → 2πk + π    (cycle midpoint)
+      trough[k+1]→ 2π(k+1)   (cycle end)
+
+    Between landmarks, phase is linearly interpolated.  This means phase
+    velocity is faster during the shorter half-cycle (rise or decay),
+    which correctly captures waveform asymmetry.
+
+    Args:
+        troughs: (n_cycles+1,) sample indices of troughs.
+        peaks: (n_cycles,) sample indices of peaks.
+        n_cycles: number of complete cycles.
+        fs: sampling rate.
+        t_grid: (n_grid,) time points to interpolate to.
+
+    Returns:
+        phase_grid: (n_grid,) unwrapped phase at grid points.
+            exp(i * (phase_P1 - phase_P2)) wraps automatically for PLV.
+    """
+    # Build interleaved landmark arrays: trough, peak, trough, peak, ...
+    n_landmarks = 2 * n_cycles + 1
+    t_landmarks = np.empty(n_landmarks, dtype=np.float64)
+    phi_landmarks = np.empty(n_landmarks, dtype=np.float64)
+
+    for k in range(n_cycles):
+        t_landmarks[2 * k] = troughs[k] / fs
+        phi_landmarks[2 * k] = 2.0 * np.pi * k
+        t_landmarks[2 * k + 1] = peaks[k] / fs
+        phi_landmarks[2 * k + 1] = 2.0 * np.pi * k + np.pi
+    # Final trough
+    t_landmarks[2 * n_cycles] = troughs[n_cycles] / fs
+    phi_landmarks[2 * n_cycles] = 2.0 * np.pi * n_cycles
+
+    # Interpolate to regular grid (unwrapped — exp(i*phi) wraps automatically)
+    phase_grid = np.interp(t_grid, t_landmarks, phi_landmarks).astype(np.float32)
+    return phase_grid
 
 
 def analyze_interbrain_cycles(p1_eeg, p2_eeg, fs, band=(4.0, 8.0),
@@ -203,6 +269,9 @@ def analyze_interbrain_cycles(p1_eeg, p2_eeg, fs, band=(4.0, 8.0),
     feat_names = ['volt_amp', 'period', 'time_rdsym', 'is_burst']
     p1_feats = {f: np.zeros((C, n_grid), dtype=np.float32) for f in feat_names}
     p2_feats = {f: np.zeros((C, n_grid), dtype=np.float32) for f in feat_names}
+    # Phase grids for cycle-PLV
+    p1_phase = np.zeros((C, n_grid), dtype=np.float32)
+    p2_phase = np.zeros((C, n_grid), dtype=np.float32)
     p1_burst_frac = np.zeros(C)
     p2_burst_frac = np.zeros(C)
     valid_ch = np.zeros(C, dtype=bool)
@@ -226,6 +295,14 @@ def analyze_interbrain_cycles(p1_eeg, p2_eeg, fs, band=(4.0, 8.0),
         for f in feat_names:
             p1_feats[f][ch] = np.interp(t_grid, t1, cyc1[f])
             p2_feats[f][ch] = np.interp(t_grid, t2, cyc2[f])
+
+        # Reconstruct cycle-derived phase
+        p1_phase[ch] = _reconstruct_cycle_phase(
+            cyc1['trough_sample'], cyc1['peak_sample'],
+            cyc1['n_cycles'], fs, t_grid)
+        p2_phase[ch] = _reconstruct_cycle_phase(
+            cyc2['trough_sample'], cyc2['peak_sample'],
+            cyc2['n_cycles'], fs, t_grid)
 
     n_valid = int(valid_ch.sum())
     if n_valid == 0:
@@ -316,6 +393,37 @@ def analyze_interbrain_cycles(p1_eeg, p2_eeg, fs, band=(4.0, 8.0),
                           for i in range(n_valid)},
     }
 
+    # ── Cycle-PLV (phase-locking from cycle-derived phase) ────────────
+    phi1 = torch.as_tensor(p1_phase[valid_idx],
+                            dtype=torch.float32, device=device)  # (C_valid, n_grid)
+    phi2 = torch.as_tensor(p2_phase[valid_idx],
+                            dtype=torch.float32, device=device)
+    delta = phi1 - phi2
+    plv_real = (torch.cos(delta).mean(dim=1) ** 2 +
+                torch.sin(delta).mean(dim=1) ** 2).sqrt()  # (C_valid,)
+
+    plv_surr = torch.zeros(K, n_valid, device=device)
+    for k in range(K):
+        phi1_s = torch.roll(phi1, int(shifts[k]), dims=1)
+        d_s = phi1_s - phi2
+        plv_surr[k] = (torch.cos(d_s).mean(dim=1) ** 2 +
+                        torch.sin(d_s).mean(dim=1) ** 2).sqrt()
+
+    sm_p = plv_surr.mean(dim=0)
+    ss_p = plv_surr.std(dim=0).clamp(min=1e-10)
+    z_plv = ((plv_real - sm_p) / ss_p).cpu().numpy()
+    plv_vals = plv_real.cpu().numpy()
+
+    pooled_plv_z = float(z_plv.mean() * np.sqrt(n_valid))
+    results['cycle_plv'] = {
+        'pooled_z': pooled_plv_z,
+        'mean_plv': float(plv_vals.mean()),
+        'per_channel_z': {int(valid_idx[i]): float(z_plv[i])
+                          for i in range(n_valid)},
+        'per_channel_plv': {int(valid_idx[i]): float(plv_vals[i])
+                            for i in range(n_valid)},
+    }
+
     return results
 
 
@@ -384,13 +492,19 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
     feat_names = ['volt_amp', 'period', 'time_rdsym', 'is_burst']
 
     def _extract_one(sig_raw_ch, sig_filt_ch, brange):
-        """Extract + resample for one channel. Returns (feats_dict, bf) or None."""
-        cyc = extract_cycle_features(sig_raw_ch, sig_filt_ch, fs, brange)
-        if cyc is None or cyc['n_cycles'] < 10:
-            return None
-        tc = cyc['peak_sample'] / fs
-        resampled = {f: np.interp(t_grid, tc, cyc[f]) for f in feat_names}
-        return resampled, float(cyc['is_burst'].mean())
+        """Extract + resample for one channel. Returns (feats_dict, bf, phase) or None."""
+        # Resource-discipline guard: pin BLAS threads inside every joblib worker
+        # to prevent the OOM mechanism documented in docs/resource_audit_2026_05_01.md
+        with limit_blas_threads(1):
+            cyc = extract_cycle_features(sig_raw_ch, sig_filt_ch, fs, brange)
+            if cyc is None or cyc['n_cycles'] < 10:
+                return None
+            tc = cyc['peak_sample'] / fs
+            resampled = {f: np.interp(t_grid, tc, cyc[f]) for f in feat_names}
+            phase = _reconstruct_cycle_phase(
+                cyc['trough_sample'], cyc['peak_sample'],
+                cyc['n_cycles'], fs, t_grid)
+            return resampled, float(cyc['is_burst'].mean()), phase
 
     # Build all (band, participant, channel) jobs
     from joblib import Parallel, delayed
@@ -405,7 +519,11 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
             jobs.append(delayed(_extract_one)(p2_eeg[:, ch], p2_filt[:, ch], brange))
             job_keys.append((bname, 'p2', ch))
 
-    results_list = Parallel(n_jobs=-1, prefer='threads')(jobs)
+    # Adaptive cap (extract_cycle_features peaks ~50-80 MB per worker on a
+    # 30-min EEG channel; 0.1 GB is the conservative budget per audit P0.1).
+    n_jobs = pick_n_jobs(per_worker_ram_gb=0.1, requested=-1,
+                          max_jobs_hard_cap=len(jobs))
+    results_list = Parallel(n_jobs=n_jobs, prefer='threads')(jobs)
 
     # Unpack into band_data structure
     band_data = {}
@@ -415,9 +533,12 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
         valid = np.zeros(C, dtype=bool)
         p1_bf = np.zeros(C)
         p2_bf = np.zeros(C)
+        p1_ph = np.zeros((C, n_grid), dtype=np.float32)
+        p2_ph = np.zeros((C, n_grid), dtype=np.float32)
         band_data[bname] = {
             'p1': p1_f, 'p2': p2_f, 'valid': valid,
             'p1_bf': p1_bf, 'p2_bf': p2_bf,
+            'p1_phase': p1_ph, 'p2_phase': p2_ph,
         }
 
     for idx, key in enumerate(job_keys):
@@ -425,14 +546,16 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
         res = results_list[idx]
         if res is None:
             continue
-        resampled, bf = res
+        resampled, bf, phase = res
         bd = band_data[bname]
         for f in feat_names:
             bd[participant][f][ch] = resampled[f]
         if participant == 'p1':
             bd['p1_bf'][ch] = bf
+            bd['p1_phase'][ch] = phase
         else:
             bd['p2_bf'][ch] = bf
+            bd['p2_phase'][ch] = phase
 
     # Mark channels valid only if BOTH participants have data
     for bname in band_names:
@@ -468,6 +591,8 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
                              'per_channel_z': {}, 'per_channel_r': {}}
             result['burst_cooc'] = {'pooled_z': 0, 'n_channels_with_bursts': 0,
                                     'per_channel_z': {}}
+            result['cycle_plv'] = {'pooled_z': 0, 'mean_plv': 0,
+                                   'per_channel_z': {}, 'per_channel_plv': {}}
             per_band[bname] = result
             continue
 
@@ -525,7 +650,41 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
                               for i in range(n_valid)},
         }
 
+        # Cycle-PLV
+        phi1 = torch.as_tensor(bd['p1_phase'][valid_idx],
+                                dtype=torch.float32, device=device)
+        phi2 = torch.as_tensor(bd['p2_phase'][valid_idx],
+                                dtype=torch.float32, device=device)
+        delta = phi1 - phi2
+        plv_real = (torch.cos(delta).mean(dim=1) ** 2 +
+                    torch.sin(delta).mean(dim=1) ** 2).sqrt()
+
+        plv_surr = torch.zeros(K, n_valid, device=device)
+        for k in range(K):
+            phi1_s = torch.roll(phi1, int(shifts[k]), dims=1)
+            d_s = phi1_s - phi2
+            plv_surr[k] = (torch.cos(d_s).mean(dim=1) ** 2 +
+                            torch.sin(d_s).mean(dim=1) ** 2).sqrt()
+
+        sm_p = plv_surr.mean(dim=0)
+        ss_p = plv_surr.std(dim=0).clamp(min=1e-10)
+        z_plv = ((plv_real - sm_p) / ss_p).cpu().numpy()
+        plv_vals = plv_real.cpu().numpy()
+
+        result['cycle_plv'] = {
+            'pooled_z': float(z_plv.mean() * np.sqrt(n_valid)),
+            'mean_plv': float(plv_vals.mean()),
+            'per_channel_z': {int(valid_idx[i]): float(z_plv[i])
+                              for i in range(n_valid)},
+            'per_channel_plv': {int(valid_idx[i]): float(plv_vals[i])
+                                for i in range(n_valid)},
+        }
+
         per_band[bname] = result
+        # P2.1 — release per-band GPU tensors before next band starts so the
+        # peak VRAM stays bounded across theta/alpha/beta accumulation.
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
 
     # ── Stouffer combination across bands ────────────────────────────────
     combined = {}
@@ -545,4 +704,458 @@ def analyze_interbrain_cycles_multiband(p1_eeg, p2_eeg, fs,
                        for b in band_names},
     }
 
+    plv_zs = [per_band[b].get('cycle_plv', {}).get('pooled_z', 0) for b in band_names]
+    plv_vals = [per_band[b].get('cycle_plv', {}).get('mean_plv', 0) for b in band_names]
+    combined['cycle_plv'] = {
+        'stouffer_z': float(np.mean(plv_zs) * np.sqrt(n_bands)),
+        'mean_plv': float(np.mean(plv_vals)),
+        'per_band_z': {b: per_band[b].get('cycle_plv', {}).get('pooled_z', 0)
+                       for b in band_names},
+    }
+
     return {'per_band': per_band, 'combined': combined}
+
+
+# ── GPU-batched cross-product surrogates ──────────────────────────────
+
+def _gpu_cross_product_surrogates(p1v, p2v, smooth_samples, n_surrogates, rng, device):
+    """GPU-batched cross-product z-score for pre-computed volt_amp arrays.
+
+    Args:
+        p1v, p2v: (C_v, N) z-scored volt_amp arrays.
+        smooth_samples: Gaussian sigma in samples.
+        n_surrogates: number of circular-shift surrogates.
+        rng: numpy random generator.
+        device: torch device.
+
+    Returns:
+        z: (N,) z-scored cross-product timecourse.
+    """
+    C_v, N = p1v.shape
+    shifts = rng.integers(int(0.1 * N), int(0.9 * N), size=n_surrogates)
+
+    use_gpu = (device is not None and
+               str(device) != 'cpu' and torch.cuda.is_available())
+
+    if use_gpu:
+        p1_t = torch.as_tensor(p1v, dtype=torch.float32, device=device)  # (C_v, N)
+        p2_t = torch.as_tensor(p2v, dtype=torch.float32, device=device)
+
+        # Cross-product: mean across channels
+        cp_t = (p1_t * p2_t).mean(dim=0)  # (N,)
+
+        # Gaussian smoothing kernel
+        if smooth_samples > 0:
+            ks = int(6 * smooth_samples) | 1
+            t_k = torch.arange(ks, device=device, dtype=torch.float32) - ks // 2
+            kernel = torch.exp(-0.5 * (t_k / smooth_samples) ** 2)
+            kernel = (kernel / kernel.sum()).view(1, 1, -1)
+            pad = ks // 2
+
+            def _sm(x):
+                if x.dim() == 1:
+                    return torch.nn.functional.conv1d(
+                        x.view(1, 1, -1), kernel, padding=pad).view(-1)
+                return torch.nn.functional.conv1d(
+                    x.unsqueeze(1), kernel, padding=pad).squeeze(1)
+
+            cp_t = _sm(cp_t)
+
+        # Batched surrogates via index gathering
+        shifts_t = torch.as_tensor(shifts, dtype=torch.long, device=device)
+        base_idx = torch.arange(N, device=device)
+        shifted_idx = (base_idx[None, :] - shifts_t[:, None]) % N  # (n_surr, N)
+
+        # p1_t is (C_v, N), index along dim=1 for each surrogate
+        # p1_t[:, shifted_idx] -> (C_v, n_surr, N)
+        surr = (p1_t[:, shifted_idx] * p2_t[:, None, :]).mean(dim=0)  # (n_surr, N)
+
+        if smooth_samples > 0:
+            surr = _sm(surr)
+
+        sm = surr.mean(dim=0)
+        ss = torch.clamp(surr.std(dim=0), min=1e-10)
+        z = ((cp_t - sm) / ss).cpu().numpy()
+    else:
+        # CPU fallback
+        from scipy.ndimage import gaussian_filter1d as gf1d
+        cp = (p1v * p2v).mean(axis=0)
+        if smooth_samples > 0:
+            cp = gf1d(cp, sigma=smooth_samples)
+
+        surr = np.zeros((n_surrogates, N))
+        for k in range(n_surrogates):
+            s = (np.roll(p1v, int(shifts[k]), axis=1) * p2v).mean(axis=0)
+            if smooth_samples > 0:
+                s = gf1d(s, sigma=smooth_samples)
+            surr[k] = s
+
+        sm = surr.mean(axis=0)
+        ss = np.maximum(surr.std(axis=0), 1e-10)
+        z = (cp - sm) / ss
+
+    return z
+
+
+def extract_all_volt_amp(eeg, fs, bands=None, feature_rate=2.0, device=None):
+    """Pre-compute per-band per-channel volt_amp timecourses for one participant.
+
+    Returns dict of {band_name: {'va': (C_v, N), 'valid': list_of_ch_indices}}.
+    Used by pseudo-dyad FPR to avoid redundant cycle extraction.
+    """
+    if bands is None:
+        bands = EEG_BANDS
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    T, C = eeg.shape
+    dur = T / fs
+    t_grid = np.arange(0, dur, 1.0 / feature_rate)
+    N = len(t_grid)
+
+    # joblib (repo convention per feedback_joblib_loky) replaces the legacy
+    # ThreadPoolExecutor here so the resource discipline is consistent.
+    from joblib import Parallel, delayed
+
+    # GPU bandpass all bands
+    eeg_t = torch.as_tensor(eeg.T, dtype=torch.float32, device=device)  # (C, T)
+    band_filt = {}
+    for band_name, (lo, hi) in bands.items():
+        filt = _fft_bandpass(eeg_t, fs, (lo, hi), device).cpu().numpy().T  # (T, C)
+        band_filt[band_name] = filt
+        # P2.1 — release per-band GPU tensors before next band starts.
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+    del eeg_t
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    # Parallel cycle extraction across all bands × channels
+    def _extract(band_name, ch):
+        # BLAS pin per audit P0.2 — extract_cycle_features uses np.percentile,
+        # np.diff, scipy.find_peaks; without pinning each thread spawns ~16
+        # BLAS threads.
+        with limit_blas_threads(1):
+            filt = band_filt[band_name]
+            cyc = extract_cycle_features(eeg[:, ch], filt[:, ch], fs, bands[band_name])
+            if cyc is not None and cyc['n_cycles'] >= 10:
+                return (band_name, ch, np.interp(t_grid, cyc['peak_sample'] / fs, cyc['volt_amp']))
+            return None
+
+    tasks = [(bn, ch) for bn in bands for ch in range(C)]
+    n_jobs = pick_n_jobs(per_worker_ram_gb=0.15, requested=8,
+                          max_jobs_hard_cap=len(tasks))
+    raw_results = Parallel(n_jobs=n_jobs, prefer='threads')(
+        delayed(_extract)(bn, ch) for bn, ch in tasks)
+    ch_results = {}  # {band: {ch: va}}
+    for r in raw_results:
+        if r is not None:
+            bn, ch, va = r
+            ch_results.setdefault(bn, {})[ch] = va
+
+    result = {}
+    for band_name in bands:
+        ch_va = ch_results.get(band_name, {})
+        valid = sorted(ch_va.keys())
+        if len(valid) >= 3:
+            va_valid = np.stack([ch_va[ch] for ch in valid])
+            for c in range(len(valid)):
+                mu, sd = va_valid[c].mean(), max(va_valid[c].std(), 1e-8)
+                va_valid[c] = (va_valid[c] - mu) / sd
+            result[band_name] = {'va': va_valid, 'valid': valid}
+        else:
+            result[band_name] = {'va': np.zeros((0, N), dtype=np.float32), 'valid': []}
+
+    result['times'] = t_grid
+    result['feature_rate'] = feature_rate
+    return result
+
+
+def eeg_coupling_from_precomputed(p1_precomp, p2_precomp,
+                                   smooth_samples=3, n_surrogates=100,
+                                   seed=None, device=None):
+    """Compute EEG coupling from pre-computed volt_amp (skips cycle extraction).
+
+    Args:
+        p1_precomp, p2_precomp: dicts from extract_all_volt_amp().
+        smooth_samples, n_surrogates, seed: surrogate parameters.
+        device: torch device for GPU surrogates.
+
+    Returns:
+        Same structure as eeg_coupling_timecourse().
+    """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    rng = np.random.default_rng(seed)
+    t_grid = p1_precomp['times']
+    N = len(t_grid)
+    bands = {k: v for k, v in p1_precomp.items()
+             if k not in ('times', 'feature_rate') and isinstance(v, dict)}
+
+    band_results = {}
+    for band_name, p1_bd in bands.items():
+        p2_bd = p2_precomp.get(band_name, {'va': np.zeros((0, N)), 'valid': []})
+        p1v = p1_bd['va']
+        p2v = p2_bd['va']
+
+        # Trim to min channels AND min time (pseudo-dyad sessions differ in length)
+        n_ch_min = min(p1v.shape[0], p2v.shape[0])
+        n_t_min = min(p1v.shape[1], p2v.shape[1])
+        if n_ch_min < 3 or n_t_min < 20:
+            band_results[band_name] = {'z': np.zeros(N), 'mask': np.zeros(N, dtype=bool),
+                                        'mean_z': 0.0, 'n_valid': 0}
+            continue
+
+        p1v = p1v[:n_ch_min, :n_t_min]
+        p2v = p2v[:n_ch_min, :n_t_min]
+        n_min = n_ch_min
+
+        z = _gpu_cross_product_surrogates(
+            p1v, p2v, smooth_samples, n_surrogates, rng, device)
+        mask = z > 2.0
+
+        band_results[band_name] = {
+            'z': z, 'mask': mask, 'mean_z': float(z.mean()),
+            'n_valid': n_min,
+        }
+        # P2.1 — release per-band GPU tensors before next band starts.
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+
+    # Combined: Stouffer across bands
+    band_zs = [band_results[b]['z'] for b in bands if band_results[b]['n_valid'] > 0]
+    n_bands_valid = len(band_zs)
+    if n_bands_valid > 0:
+        combined_z = np.mean(band_zs, axis=0) * np.sqrt(n_bands_valid)
+        combined_mask = combined_z > 2.0
+    else:
+        combined_z = np.zeros(N)
+        combined_mask = np.zeros(N, dtype=bool)
+
+    return {
+        'times': t_grid,
+        'feature_rate': p1_precomp.get('feature_rate', 2.0),
+        'smooth_samples': smooth_samples,
+        'per_band': band_results,
+        'combined': {
+            'z': combined_z, 'mask': combined_mask,
+            'mean_z': float(combined_z.mean()),
+            'coupling_fraction': float(combined_mask.mean()),
+        },
+    }
+
+
+# ── Burst grid extraction (shared by coupling + coincidence) ─────────
+
+def extract_burst_grids(p1_eeg, p2_eeg, fs, t_grid, bands=None, device=None):
+    """Extract per-band per-channel burst and volt_amp grids for both participants.
+
+    GPU bandpass + threaded cycle extraction.  Resamples is_burst and volt_amp
+    to ``t_grid`` (in EEG-local seconds, i.e. 0-based).
+
+    Args:
+        p1_eeg, p2_eeg: (T, C) numpy arrays, avg-ref + z-scored.
+        fs: EEG sampling rate (Hz).
+        t_grid: (N,) target time grid in seconds (EEG-local, 0-based).
+        bands: dict of {name: (lo, hi)} or None for default (theta/alpha/beta).
+        device: torch device.
+
+    Returns:
+        dict of {band_name: {
+            'p1_burst': (C_valid, N) bool ndarray,
+            'p2_burst': (C_valid, N) bool ndarray,
+            'p1_va':    (C_valid, N) float32 ndarray,
+            'p2_va':    (C_valid, N) float32 ndarray,
+            'valid_channels': list of int (channel indices valid for both),
+        }}
+    """
+    if bands is None:
+        bands = EEG_BANDS
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # joblib (repo convention) replaces ThreadPoolExecutor here. The audit
+    # P0.2 noted this site is the V11 scaffold's hottest CPU stage, called
+    # 4-wide from _run_scaffold_v11.py --all; without resource discipline the
+    # compounded thread count was ~4 × 8 × 16 BLAS = 512 — the OOM trigger.
+    from joblib import Parallel, delayed
+
+    T, C = p1_eeg.shape
+    N = len(t_grid)
+
+    # GPU bandpass ALL bands at once
+    both = np.vstack([p1_eeg.T, p2_eeg.T])  # (2C, T)
+    both_t = torch.as_tensor(both, dtype=torch.float32, device=device)
+
+    band_filtered = {}
+    for band_name, (lo, hi) in bands.items():
+        filt = _fft_bandpass(both_t, fs, (lo, hi), device).cpu().numpy()
+        band_filtered[band_name] = (filt[:C].T, filt[C:].T)  # (T, C) each
+        # P2.1 — release per-band GPU tensors before next band starts.
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+    del both_t
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+
+    # Parallel cycle extraction: 3 bands × 14 channels × 2 participants = 84 tasks
+    def _extract_one(band_name, ch, person_eeg, person_filt, band, person):
+        with limit_blas_threads(1):
+            cyc = extract_cycle_features(person_eeg[:, ch], person_filt[:, ch], fs, band)
+            if cyc is not None and cyc['n_cycles'] >= 10:
+                tc = cyc['peak_sample'] / fs
+                va = np.interp(t_grid, tc, cyc['volt_amp'])
+                burst = np.interp(t_grid, tc, cyc['is_burst']) > 0.5
+                return (person, band_name, ch, va, burst)
+            return (person, None, None, None, None)
+
+    tasks = []
+    for band_name, (lo, hi) in bands.items():
+        p1_filt, p2_filt = band_filtered[band_name]
+        for ch in range(C):
+            tasks.append((band_name, ch, p1_eeg, p1_filt, (lo, hi), 'p1'))
+            tasks.append((band_name, ch, p2_eeg, p2_filt, (lo, hi), 'p2'))
+
+    n_jobs = pick_n_jobs(per_worker_ram_gb=0.15, requested=8,
+                          max_jobs_hard_cap=len(tasks))
+    raw = Parallel(n_jobs=n_jobs, prefer='threads')(
+        delayed(_extract_one)(band_name, ch, eeg, filt, band, person)
+        for band_name, ch, eeg, filt, band, person in tasks)
+
+    # {person: {band: {ch: (va, burst)}}}
+    extracted = {'p1': {}, 'p2': {}}
+    for person, bn, ch, va, burst in raw:
+        if bn is not None:
+            extracted[person].setdefault(bn, {})[ch] = (va, burst)
+
+    # Assemble per-band grids (only channels valid for BOTH participants)
+    grids = {}
+    for band_name in bands:
+        p1_ch = extracted['p1'].get(band_name, {})
+        p2_ch = extracted['p2'].get(band_name, {})
+        valid = sorted(set(p1_ch.keys()) & set(p2_ch.keys()))
+
+        if not valid:
+            grids[band_name] = {
+                'p1_burst': np.zeros((0, N), dtype=bool),
+                'p2_burst': np.zeros((0, N), dtype=bool),
+                'p1_va': np.zeros((0, N), dtype=np.float32),
+                'p2_va': np.zeros((0, N), dtype=np.float32),
+                'valid_channels': [],
+            }
+            continue
+
+        grids[band_name] = {
+            'p1_burst': np.stack([p1_ch[ch][1] for ch in valid]),
+            'p2_burst': np.stack([p2_ch[ch][1] for ch in valid]),
+            'p1_va': np.stack([p1_ch[ch][0] for ch in valid]).astype(np.float32),
+            'p2_va': np.stack([p2_ch[ch][0] for ch in valid]).astype(np.float32),
+            'valid_channels': valid,
+        }
+
+    return grids
+
+
+# ── Time-resolved coupling ────────────────────────────────────────────
+
+def eeg_coupling_timecourse(p1_eeg, p2_eeg, fs, bands=None,
+                             smooth_samples=3, n_surrogates=100,
+                             feature_rate=2.0, seed=42, device=None):
+    """Time-resolved inter-brain coupling from cycle volt_amp timecourses.
+
+    Extracts per-cycle volt_amp, resamples to feature_rate, computes
+    cross-product with light smoothing and surrogate-calibrated z-scores.
+
+    Args:
+        p1_eeg, p2_eeg: (T, C) numpy arrays, avg-ref + z-scored.
+        fs: EEG sampling rate.
+        bands: dict of {name: (lo, hi)} or None for default.
+        smooth_samples: Gaussian sigma in samples at feature_rate.
+            3 samples at 2 Hz = 1.5s sigma ~ 3s resolution.
+        n_surrogates: circular-shift surrogates.
+        feature_rate: Hz for resampled feature timecourse.
+        seed: random seed.
+        device: torch device.
+
+    Returns:
+        dict with:
+            times: (N,) seconds.
+            per_band: {band: {z: (N,), mask: (N,), mean_z: float}}
+            combined: {z: (N,), mask: (N,), mean_z: float}
+    """
+    if bands is None:
+        bands = EEG_BANDS
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    T, C = p1_eeg.shape
+    dur = T / fs
+    t_grid = np.arange(0, dur, 1.0 / feature_rate)
+    N = len(t_grid)
+    rng = np.random.default_rng(seed)
+
+    # Extract burst grids + volt_amp via shared function
+    grids = extract_burst_grids(p1_eeg, p2_eeg, fs, t_grid, bands, device)
+
+    band_results = {}
+    for band_name in bands:
+        bg = grids[band_name]
+        valid = bg['valid_channels']
+
+        if len(valid) < 3:
+            band_results[band_name] = {'z': np.zeros(N), 'mask': np.zeros(N, dtype=bool),
+                                        'mean_z': 0.0, 'n_valid': 0}
+            continue
+
+        p1v = bg['p1_va'].copy()
+        p2v = bg['p2_va'].copy()
+        C_v = len(valid)
+
+        # Z-score per channel
+        for c in range(C_v):
+            for arr in [p1v, p2v]:
+                mu, sd = arr[c].mean(), max(arr[c].std(), 1e-8)
+                arr[c] = (arr[c] - mu) / sd
+
+        # Cross-product + surrogates (GPU-batched)
+        z = _gpu_cross_product_surrogates(
+            p1v, p2v, smooth_samples, n_surrogates, rng, device)
+
+        # Significance mask: z > 2 (one-tailed)
+        mask = z > 2.0
+
+        band_results[band_name] = {
+            'z': z,
+            'mask': mask,
+            'mean_z': float(z.mean()),
+            'n_valid': C_v,
+            'per_channel_valid': valid,
+        }
+        # P2.1 — release per-band GPU tensors before next band starts.
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
+
+    # Combined: Stouffer across bands
+    band_zs = [band_results[b]['z'] for b in bands if band_results[b]['n_valid'] > 0]
+    n_bands_valid = len(band_zs)
+
+    if n_bands_valid > 0:
+        combined_z = np.mean(band_zs, axis=0) * np.sqrt(n_bands_valid)
+        combined_mask = combined_z > 2.0
+    else:
+        combined_z = np.zeros(N)
+        combined_mask = np.zeros(N, dtype=bool)
+
+    return {
+        'times': t_grid,
+        'feature_rate': feature_rate,
+        'smooth_samples': smooth_samples,
+        'per_band': band_results,
+        'combined': {
+            'z': combined_z,
+            'mask': combined_mask,
+            'mean_z': float(combined_z.mean()),
+            'coupling_fraction': float(combined_mask.mean()),
+        },
+    }

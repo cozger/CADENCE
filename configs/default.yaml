@@ -145,6 +145,7 @@ visualization:
 sessions: null  # null = all discovered sessions
 excluded_sessions:
   - y26_022728
+  - y_03_03122026
 
 # ---------------------------------------------------------------------------
 # V2 Pipeline Configuration

@@ -124,7 +124,7 @@ def run_model_comparison(sessions: list, output_dir: str) -> dict:
         if abs(gmm4_mean - hmm4_mean) < sems.get('GMM_K4', 0) + hmm4_sem:
             interp_lines.append('GMM K=4 competitive with HMM K=4 — temporal dynamics not contributing.')
 
-    with open(os.path.join(output_dir, 'module4_report.md'), 'w') as f:
+    with open(os.path.join(output_dir, 'module4_report.md'), 'w', encoding='utf-8') as f:
         f.write('# Module 4: Alternative-Model Baselines\n\n')
         f.write(means.to_string())
         f.write('\n\n**Interpretation:**\n')

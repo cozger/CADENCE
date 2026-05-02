@@ -158,8 +158,27 @@ for sess_idx, (sess_name, session) in enumerate(sessions):
                 for band in ['theta', 'alpha', 'beta']:
                     bz = r_eeg['per_band'][band]['volt_amp']['pooled_z']
                     result[f'eeg_{band}_z'] = round(bz, 2)
-                cz = r_eeg['combined']['volt_amp']['stouffer_z']
-                result['eeg_combined_z'] = round(cz, 2)
+                    # All cycle features per band
+                    for feat in ['volt_amp', 'period', 'time_rdsym']:
+                        fz = r_eeg['per_band'][band][feat]['pooled_z']
+                        result[f'eeg_{band}_{feat}_z'] = round(fz, 2)
+                    bcooc = r_eeg['per_band'][band].get('burst_cooc', {})
+                    result[f'eeg_{band}_burst_z'] = round(
+                        bcooc.get('pooled_z', 0), 2)
+                    cplv = r_eeg['per_band'][band].get('cycle_plv', {})
+                    result[f'eeg_{band}_cplv_z'] = round(
+                        cplv.get('pooled_z', 0), 2)
+                # Combined Stouffer across bands
+                comb = r_eeg['combined']
+                result['eeg_combined_z'] = round(
+                    comb['volt_amp']['stouffer_z'], 2)
+                for feat in ['volt_amp', 'period', 'time_rdsym']:
+                    result[f'eeg_combined_{feat}_z'] = round(
+                        comb[feat]['stouffer_z'], 2)
+                result['eeg_combined_burst_z'] = round(
+                    comb.get('burst_cooc', {}).get('stouffer_z', 0), 2)
+                result['eeg_combined_cplv_z'] = round(
+                    comb.get('cycle_plv', {}).get('stouffer_z', 0), 2)
 
         # ── BL ───────────────────────────────────────────────────────
         if not args.eeg_only:
@@ -196,10 +215,10 @@ for sess_idx, (sess_name, session) in enumerate(sessions):
         # Print row
         eeg_str = ""
         if 'eeg_combined_z' in result:
-            eeg_str = (f"θ={result.get('eeg_theta_z',0):+.1f} "
-                       f"α={result.get('eeg_alpha_z',0):+.1f} "
-                       f"β={result.get('eeg_beta_z',0):+.1f} "
-                       f"C={result.get('eeg_combined_z',0):+.1f}")
+            eeg_str = (f"amp={result.get('eeg_combined_z',0):+.1f} "
+                       f"plv={result.get('eeg_combined_cplv_z',0):+.1f} "
+                       f"prd={result.get('eeg_combined_period_z',0):+.1f} "
+                       f"bst={result.get('eeg_combined_burst_z',0):+.1f}")
         bl_str = ""
         if f'bl_T_to_P_smile_p' in result:
             sp = result.get('bl_T_to_P_smile_p', 1)
@@ -216,9 +235,9 @@ with open(args.output, 'w') as f:
     json.dump(all_results, f, indent=2, default=str)
 print(f"\nResults saved to {args.output}")
 
-# ── Summary table ────────────────────────────────────────────────────────
+# ── Summary table: volt_amp (existing) ────────────────────────────────────
 print(f"\n\n{'='*90}")
-print(f"  CORPUS SUMMARY: EEG amplitude coupling (volt_amp pooled z)")
+print(f"  CORPUS SUMMARY: EEG volt_amp (amplitude co-modulation)")
 print(f"{'='*90}")
 print(f"  {'session':>20} {'condition':>15} {'dur':>5} "
       f"{'theta':>7} {'alpha':>7} {'beta':>7} {'combined':>9}")
@@ -231,8 +250,20 @@ for r in sorted(all_results, key=lambda x: (x['session'], x['condition'])):
           f"{r.get('eeg_theta_z',0):>+6.1f} {r.get('eeg_alpha_z',0):>+6.1f} "
           f"{r.get('eeg_beta_z',0):>+6.1f} {r.get('eeg_combined_z',0):>+8.1f}")
 
-# Per-condition averages
-print(f"\n  {'CONDITION AVERAGES':>20}")
+# ── Summary table: ALL features (condition averages) ──────────────────────
+ALL_FEATS = ['volt_amp', 'period', 'time_rdsym', 'burst', 'cplv']
+FEAT_LABELS = {'volt_amp': 'amp', 'period': 'prd', 'time_rdsym': 'sym',
+               'burst': 'bst', 'cplv': 'plv'}
+
+print(f"\n{'='*100}")
+print(f"  CONDITION AVERAGES: all features (combined Stouffer z)")
+print(f"{'='*100}")
+hdr = f"  {'condition':>15} {'n':>3}"
+for f in ALL_FEATS:
+    hdr += f" {FEAT_LABELS[f]:>7}"
+print(hdr)
+print(f"  {'-'*15} {'-'*3}" + f" {'-'*7}" * len(ALL_FEATS))
+
 cond_groups = {}
 for r in all_results:
     c = r['condition']
@@ -242,12 +273,12 @@ for r in all_results:
 for cond in sorted(cond_groups.keys()):
     rs = cond_groups[cond]
     n = len(rs)
-    tz = np.mean([r.get('eeg_theta_z', 0) for r in rs])
-    az = np.mean([r.get('eeg_alpha_z', 0) for r in rs])
-    bz = np.mean([r.get('eeg_beta_z', 0) for r in rs])
-    cz = np.mean([r.get('eeg_combined_z', 0) for r in rs])
-    print(f"  {'avg('+str(n)+')':>20} {cond:>15}       "
-          f"{tz:>+6.1f} {az:>+6.1f} {bz:>+6.1f} {cz:>+8.1f}")
+    row = f"  {cond:>15} {n:>3}"
+    for f in ALL_FEATS:
+        key = f'eeg_combined_{f}_z'
+        vals = [r.get(key, 0) for r in rs]
+        row += f" {np.mean(vals):>+6.1f}"
+    print(row)
 
 # BL summary
 if not args.eeg_only:

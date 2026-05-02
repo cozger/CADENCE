@@ -1385,22 +1385,80 @@ def slds_e_step(Y, U, obs_mask, params, cfg, iohmm):
     return gamma, xi, log_lik, x_sm, P_sm, Plag_sm
 
 
+@numba.njit(cache=True, fastmath=False, nogil=True)
+def _log_transitions_recurrent_numba(U, x, W, S, R, x0_mean):
+    """Numba kernel: recurrent log-transition matrix.
+
+    logits[t,j,k] = W[j,k] + S[j,k,:] @ u_t + R[j,k,:] @ x_{t-1}
+    then normalised to log-probabilities via per-row logsumexp.
+
+    Args:
+        U:      (T, D_in)  input covariates
+        x:      (T, D_lat) smoothed latent states
+        W:      (K, K)     baseline transition logits
+        S:      (K, K, D_in) input weights
+        R:      (K, K, D_lat) recurrent weights
+        x0_mean:(D_lat,)   prior mean for x at t=0
+
+    Returns:
+        log_trans: (T, K, K) normalised log-transition matrix
+    """
+    T = U.shape[0]
+    D_in = U.shape[1]
+    D_lat = R.shape[2]
+    K = W.shape[0]
+    log_trans = np.empty((T, K, K))
+    for t in range(T):
+        for j in range(K):
+            for k in range(K):
+                logit = W[j, k]
+                for d in range(D_in):
+                    logit += S[j, k, d] * U[t, d]
+                if t == 0:
+                    for d in range(D_lat):
+                        logit += R[j, k, d] * x0_mean[d]
+                else:
+                    for d in range(D_lat):
+                        logit += R[j, k, d] * x[t - 1, d]
+                log_trans[t, j, k] = logit
+        # softmax(axis=2): subtract max, log-sum-exp
+        for j in range(K):
+            mx = log_trans[t, j, 0]
+            for k in range(1, K):
+                if log_trans[t, j, k] > mx:
+                    mx = log_trans[t, j, k]
+            s = 0.0
+            for k in range(K):
+                s += np.exp(log_trans[t, j, k] - mx)
+            lse = mx + np.log(s)
+            for k in range(K):
+                log_trans[t, j, k] -= lse
+    return log_trans
+
+
+def _log_transitions_recurrent_ref(U, x, W, S, R, x0_mean):
+    """Numpy reference for the recurrent transition logits.
+
+    Tested-equivalent to `_log_transitions_recurrent_numba` to <1e-12.
+    Kept module-level so the validation script can import it.
+    """
+    T = U.shape[0]
+    logits = W[None] + np.einsum('td,jkd->tjk', U, S)
+    x_prev = np.empty((T, x.shape[1]))
+    x_prev[0] = x0_mean
+    x_prev[1:] = x[:-1]
+    logits += np.einsum('td,jkd->tjk', x_prev, R)
+    return logits - logsumexp(logits, axis=2, keepdims=True)
+
+
 def _log_transitions_recurrent(U, x, params, cfg):
-    """Log transitions with recurrent x_{t-1} -> z_t term.
+    """Public wrapper: dispatches to numba kernel.
 
     logits[t,j,k] = W[j,k] + S[j,k,:] @ u_t + R_recur[j,k,:] @ x_{t-1}
     """
-    T = U.shape[0]
-    K = cfg.K
-    logits = params.W_trans[None, :, :] + np.einsum('td,jkd->tjk', U, params.S_trans)
-
-    x_prev = np.empty((T, cfg.D_latent))
-    x_prev[0] = params.x0_mean
-    x_prev[1:] = x[:-1]
-    logits += np.einsum('td,jkd->tjk', x_prev, params.R_recur)
-
-    log_trans = logits - logsumexp(logits, axis=2, keepdims=True)
-    return log_trans
+    return _log_transitions_recurrent_numba(
+        U, x, params.W_trans, params.S_trans, params.R_recur, params.x0_mean
+    )
 
 
 def slds_m_step_dynamics(gamma, x_sm, P_sm, Plag_sm, K, D):

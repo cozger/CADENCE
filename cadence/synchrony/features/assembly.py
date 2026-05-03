@@ -462,12 +462,22 @@ def assemble_session_features(sid: str, config: SynchronyConfig = DEFAULT_CONFIG
 # ── Cohort fan-in ─────────────────────────────────────────────────────
 
 def pool_cohort_features(session_ids: list[str],
-                           config: SynchronyConfig = DEFAULT_CONFIG) -> dict:
-    """Stack per-session caches; impute; standardize; write cohort_features.npz."""
+                           config: SynchronyConfig = DEFAULT_CONFIG,
+                           condition_filter: list[str] | None = None) -> dict:
+    """Stack per-session caches; impute; standardize; write cohort_features.npz.
+
+    Args:
+        session_ids: list of canonical session ids to include.
+        config: synchrony config.
+        condition_filter: if set, only keep episodes whose ``condition`` is in
+            this list. Useful for running a parallel "conversation-only"
+            cohort to drop noise from baseline / meditation periods.
+    """
     rows = []
     sids = []
     eids = []
     starts = []
+    ends = []
     conds = []
     pooled = []
     valid_blocks = {b: [] for b in ('3a', '3b', '3c', '3d')}
@@ -478,6 +488,7 @@ def pool_cohort_features(session_ids: list[str],
 
     feat_names = all_feature_names()
     n_kept_sessions = 0
+    n_filtered_total = 0
     for sid in session_ids:
         try:
             npz, meta = read_stage(sid, 3)
@@ -485,23 +496,40 @@ def pool_cohort_features(session_ids: list[str],
             continue
         if meta.get('n_episodes_in_features', 0) == 0:
             continue
-        rows.append(np.asarray(npz['features']))
-        n = rows[-1].shape[0]
+        sess_X = np.asarray(npz['features'])
+        sess_cond = np.asarray(npz['condition'])
+        if condition_filter is not None:
+            keep = np.array([str(c) in condition_filter for c in sess_cond])
+            if not keep.any():
+                continue
+            n_filtered_total += int((~keep).sum())
+            sess_X = sess_X[keep]
+            row_keep = keep
+        else:
+            row_keep = np.ones(len(sess_X), dtype=bool)
+        rows.append(sess_X)
+        n = sess_X.shape[0]
         sids.extend([sid] * n)
-        eids.extend(np.asarray(npz['episode_id']).tolist())
-        starts.extend(np.asarray(npz['t_start_lsl']).tolist())
-        conds.extend(np.asarray(npz['condition']).tolist())
-        pooled.extend(np.asarray(npz['cca_pooled_flag']).tolist())
+        eids.extend(np.asarray(npz['episode_id'])[row_keep].tolist())
+        starts.extend(np.asarray(npz['t_start_lsl'])[row_keep].tolist())
+        if 't_end_lsl' in npz.files if hasattr(npz, 'files') else 't_end_lsl' in npz:
+            ends.extend(np.asarray(npz['t_end_lsl'])[row_keep].tolist())
+        else:
+            ends.extend((np.asarray(npz['t_start_lsl'])[row_keep] +
+                          np.asarray(npz['duration_s'])[row_keep]).tolist())
+        conds.extend(sess_cond[row_keep].tolist())
+        pooled.extend(np.asarray(npz['cca_pooled_flag'])[row_keep].tolist())
         for b in valid_blocks:
-            valid_blocks[b].extend(np.asarray(npz[f'_{b}_valid']).tolist())
-        durations.extend(np.asarray(npz['duration_s']).tolist())
-        peak_envs.extend(np.asarray(npz['peak_env']).tolist())
-        mean_envs.extend(np.asarray(npz['mean_env']).tolist())
-        n_events_totals.extend(np.asarray(npz['n_events_total']).tolist())
+            valid_blocks[b].extend(np.asarray(npz[f'_{b}_valid'])[row_keep].tolist())
+        durations.extend(np.asarray(npz['duration_s'])[row_keep].tolist())
+        peak_envs.extend(np.asarray(npz['peak_env'])[row_keep].tolist())
+        mean_envs.extend(np.asarray(npz['mean_env'])[row_keep].tolist())
+        n_events_totals.extend(np.asarray(npz['n_events_total'])[row_keep].tolist())
         n_kept_sessions += 1
 
     if not rows:
-        raise RuntimeError('No sessions had non-empty Stage 4 caches')
+        raise RuntimeError('No sessions had non-empty Stage 4 caches '
+                            '(after condition_filter, if any)')
 
     X_raw = np.vstack(rows)
     classes = [c for n, c in classify_all(feat_names).items()]
@@ -520,6 +548,7 @@ def pool_cohort_features(session_ids: list[str],
         'session_id':          np.array(sids, dtype=object),
         'episode_id':          np.array(eids, dtype=np.int32),
         't_start_lsl':         np.array(starts, dtype=np.float64),
+        't_end_lsl':           np.array(ends, dtype=np.float64),
         'condition':           np.array(conds, dtype=object),
         'cca_pooled_flag':     np.array(pooled, dtype=bool),
         'duration_s':          np.array(durations, dtype=np.float32),
@@ -548,6 +577,8 @@ def pool_cohort_features(session_ids: list[str],
             for i, n in sorted(enumerate(feat_names),
                                 key=lambda p: -imputed_mask[:, p[0]].mean())[:10]
         ],
+        'condition_filter': condition_filter,
+        'n_filtered_out':  n_filtered_total,
         'config_hash':       config.hash(),
     }
     (cdir / 'cohort_features.json').write_text(json.dumps(sidecar, indent=2))

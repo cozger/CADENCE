@@ -45,6 +45,7 @@ from cadence.synchrony.clustering import fit_cohort_clusters
 from cadence.synchrony.interpretation import summarize_clusters
 from cadence.synchrony.viz import plot_cohort_embedding
 from cadence.synchrony.validation import run_validation_suite
+from cadence.synchrony.io import set_cohort_name
 from cadence.synchrony.reporting import (
     per_dyad_repertoire, per_dyad_expressivity,
     repertoire_x_rslds_state, write_report_markdown,
@@ -59,7 +60,25 @@ def main():
                      help='Skip Stage 8 validation suite (saves ~2 min)')
     ap.add_argument('--ensure-per-session', action='store_true',
                      help='Run Stages 1-4 first if any session cache is missing')
+    ap.add_argument('--conditions', type=str, default=None,
+                     help='Comma-separated list of episode conditions to keep '
+                     '(e.g. "conv_1,conv_2"). If unset, all episodes are used.')
+    ap.add_argument('--cohort-name', type=str, default=None,
+                     help='Output directory namespace under results/synchrony/. '
+                     'Defaults to "cohort", or "cohort_<conditions_tag>" when '
+                     '--conditions is set.')
     args = ap.parse_args()
+
+    condition_filter = None
+    if args.conditions:
+        condition_filter = [c.strip() for c in args.conditions.split(',') if c.strip()]
+    cohort_name = (args.cohort_name or
+                    (f'cohort_{"_".join(condition_filter)}' if condition_filter
+                     else 'cohort'))
+    set_cohort_name(cohort_name)
+    print(f'cohort namespace: results/synchrony/{cohort_name}/')
+    if condition_filter:
+        print(f'episode condition filter: {condition_filter}\n')
 
     sids = list_canonical_sessions()
     print(f'cohort: {len(sids)} canonical sessions\n')
@@ -79,10 +98,13 @@ def main():
 
     print('\n=== Stage 4 cohort fan-in ===')
     t0 = time.perf_counter()
-    pool = pool_cohort_features(sids)
+    pool = pool_cohort_features(sids, condition_filter=condition_filter)
     m = pool['_meta']
     print(f'  {m["n_sessions"]} sessions, {m["n_episodes"]} episodes, '
            f'{m["n_low_quality"]} low-quality')
+    if condition_filter:
+        print(f'  filtered out {m["n_filtered_out"]} episodes outside '
+               f'{condition_filter}')
     print(f'  mean imputation rate: {m["mean_imputation_rate"]:.2%}')
     print(f'  ({time.perf_counter() - t0:.1f}s)')
 

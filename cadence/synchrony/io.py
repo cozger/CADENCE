@@ -38,8 +38,27 @@ def session_dir(sid: str, ensure: bool = False) -> Path:
     return p
 
 
-def cohort_dir(ensure: bool = False) -> Path:
-    p = RESULTS_ROOT / 'cohort'
+_active_cohort_name = 'cohort'
+
+
+def set_cohort_name(name: str) -> None:
+    """Switch the active cohort namespace.
+
+    All ``cohort_dir()`` calls (and downstream pool / cluster / report
+    paths) write/read from ``results/synchrony/<name>/`` until reset.
+    Useful for parallel cohort variants — e.g. condition-filtered subsets:
+    ``set_cohort_name('cohort_conv_only')`` then run Stages 5-9.
+    """
+    global _active_cohort_name
+    _active_cohort_name = name
+
+
+def get_cohort_name() -> str:
+    return _active_cohort_name
+
+
+def cohort_dir(ensure: bool = False, name: str | None = None) -> Path:
+    p = RESULTS_ROOT / (name or _active_cohort_name)
     if ensure:
         p.mkdir(parents=True, exist_ok=True)
     return p

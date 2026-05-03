@@ -122,7 +122,10 @@ def compute_cohort_threshold(config: SynchronyConfig = DEFAULT_CONFIG,
     Returns ``{'T_star': float, 'config_hash': str, 'n_sessions_pooled':
     int, 'n_samples_pooled': int, 'fallback_T_star': float, ...}``.
     """
-    out_path = cohort_dir(ensure=True) / COHORT_THRESHOLD_FILENAME
+    # T* is condition-agnostic (derived from base_EO across the canonical
+    # cohort) — always live in the canonical 'cohort' namespace, even if the
+    # active cohort name has been switched (e.g. 'cohort_conv_1_conv_2').
+    out_path = cohort_dir(ensure=True, name='cohort') / COHORT_THRESHOLD_FILENAME
     config_hash = config.hash()
     if not force and out_path.exists():
         meta = json.loads(out_path.read_text())

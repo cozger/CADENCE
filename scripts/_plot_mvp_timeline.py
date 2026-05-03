@@ -53,8 +53,18 @@ CHANNEL_COLORS = {
 }
 
 
+VALID_CONDITIONS = {'base_EO', 'base_EC', 'conv_1', 'conv_2',
+                     'meditate_B', 'meditate_K',
+                     'PE', 'PE_1', 'PE_2', 'baseline'}
+
+
 def parse_periods(markers):
     """Convert flat (t, label) markers into (name, t0, t1) period tuples.
+
+    Filters out auto-detected event markers (gesture_*, etc.) that share
+    the _start/_stop convention but are not experimental conditions.
+    Drops the redundant outer ``baseline`` block when its inner sub-blocks
+    (``base_EO``, ``base_EC``) are present.
 
     LSL times; caller subtracts t_start_lsl to align to t_common.
     """
@@ -63,12 +73,17 @@ def parse_periods(markers):
     for t, lbl in markers:
         if lbl.endswith('_start'):
             name = lbl[:-len('_start')]
-            starts[name] = t
+            if name in VALID_CONDITIONS:
+                starts[name] = t
         elif lbl.endswith('_stop'):
             name = lbl[:-len('_stop')]
             if name in starts:
                 periods.append((name, starts.pop(name), t))
-    return sorted(periods, key=lambda x: x[1])
+    periods = sorted(periods, key=lambda x: x[1])
+    have_subblocks = {n for n, _, _ in periods} & {'base_EO', 'base_EC'}
+    if have_subblocks:
+        periods = [(n, t0, t1) for n, t0, t1 in periods if n != 'baseline']
+    return periods
 
 
 def state_runs(path, K):
@@ -273,7 +288,7 @@ def plot_timeline(session_id, variant, out_path, smooth_sigma_s=5.0):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--session', default='y_06')
-    ap.add_argument('--variant', default='prod', choices=['prod', 'med', 'pe', 'smoke', 'k3', 'k2', 'no_dwell'])
+    ap.add_argument('--variant', default='prod', choices=['prod', 'med', 'pe', 'smoke', 'k3', 'k2', 'no_dwell', 'evtcoinc_k2', 'evtcoinc_k3'])
     ap.add_argument('--smooth-sigma-s', type=float, default=5.0,
                     help='Gaussian sigma in seconds for the obs/cov envelope overlay (default 5.0; 0 disables)')
     ap.add_argument('--out', default=None,

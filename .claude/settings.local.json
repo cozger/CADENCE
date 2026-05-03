@@ -85,7 +85,8 @@
       "WebFetch(domain:zenodo.org)",
       "WebFetch(domain:www.emotibit.com)",
       "mcp__plugin_github_github__create_or_update_file",
-      "mcp__claude_ai_Consensus__search"
+      "mcp__claude_ai_Consensus__search",
+      "PowerShell(conda activate *)"
     ]
   }
 }

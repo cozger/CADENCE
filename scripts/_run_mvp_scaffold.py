@@ -54,9 +54,15 @@ V11_SCAFFOLD_ROOT = REPO_ROOT / 'results' / 'v11'
 PHASE0_DIR = REPO_ROOT / 'results' / 'mvp' / 'phase0'
 OUT_ROOT = REPO_ROOT / 'results' / 'mvp'
 
-# 7-channel MVP observation set (column slice of V11's 26-D scaffold)
-MVP_OBS_CHANNELS = ['conc_theta', 'conc_alpha', 'bl_expr', 'bl_activity_conc',
+# 6-channel MVP observation set
+# - 5 channels (conc_theta/alpha, pose, resp, ecg_hf) are sliced from V11
+# - bl_event_coincidence is computed directly from face/v1 preproc
+#   (replaces obsolete bl_expr + bl_activity_conc — see
+#   cadence/significance/face_event_coincidence.py docstring for rationale).
+MVP_OBS_CHANNELS = ['conc_theta', 'conc_alpha', 'bl_event_coincidence',
                     'pose', 'resp', 'ecg_hf']
+# Channels sourced from V11 ztimecourses (everything except bl_event_coincidence)
+MVP_V11_CHANNELS = {'conc_theta', 'conc_alpha', 'pose', 'resp', 'ecg_hf'}
 MVP_COV_CHANNELS = ['coupling_flexibility', 'lambda2']
 
 # Conditions per protocol (for cohort_protocol_assignment.csv counts)
@@ -187,14 +193,82 @@ def slice_session(sid: str, pose_channel: str, freshness: dict) -> dict:
                            ).read_text())
     modality_keys = sidecar['modality_keys']
     cov_keys = sidecar['covariate_keys']
+    t_common = v11['t_common']
+
+    # Pre-compute bl_event_coincidence (face/v1 preproc + auto-detected
+    # timestamp offset) — see cadence/significance/face_event_coincidence.py
+    # for rationale.
+    face_path = REPO_ROOT / 'data' / 'preproc' / 'face' / 'v1' / f'{sid}.npz'
+    digest_path = DIGEST_ROOT / f'{sid}.json'
+    bl_evt_z = None
+    bl_evt_valid = None
+    bl_evt_info = None
+    if face_path.exists() and digest_path.exists():
+        from cadence.significance.face_event_coincidence import (
+            compute_bl_event_coincidence,
+        )
+        face_npz = dict(np.load(face_path))
+        digest = json.loads(digest_path.read_text())
+        t_start_lsl = digest.get('t_start_lsl', 0.0)
+
+        # Auto-detect timestamp convention: face_ts may be session-local
+        # (≈0–10000) or Unix epoch (≈1.7e9) depending on session vintage.
+        # The pipeline docstring says "session-relative" but enforcement is
+        # inconsistent. Pick the offset that lands face_ts in t_common's range.
+        if 'p1_au52_ts' in face_npz:
+            face_ts0 = float(face_npz['p1_au52_ts'][0])
+        elif 'p2_au52_ts' in face_npz:
+            face_ts0 = float(face_npz['p2_au52_ts'][0])
+        else:
+            face_ts0 = None
+
+        if face_ts0 is not None:
+            # Candidate 1: assume session-local → add t_start_lsl
+            cand_offset = t_start_lsl
+            mapped = face_ts0 + cand_offset
+            if not (t_common[0] - 600 < mapped < t_common[-1] + 600):
+                # Doesn't fit → align face start with t_common start directly
+                cand_offset = float(t_common[0] - face_ts0)
+            lsl_offset = cand_offset
+        else:
+            lsl_offset = t_start_lsl
+
+        bl_evt_z, bl_evt_info = compute_bl_event_coincidence(
+            face_npz, t_common, lsl_offset)
+        bl_evt_info = bl_evt_info or {}
+        bl_evt_info['lsl_offset_used'] = lsl_offset
+
+        # Validity: True for the whole session if the channel computed
+        # successfully (face data present + alignment worked + non-degenerate
+        # surrogate distribution). Mark the WHOLE session invalid only when
+        # the channel itself is unusable; per-frame face dropouts are
+        # already handled inside compute_bl_event_coincidence via the
+        # au_valid masks. If we inherited V11's bl_expr mask we'd silently
+        # drop sessions where Morlet bl_expr happened to fail unrelated to
+        # the new channel.
+        if (bl_evt_info.get('status') != 'ok'
+                or float(bl_evt_z.std()) < 1e-6):
+            bl_evt_valid = np.zeros(len(t_common), dtype=bool)
+            bl_evt_info['marked_invalid'] = True
+        else:
+            bl_evt_valid = np.ones(len(t_common), dtype=bool)
 
     # Build observation matrix
-    T = len(v11['t_common'])
+    T = len(t_common)
     obs = np.empty((T, len(MVP_OBS_CHANNELS)), dtype=np.float32)
     obs_valid = np.empty((T, len(MVP_OBS_CHANNELS)), dtype=bool)
     for i, ch in enumerate(MVP_OBS_CHANNELS):
+        if ch == 'bl_event_coincidence':
+            if bl_evt_z is None:
+                info['status'] = 'error'
+                info['note'] = ('bl_event_coincidence: missing face/v1 preproc '
+                                 'or digest')
+                return info
+            obs[:, i] = bl_evt_z
+            obs_valid[:, i] = bl_evt_valid
+            continue
         if ch == 'pose' and pose_channel == 'pose_ddtw':
-            z, note = load_phase0_ddtw_for_session(sid, v11['t_common'])
+            z, note = load_phase0_ddtw_for_session(sid, t_common)
             if z is None:
                 info['status'] = 'fallback'
                 info['note'] = (f'pose_ddtw requested but unavailable ({note}); '
@@ -256,6 +330,7 @@ def slice_session(sid: str, pose_channel: str, freshness: dict) -> dict:
         'digest_xdf_md5': freshness['digest_xdf_md5'],
         'v11_scaffold_sha256': v11_md5,
         'v11_freshness_check': freshness['reason'],
+        'bl_event_coincidence_info': bl_evt_info,
         'written_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
     }
     (out_dir / 'mvp_scaffold.json').write_text(json.dumps(sidecar_out, indent=2))

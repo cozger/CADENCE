@@ -8,6 +8,8 @@
 
 ## Architecture
 
+**MVP Pipeline** (current grant baseline — 2026-05-02): 6-channel observation set + 2-channel covariates, hierarchical rSLDS over 19 canonical sessions. **Production BL channel: `bl_event_coincidence`** — surrogate-z dyadic coincidence of facial-activity peaks (per-participant peaks of `au_activity` envelope above session p70, ±500ms tolerance, 200 circular shifts). Replaces obsolete `bl_expr` (Morlet wavelet coherence, fired on z-score noise during quiet periods) and `bl_activity_conc` (`(z_P1+z_P2)/2`, was shared activity LEVEL not coupling — confounded by who's talking). Implementation: `cadence/significance/face_event_coincidence.py`. Per-condition validation on y_06: conv_1=+0.34, conv_2=+0.36, meditation=−0.16/−0.17, baselines≈0 — clean discrimination between interactive coupling and quiescent periods.
+
 **V12 Pipeline** (planned — pending stereo gaze hardware): Gaze coupling from stereo-calibrated gaze rays. 29-31D observation + 9D covariates. Extends V11 with gaze concordance (obs: mutual attention intensity), gaze asymmetry (cov: who attends), gaze approach rate (cov: convergence predicting state transitions). First modality where raw measurement IS the coupling — no surrogates needed. Design doc: `docs/v12_gaze_design.md`.
 
 **V11 Pipeline** (current — production): Burst coincidence + transfer entropy scaffold. 26D observation + 7D transition covariates. Extends V10 with TE concordance (2ch obs: bidirectional flow), burst coincidence (3ch obs), and TE asymmetry (2ch cov: directionality as transition modulator). **Note:** dyn_theta/alpha/beta collapsed to `dyn_mean` (diagnostic suite confirmed r=0.99 collinearity; all three are EWMAD of concordance channels which share the same slow timescale). 28D→26D.

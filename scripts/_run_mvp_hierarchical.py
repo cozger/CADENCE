@@ -48,7 +48,7 @@ from cadence.significance.rslds_model import IOHMMConfig, fit_hierarchical_slds
 
 # ── Constants ───────────────────────────────────────────────────────
 
-MVP_OBS_CHANNELS = ['conc_theta', 'conc_alpha', 'bl_expr', 'bl_activity_conc',
+MVP_OBS_CHANNELS = ['conc_theta', 'conc_alpha', 'bl_event_coincidence',
                     'pose', 'resp', 'ecg_hf']
 MVP_COV_CHANNELS = ['coupling_flexibility', 'lambda2']
 FS_OUT = 2.0
@@ -122,8 +122,13 @@ def label_states(mean_d_emit, K, null_state):
         labels[coup_k] = 'COUP'
         avail = [k for k in avail if k != coup_k]
 
-    # SHARED = highest bl_activity_conc
-    bla_idx = MVP_OBS_CHANNELS.index('bl_activity_conc')
+    # SHARED = highest bl_event_coincidence (was bl_activity_conc; renamed
+    # post 2026-05-02 — see cadence/significance/face_event_coincidence.py).
+    # If neither is in scaffold, fall back to highest pose loading.
+    shared_ch = ('bl_event_coincidence' if 'bl_event_coincidence' in MVP_OBS_CHANNELS
+                  else 'bl_activity_conc' if 'bl_activity_conc' in MVP_OBS_CHANNELS
+                  else 'pose')
+    bla_idx = MVP_OBS_CHANNELS.index(shared_ch)
     if avail:
         shared_k = max(avail, key=lambda k: mean_d_emit[k, bla_idx])
         labels[shared_k] = 'SHARED'

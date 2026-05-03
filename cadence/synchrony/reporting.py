@@ -210,9 +210,16 @@ def _plot_per_dyad_expressivity(df: pd.DataFrame, save_path: Path):
 
 # ── 9c Repertoire × rSLDS-state cross-tab ───────────────────────────────
 
-def repertoire_x_rslds_state(save: bool = True) -> dict:
+def repertoire_x_rslds_state(save: bool = True,
+                                rslds_variant: str = 'evtcoinc_smooth') -> dict:
     """For each session w/ both MVP rSLDS results AND synchrony repertoire,
-    compute P(cluster | rSLDS_state). Aggregate to a single heatmap."""
+    compute P(cluster | rSLDS_state). Aggregate to a single heatmap.
+
+    Looks for ``results/mvp/<sid>/mvp_rslds_results_<variant>.npz`` per
+    session. For the production MVP that's ``rslds_variant='evtcoinc_smooth'``
+    (K=3, states NULL/SHARED/COUP). State labels are read from the per-session
+    NPZ to stay aligned with whatever variant is loaded.
+    """
     cdir = cohort_dir()
     coh = dict(np.load(cdir / 'cohort_features.npz', allow_pickle=True))
     cls = dict(np.load(cdir / 'cohort_clusters.npz', allow_pickle=True))
@@ -224,43 +231,49 @@ def repertoire_x_rslds_state(save: bool = True) -> dict:
 
     cluster_ids = sorted(set(int(c) for c in labels) - {-2, -1})
 
-    # Per-session, load mvp_rslds_results.npz if present
     mvp_root = REPO_ROOT / 'results' / 'mvp'
-    state_names = ['NULL', 'OTHER', 'COUP', 'SHARED']  # Per CADENCE convention
-    contingency = np.zeros((len(state_names), len(cluster_ids)), dtype=np.int64)
+    contingency = None
+    state_names = None
     n_sessions_with_rslds = 0
     n_episodes_assigned = 0
     skipped_reasons = {}
 
     for s in sorted(set(sids)):
-        rslds_path = mvp_root / s / 'mvp_rslds_results.npz'
+        rslds_path = mvp_root / s / f'mvp_rslds_results_{rslds_variant}.npz'
         if not rslds_path.exists():
-            skipped_reasons.setdefault('no mvp_rslds_results.npz', []).append(s)
+            skipped_reasons.setdefault(
+                f'no mvp_rslds_results_{rslds_variant}.npz', []).append(s)
             continue
         try:
             mvp = np.load(rslds_path, allow_pickle=True)
         except Exception as e:
             skipped_reasons.setdefault(f'load_error: {type(e).__name__}', []).append(s)
             continue
-        if 'state' not in mvp.files or 't_common' not in mvp.files:
-            skipped_reasons.setdefault('missing state/t_common', []).append(s)
+        # Per-session NPZ keys: path (Viterbi state per t_common), t_common,
+        # state_labels, gamma, etc.
+        if 'path' not in mvp.files or 't_common' not in mvp.files:
+            skipped_reasons.setdefault('missing path/t_common', []).append(s)
             continue
-        state = np.asarray(mvp['state'], dtype=np.int32)
+        state = np.asarray(mvp['path'], dtype=np.int32)
         t_common = np.asarray(mvp['t_common'], dtype=np.float64)
+        if state_names is None:
+            if 'state_labels' in mvp.files:
+                state_names = [str(x) for x in mvp['state_labels'].tolist()]
+            else:
+                state_names = [f'S{i}' for i in range(int(state.max() + 1))]
+            contingency = np.zeros((len(state_names), len(cluster_ids)),
+                                     dtype=np.int64)
         n_sessions_with_rslds += 1
 
-        # For each episode in this session, get majority rSLDS state during
-        # episode → contingency[state, cluster] += 1
         m = sids == s
         for i in np.where(m)[0]:
             cid = int(labels[i])
-            if cid < 0:  # skip noise + excluded
+            if cid < 0:
                 continue
             t0 = float(starts[i]); t1 = float(ends[i])
             mask = (t_common >= t0) & (t_common <= t1)
             if not mask.any():
                 continue
-            # Majority state
             states_in_ep = state[mask]
             uniq, counts = np.unique(states_in_ep, return_counts=True)
             mode_state = int(uniq[np.argmax(counts)])
@@ -268,6 +281,11 @@ def repertoire_x_rslds_state(save: bool = True) -> dict:
                 col = cluster_ids.index(cid)
                 contingency[mode_state, col] += 1
                 n_episodes_assigned += 1
+
+    # If no sessions had rSLDS at all, contingency is still None — initialize.
+    if contingency is None:
+        state_names = ['(none)']
+        contingency = np.zeros((1, len(cluster_ids)), dtype=np.int64)
 
     out = {
         'state_names':              state_names,
@@ -279,28 +297,50 @@ def repertoire_x_rslds_state(save: bool = True) -> dict:
     }
 
     if save and n_episodes_assigned > 0:
-        # Normalize per row (P(cluster | state))
+        # Two views — P(cluster | state) and the complementary P(state | cluster)
         row_sums = contingency.sum(axis=1, keepdims=True)
-        prob = np.where(row_sums > 0, contingency / np.maximum(row_sums, 1), 0)
+        col_sums = contingency.sum(axis=0, keepdims=True)
+        p_c_given_s = np.where(row_sums > 0, contingency / np.maximum(row_sums, 1), 0)
+        p_s_given_c = np.where(col_sums > 0, contingency / np.maximum(col_sums, 1), 0)
+        # Lift = observed / expected — highlights enrichment
+        # P(state, cluster) / (P(state) * P(cluster))
+        N = contingency.sum()
+        p_marg_state = row_sums / max(N, 1)
+        p_marg_cluster = col_sums / max(N, 1)
+        joint = contingency / max(N, 1)
+        denom = p_marg_state * p_marg_cluster
+        lift = np.where(denom > 0, joint / np.maximum(denom, 1e-12), 0)
 
-        fig, ax = plt.subplots(figsize=(max(8, 0.6 * len(cluster_ids) + 4), 4))
-        im = ax.imshow(prob, aspect='auto', cmap='viridis', vmin=0, vmax=1)
-        ax.set_xticks(range(len(cluster_ids)))
-        ax.set_xticklabels([f'c{c}' for c in cluster_ids], rotation=0)
-        ax.set_yticks(range(len(state_names)))
-        ax.set_yticklabels(state_names)
-        ax.set_xlabel('Synchrony cluster', fontsize=10)
-        ax.set_ylabel('rSLDS state (MVP)', fontsize=10)
-        ax.set_title(f'P(cluster | rSLDS state)  ·  '
+        fig, axes = plt.subplots(3, 1, figsize=(max(10, 0.7 * len(cluster_ids) + 4), 9))
+
+        for ax, mat, title, vmax_use in (
+            (axes[0], p_c_given_s, 'P(cluster | state)  — rows sum to 1', None),
+            (axes[1], p_s_given_c, 'P(state | cluster)  — cols sum to 1', None),
+            (axes[2], lift,        'Lift = P(state, cluster) / P(state)·P(cluster)  '
+                                    '— >1 means enriched, <1 depleted', None),
+        ):
+            cap = vmax_use or float(mat.max())
+            im = ax.imshow(mat, aspect='auto', cmap='RdBu_r' if 'Lift' in title else 'viridis',
+                            vmin=0 if 'Lift' not in title else 0,
+                            vmax=cap)
+            ax.set_xticks(range(len(cluster_ids)))
+            ax.set_xticklabels([f'c{c}' for c in cluster_ids], rotation=0, fontsize=8)
+            ax.set_yticks(range(len(state_names)))
+            ax.set_yticklabels(state_names, fontsize=9)
+            ax.set_title(title, fontsize=10, loc='left', fontweight='bold')
+            for i in range(len(state_names)):
+                for j in range(len(cluster_ids)):
+                    val = mat[i, j]
+                    ax.text(j, i, f'{val:.2f}', ha='center', va='center',
+                            fontsize=7,
+                            color='white' if val > cap * 0.55 else 'black')
+            plt.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
+        axes[2].set_xlabel('Synchrony cluster', fontsize=10)
+        fig.suptitle(f'Repertoire × rSLDS-state cross-tab  ·  '
                       f'{n_sessions_with_rslds} sessions, '
-                      f'{n_episodes_assigned} episodes',
-                      fontsize=11, fontweight='bold')
-        for i in range(len(state_names)):
-            for j in range(len(cluster_ids)):
-                ax.text(j, i, f'{prob[i, j]:.2f}', ha='center', va='center',
-                        fontsize=8,
-                        color='white' if prob[i, j] > 0.5 else 'black')
-        plt.colorbar(im, ax=ax, label='probability')
+                      f'{n_episodes_assigned} episodes  ·  '
+                      f'states: {", ".join(state_names)}',
+                      fontsize=12, fontweight='bold')
         fig.tight_layout()
         fig.savefig(cdir / 'fig_repertoire_x_rslds_state.png', dpi=120,
                      bbox_inches='tight')

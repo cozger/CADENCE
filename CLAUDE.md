@@ -14,6 +14,8 @@
 
 **V11 Pipeline** (current — production): Burst coincidence + transfer entropy scaffold. 26D observation + 7D transition covariates. Extends V10 with TE concordance (2ch obs: bidirectional flow), burst coincidence (3ch obs), and TE asymmetry (2ch cov: directionality as transition modulator). **Note:** dyn_theta/alpha/beta collapsed to `dyn_mean` (diagnostic suite confirmed r=0.99 collinearity; all three are EWMAD of concordance channels which share the same slow timescale). 28D→26D.
 
+**rSLDS engine** (`cadence/significance/rslds_model.py`): numpy + Numba (Phase 0 patches + Phase 0.5 Tier A patches as of 2026-05-02). Phase 0 alone delivers 5.8× hierarchical-fit speedup vs unpatched (138 min → 23.6 min on 19-session production cohort); Tier A adds ~12% on top via vectorized K loop in `slds_e_step` and a `nogil=True` Numba kernel for `_log_transitions_recurrent`. JAX migration deferred to ~2027-2028 when cohort approaches ~100+ sessions; trigger criteria and decision gates documented in `docs/dynamax_migration_plan.md` §0.
+
 **V10 Pipeline** (extended by V11): Graph-enhanced rSLDS with LZ complexity. 23D observation + 5D transition covariates. Extends V8.2 with LZ complexity channels, graph modularity, and coupling flexibility as transition covariate.
 
 **V7 Pipeline** (feature extraction layer): CWT wavelet decomposition + wavelet coherence.

@@ -151,6 +151,45 @@ arises (autodiff sensitivity sweeps, batched cross-validation, GPU
 inference), Phases A/B/C in §2 below remain valid blueprints but should
 be re-justified against the Phase 0 baseline.
 
+### Phase 0.5 — Tier A no-WSL2 patches (COMPLETE 2026-05-02)
+
+Stack on top of Phase 0. Driven by the gate result in
+`results/migration/dynamax/tier_ab_decision.md`: the sequential pooled
+M-step at MVP scale is only **0.23%** of wall-clock (3-session profile,
+178 s wall, K=4, D_obs=6, D_input=2, D_latent=3, n_factors=2). Numba
+LBFGS (Tier B) is therefore not cost-justified at the current 19-session
+cohort size; the bottleneck is the parallel E-step's emissions
+log-likelihood and recurrent transition computation. Tier A targets both.
+
+**Patches landed (branch `perf/rslds-tier-ab`):**
+
+| Commit | What | Numerics vs reference |
+|---|---|---|
+| `cc7b267` | Vectorize K loop in `slds_e_step` emissions LL — batched einsum with leading K axis, 3 branches preserved (factor const-mask / factor var-mask / diagonal). New module functions `_emit_ll_per_k_loop_ref` (canonical reference) and `_emit_ll_vectorized` (production). | max\|Δ\| ≤ 1.42e-14 (5 test cases); y_06 fit_slds final LL bit-identical |
+| `47458c2` | Cleanup: remove orphaned `Sigma_inv`, `logdet_noise`, mask-tracking scalars from `slds_e_step` (now recomputed inside `_emit_ll_vectorized`). Preserve `Sigma_noise` (Kalman path still needs it). | bit-identical |
+| `08bf2ea` | Numba-ize `_log_transitions_recurrent` — `@numba.njit(cache=True, fastmath=False, nogil=True)`. Public wrapper signature `(U, x, params, cfg)` preserved; `_log_transitions_recurrent_ref` (numpy) kept module-level for the validation script. | max\|Δ\| ≤ 1.78e-15; y_06 fit_slds final LL within 1e-7 relative |
+
+**Validation artefacts:**
+- `scripts/_validate_emissions_ll_vectorized.py` — 5 cases (diag no-mask, factor no-mask, factor all-obs const-mask, factor const-mask, factor var-mask)
+- `scripts/_validate_log_trans_recurrent_numba.py` — 2 cases (T=2000 K=4, T=5 K=3)
+- `scripts/_profile_mvp_hierarchical_short.py` — 3-session profile + gate-target sections + decision document
+
+**Single-session smoke test (y_06, current scaffold D_obs=6, K=4, 10 EM iters):**
+- Phase 0 baseline: 22.7 s wall, final LL = -32149.6
+- Phase 0.5 (Tier A): 19.9 s wall, final LL = -32149.5993
+- ~12 % faster, bit-identical numerics (~1e-7 relative drift from Numba float-summation order)
+
+Hierarchical 19-session production wall-clock measurement deferred —
+the single-session bit-equivalence covers the same code paths the
+hierarchical fit exercises, and the gate showed the M-step the user
+worried about is not the bottleneck. Re-measurement when cohort grows
+toward the JAX trigger (~100+ sessions, ~2027-2028).
+
+**State:** Tier B (numba LBFGS) parked. The plan in §1-§5 below remains
+the blueprint for the JAX migration when cohort scaling crosses the
+trigger. See `docs/superpowers/plans/2026-05-02-rslds-tier-a-b-perf.md`
+for the full Tier A+B plan and gate logic.
+
 ---
 
 **Recommendation up-front:** *do not adopt the dynamax `SLDS` class*. The

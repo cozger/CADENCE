@@ -74,7 +74,8 @@ def _baseline_subtract(x, fs, window_s=5.0, q=10):
 
 
 def detect_au_events(channel_signal, fs, scales_seconds=None,
-                      noise_thresh_factor=3.0, min_chain_frac=0.5):
+                      noise_thresh_factor=3.0, min_chain_frac=0.5,
+                      noise_floor_override=None, return_extra=False):
     """Multiscale derivative-of-Gaussian event detection on one AU channel.
 
     Args:
@@ -85,11 +86,23 @@ def detect_au_events(channel_signal, fs, scales_seconds=None,
         noise_thresh_factor: per-channel noise floor = ``factor × MAD``
             of the smallest-scale derivative response.
         min_chain_frac: keep chains spanning ≥ this fraction of scales.
+        noise_floor_override: if not None, use this absolute value as the
+            noise floor (overriding the MAD-based default). Used by callers
+            that estimate the floor from explicit baseline frames.
+        return_extra: if True, additionally return Hölder regularity α and
+            chain length per event. α is the slope of log|amp| vs log σ
+            along the chain (Mallat & Hwang 1992: |W_f(s, t)| ∝ s^α near a
+            singularity). Sharp jump → α≈0; ramp → α≈1; over-smooth (>1.5)
+            or noise spike (<−0.5) → flagged and dropped.
 
     Returns:
-        events: (n_events,) array of event timestamps (in seconds, relative
-            to start of channel_signal).
-        amps:   (n_events,) array of peak |response| amplitudes along chain.
+        If return_extra=False (legacy):
+            events: (n_events,) array of event timestamps (s, relative to start)
+            amps:   (n_events,) array of peak |response| amplitudes
+        If return_extra=True:
+            events, amps, alphas, chain_lens
+                alphas:     (n_events,) Hölder regularity slope
+                chain_lens: (n_events,) int8 — # scales the chain spanned
     """
     T = len(channel_signal)
     if scales_seconds is None:
@@ -105,19 +118,42 @@ def detect_au_events(channel_signal, fs, scales_seconds=None,
         resp[j] = gaussian_filter1d(channel_signal, sigma=sigma, order=1,
                                      mode='reflect') * sigma
 
-    # Per-channel noise floor: MAD of the finest-scale response × factor.
-    # MAD is robust to the events themselves.
-    finest = np.abs(resp[0])
-    mad = 1.4826 * np.median(np.abs(finest - np.median(finest)))
-    noise_floor = max(noise_thresh_factor * mad, 1e-6)
+    return chain_link_from_responses(resp, sigmas, fs,
+                                       noise_thresh_factor=noise_thresh_factor,
+                                       min_chain_frac=min_chain_frac,
+                                       noise_floor_override=noise_floor_override,
+                                       return_extra=return_extra)
 
-    # Local maxima (in time) of |response| at each scale, above noise floor.
-    # max_per_scale[j] = list of (t_idx, amplitude_idx)
+
+def chain_link_from_responses(resp, sigmas, fs, noise_thresh_factor=3.0,
+                                min_chain_frac=0.5, noise_floor_override=None,
+                                return_extra=False):
+    """Run chain-linking + Hölder α extraction on a precomputed response pyramid.
+
+    Factored out of ``detect_au_events`` so a GPU-batched DoG pyramid (see
+    ``cadence.synchrony._gpu.batched_dog_pyramid``) can feed in
+    pre-convolved responses without paying for per-channel scipy convolution.
+
+    Args:
+        resp: (n_scales, T) σ-normalized DoG response array.
+        sigmas: per-scale σ in samples (frames). len == n_scales.
+        fs: sampling rate (Hz) — used to convert event indices to seconds.
+        Other args identical to ``detect_au_events``.
+
+    Returns: same shape as ``detect_au_events``.
+    """
+    n_scales, T = resp.shape
+
+    if noise_floor_override is not None:
+        noise_floor = max(float(noise_floor_override), 1e-6)
+    else:
+        finest = np.abs(resp[0])
+        mad = 1.4826 * np.median(np.abs(finest - np.median(finest)))
+        noise_floor = max(noise_thresh_factor * mad, 1e-6)
+
     max_per_scale = []
     for j in range(n_scales):
         a = np.abs(resp[j])
-        # Local maxima: a[t] > a[t-1] and a[t] > a[t+1], above floor
-        # Vectorised: compare to shifted arrays
         if T < 3:
             max_per_scale.append(np.array([], dtype=int))
             continue
@@ -125,29 +161,21 @@ def detect_au_events(channel_signal, fs, scales_seconds=None,
         idx = np.where(is_max)[0] + 1
         max_per_scale.append(idx)
 
+    empty_extra = (np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0, dtype=np.int8))
+    empty_legacy = (np.zeros(0), np.zeros(0))
     if all(len(m) == 0 for m in max_per_scale):
-        return np.zeros(0), np.zeros(0)
-
-    # Link maxima into chains across adjacent scales.
-    # A chain is a sequence (t_0, t_1, ..., t_{k-1}) at scales 0..k-1
-    # where each t_{j+1} is the nearest maximum at scale j+1 within
-    # a scale-dependent tolerance (≈ 2 × σ_{j+1} samples).
-    # Simple greedy linking: start from the COARSEST scale (most reliable)
-    # and trace back to the finest.
-    # This avoids O(N^2) by building from the top.
+        return empty_extra if return_extra else empty_legacy
     if max_per_scale[-1].size == 0:
-        # No coarse-scale events → no chains
-        return np.zeros(0), np.zeros(0)
+        return empty_extra if return_extra else empty_legacy
 
-    chains = []  # list of dicts {finest_t, peak_amp, scale_span}
+    log_sigmas = np.log(np.asarray(sigmas, dtype=np.float64))
+    chains = []
     for t_coarse in max_per_scale[-1]:
         chain_t = [None] * n_scales
         chain_t[-1] = int(t_coarse)
-        # Trace back to finer scales
         for j in range(n_scales - 2, -1, -1):
             if max_per_scale[j].size == 0:
                 break
-            # tolerance ∝ σ at this scale (in samples)
             tol = max(2.0, 2.0 * sigmas[j + 1])
             distances = np.abs(max_per_scale[j] - chain_t[j + 1])
             best_idx = int(np.argmin(distances))
@@ -155,29 +183,46 @@ def detect_au_events(channel_signal, fs, scales_seconds=None,
                 chain_t[j] = int(max_per_scale[j][best_idx])
             else:
                 break
-        # Count scales successfully linked
         spanned = sum(1 for c in chain_t if c is not None)
         if spanned / n_scales < min_chain_frac:
             continue
-        # Event time = finest available scale's location
+
         finest_idx = next(j for j, c in enumerate(chain_t) if c is not None)
         t_event = chain_t[finest_idx]
-        # Peak amplitude across linked scales
         peak_amp = max(np.abs(resp[j, chain_t[j]])
                         for j in range(n_scales) if chain_t[j] is not None)
-        chains.append((t_event, peak_amp))
+
+        chain_amps = np.array([np.abs(resp[j, chain_t[j]])
+                                for j in range(n_scales) if chain_t[j] is not None],
+                               dtype=np.float64)
+        chain_log_sigmas = log_sigmas[[j for j in range(n_scales)
+                                         if chain_t[j] is not None]]
+        if len(chain_amps) >= 2 and (chain_amps > 0).all():
+            slope, _ = np.polyfit(chain_log_sigmas, np.log(chain_amps), 1)
+            alpha = float(slope)
+        else:
+            alpha = np.nan
+        if not np.isfinite(alpha):
+            continue
+        if alpha < -0.5 or alpha > 1.5:
+            continue
+
+        chains.append((t_event, peak_amp, alpha, spanned))
 
     if not chains:
-        return np.zeros(0), np.zeros(0)
+        return empty_extra if return_extra else empty_legacy
 
-    # De-duplicate by (t_event); keep highest amplitude
     dedup = {}
-    for t, a in chains:
-        if t not in dedup or a > dedup[t]:
-            dedup[t] = a
+    for t, a, alpha, span in chains:
+        if t not in dedup or a > dedup[t][0]:
+            dedup[t] = (a, alpha, span)
     events_idx = np.array(sorted(dedup.keys()), dtype=int)
-    amps = np.array([dedup[t] for t in events_idx], dtype=np.float64)
+    amps = np.array([dedup[t][0] for t in events_idx], dtype=np.float64)
+    alphas = np.array([dedup[t][1] for t in events_idx], dtype=np.float32)
+    chain_lens = np.array([dedup[t][2] for t in events_idx], dtype=np.int8)
     events_s = events_idx / fs
+    if return_extra:
+        return events_s, amps, alphas, chain_lens
     return events_s, amps
 
 
@@ -460,8 +505,17 @@ def _coincidence_z(p1_grid, p2_grid, tau_samples=1, n_surrogates=200,
 def compute_bl_event_coincidence(face_npz_data, t_common, lsl_offset,
                                   fs_native=30.0, n_surrogates=200, seed=42,
                                   tau_samples=1, activity_quantile_gate=0.70,
-                                  min_peak_sep_s=1.0):
+                                  min_peak_sep_s=1.0,
+                                  smooth_sigma_s=15.0):
     """End-to-end: face activity envelopes → peak coincidence z-trace.
+
+    The raw per-2Hz-bin coincidence z-trace is sparse (mostly zero with
+    occasional spikes when peaks coincide), which makes it too low-amplitude
+    relative to EEG concordance channels for the rSLDS to form a behavioral
+    state around. We Gaussian-smooth (default σ=15s) to produce a continuous
+    "recent coupling intensity envelope" — preserves the statistical meaning
+    per timepoint (surrogate-corrected) but amplifies regions where coincident
+    events cluster, giving the model continuous signal to work with.
 
     Args:
         face_npz_data: dict-like (np.load result) from
@@ -475,6 +529,8 @@ def compute_bl_event_coincidence(face_npz_data, t_common, lsl_offset,
         activity_quantile_gate: per-session quantile defining the activity
             peak threshold. Default 0.70 = top 30% of frames.
         min_peak_sep_s: minimum separation between consecutive peaks (s).
+        smooth_sigma_s: Gaussian smoothing sigma applied to the z-trace
+            after surrogate z-scoring. Default 15.0 s. Set to 0 to disable.
 
     Returns:
         z: (N,) bl_event_coincidence z-score timecourse at t_common rate.
@@ -517,8 +573,34 @@ def compute_bl_event_coincidence(face_npz_data, t_common, lsl_offset,
     # Coincidence z
     z, raw = _coincidence_z(p1_grid, p2_grid, tau_samples=tau_samples,
                               n_surrogates=n_surrogates, seed=seed)
-    info['mean_z'] = float(z.mean())
-    info['std_z'] = float(z.std())
+    info['mean_z_raw'] = float(z.mean())
+    info['std_z_raw'] = float(z.std())
     info['mean_raw_coinc'] = float(raw.mean())
+
+    # Gaussian-smooth the z-trace into a "recent coupling intensity" envelope
+    # so the rSLDS sees a continuous signal of comparable amplitude to other
+    # observation channels. Smoothing alone *reduces* variance (~ √(window)),
+    # so we then per-session standardize to restore unit variance comparable
+    # to the EEG concordance channels (which are surrogate-z'd per timepoint
+    # and naturally have std ≈ 1).
+    if smooth_sigma_s and smooth_sigma_s > 0 and len(t_common) > 1:
+        from scipy.ndimage import gaussian_filter1d
+        fs_out = 1.0 / float(np.median(np.diff(t_common)))
+        sigma_samples = max(0.5, smooth_sigma_s * fs_out)
+        z = gaussian_filter1d(z, sigma=sigma_samples).astype(np.float32)
+        info['smooth_sigma_s'] = float(smooth_sigma_s)
+        info['mean_z_smoothed'] = float(z.mean())
+        info['std_z_smoothed'] = float(z.std())
+        # Per-session standardize so signal amplitude is comparable to other channels
+        s = float(z.std())
+        if s > 1e-6:
+            z = ((z - z.mean()) / s).astype(np.float32)
+        info['mean_z'] = float(z.mean())
+        info['std_z'] = float(z.std())
+    else:
+        info['smooth_sigma_s'] = 0.0
+        info['mean_z'] = info['mean_z_raw']
+        info['std_z'] = info['std_z_raw']
+
     info['status'] = 'ok'
     return z.astype(np.float32), info

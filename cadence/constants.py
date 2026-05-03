@@ -122,6 +122,31 @@ AU_REGIONS_EXCLUDED = {
     'gaze':     [11, 12, 13, 14, 15, 16, 17, 18],
 }
 
+# Subdivided 7-region map for synchrony-repertoire identity profiles.
+# Keeps AU_REGIONS' anatomical groupings but valence-keys the mouth so a
+# polite smile, a frown, and a jaw-drop don't all collapse into one
+# "mouth lit up" feature. Disjoint with respect to AU_REGIONS — every AU
+# appears in exactly one region (gaze + _neutral excluded).
+#
+# Total: 5 + 6 + 2 + 3 + 4 + 7 + 16 = 43 AUs (52 − 9 excluded).
+AU_REGIONS_7 = {
+    'brow':        [1, 2, 3, 4, 5],
+    'eye':         [9, 10, 19, 20, 21, 22],
+    'nose':        [50, 51],
+    'cheek':       [6, 7, 8],
+    # Smile composite: dimples + zygomaticus (smile L/R). Cheek-squint is
+    # part of a Duchenne smile but is kept under 'cheek' so the regions
+    # remain disjoint — clusters can still flag "cheek + mouth_smile
+    # co-activate" via the per-region presence vector.
+    'mouth_smile': [28, 29, 44, 45],
+    # Frown / press / pucker / shrug — non-smile non-speech mouth shapes.
+    'mouth_frown': [30, 31, 36, 37, 38, 42, 43],
+    # Jaw + oromotor (funnel/close/roll/stretch/upperUp/lowerDown) +
+    # lateral mouth movements. Speech-related AUs cluster here.
+    'mouth_jaw':   [23, 24, 25, 26, 27, 32, 33, 34, 35, 39, 40, 41,
+                    46, 47, 48, 49],
+}
+
 # Reverse map: AU channel index -> segment name (for PCA interpretation)
 _BL_CH_TO_SEGMENT = {}
 for _seg_name, _ch_list in BLENDSHAPE_SEGMENT_MAP.items():

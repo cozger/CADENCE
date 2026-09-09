@@ -285,15 +285,61 @@ def test_build_angle_features_nan_fill_and_validity():
     assert valid[100:140].all()                          # one missing feature keeps the frame valid
     lo, hi = sorted((X[99, j], X[140, j]))
     assert np.all(X[100:140, j] >= lo - 1e-9) and np.all(X[100:140, j] <= hi + 1e-9)
-    # leading gap -> 0
+    # leading gap -> edge-held at the first finite value (angles rest near
+    # +-pi, so a zero fill would be a multi-radian step at frame 25)
     pose = make_pose_stream(n, FS, rng, jitter=0.002, hide=(15, 0, 25))
     X, valid, _ = build_angle_features(pose, ts, 'angles')
-    assert np.all(X[:25, j] == 0.0) and X[25, j] != 0.0
+    assert np.all(X[:25, j] == X[25, j]) and X[25, j] != 0.0
+    # angle_speed keeps the zero fill (speed genuinely rests at 0); the
+    # 5-frame smoothing can reach a frame or two into the gap, so check the
+    # part of the leading run that is unambiguously NaN
+    X, _, _ = build_angle_features(pose, ts, 'angle_speed')
+    assert np.all(X[:20, j] == 0.0)
     # hidden hips -> frame invalid, still finite (zero) input for the DTW
     pose = make_pose_stream(n, FS, rng, jitter=0.002, hide=(23, 200, 260))
     X, valid, _ = build_angle_features(pose, ts, 'angles')
     assert not valid[200:260].any() and valid[:200].all() and valid[260:].all()
     assert np.isfinite(X).all()
+
+
+def test_leading_gap_on_shifted_stream_causes_no_spurious_anticoupling():
+    """Regression: a landmark hidden for the first 40 s of P2 (hands under the
+    table at session start) must not produce a step in the noise-normalised
+    angle stream and hence no spurious anti-coupling around the transition.
+    The gap is on P2 (the circularly shifted stream) — a P1-side gap cancels
+    in z and would not catch the bug."""
+    n, ts, _ = _grid(120.0)
+    rng = np.random.default_rng(0)
+    p1 = make_pose_stream(n, FS, rng, jitter=0.003)
+    p2 = make_pose_stream(n, FS, rng, jitter=0.003)           # independent
+    i_gap = int(40 * FS)
+    p2_hidden = p2.copy()
+    p2_hidden[:i_gap, 15, :3] = 0.0                            # left wrist hidden
+    p2_hidden[:i_gap, 15, 3] = 0.0
+    j = IDX['l_forearm']
+
+    X1, v1, _ = build_angle_features(p1, ts, 'angles')
+    X2, v2, info = build_angle_features(p2_hidden, ts, 'angles')
+    assert v2.all()                                            # 11/12 features keep the frame valid
+    assert np.all(X2[:i_gap, j] == X2[i_gap, j])               # edge-held, not zero
+    # no step at the transition frame (units: noise SD)
+    assert abs(X2[i_gap, j] - X2[i_gap - 1, j]) < 10.0
+
+    hidden = compute_session_ddtw(X1, X2, v1, v2, ts, [], n_surrogates=40, seed=1)
+    st = hidden['stride_ts']
+    near = np.abs(st - 40.0) <= 2.0
+    far = ~near
+    assert near.sum() >= 5
+    z = hidden['ddtw_z']
+    # zero-fill gives near - far ~ -3.5; edge-hold ~ -0.1
+    assert abs(float(np.nanmean(z[near])) - float(np.nanmean(z[far]))) < 0.75
+
+    X2_full, v2_full, _ = build_angle_features(p2, ts, 'angles')
+    clean = compute_session_ddtw(X1, X2_full, v1, v2_full, ts, [], n_surrogates=40, seed=1)
+    ratio = (float(np.nanmedian(hidden['surr_std'][far]))
+             / float(np.nanmedian(clean['surr_std'][far])))
+    # zero-fill roughly doubles the surrogate spread away from the gap
+    assert 1.0 / 1.3 < ratio < 1.3, ratio
 
 
 def test_build_angle_features_rejects_bad_mode():

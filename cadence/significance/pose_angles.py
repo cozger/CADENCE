@@ -250,19 +250,85 @@ def moving_average_nan(x: np.ndarray, window: int) -> np.ndarray:
 
 # ── Angular speed, noise floor, envelope ────────────────────────────
 
-def speed_features(angles: np.ndarray, fs: float,
-                   smooth_frames: int = 5) -> np.ndarray:
+def _timestamp_gaps(ts: np.ndarray, n: int, fs: float,
+                    max_gap_frames: float) -> tuple[np.ndarray, np.ndarray]:
+    """(gap (N-1,) bool, ts_safe (N,) float64) for gap-aware differentiation.
+
+    ``gap[i]`` is True when the step from frame ``i`` to ``i + 1`` exceeds
+    ``max_gap_frames / fs`` (dropped frames / recorder stall) or is not a
+    finite positive number (duplicate or unordered timestamps). ``ts_safe``
+    is a monotone rebuild of ``ts`` whose gap steps are replaced by the
+    nominal ``1 / fs`` so ``np.gradient`` never divides by a zero or huge
+    spacing; every frame it touches at a gap is masked by the caller.
+    """
+    ts = np.asarray(ts, dtype=np.float64).reshape(-1)
+    if ts.shape[0] != n:
+        raise ValueError(f'ts must have {n} samples to match angles; got {ts.shape[0]}')
+    nominal = 1.0 / float(fs)
+    dt = np.diff(ts)
+    gap = ~np.isfinite(dt) | (dt <= 0.0) | (dt > float(max_gap_frames) * nominal)
+    dt_safe = np.where(gap, nominal, dt)
+    ts_safe = np.concatenate([[0.0], np.cumsum(dt_safe)])
+    return gap, ts_safe
+
+
+def _gap_mask(gap: np.ndarray, n: int, half_width: int) -> np.ndarray:
+    """(N,) bool: frames within ``half_width`` of either side of any gap.
+
+    For a gap between frames ``i`` and ``i + 1`` the masked index range is
+    ``[i - half_width, i + 1 + half_width]`` inclusive (difference-array
+    construction, vectorised over gaps).
+    """
+    mask = np.zeros(n, dtype=bool)
+    gap_idx = np.flatnonzero(gap)
+    if gap_idx.size == 0:
+        return mask
+    lo = np.clip(gap_idx - half_width, 0, n)
+    hi = np.clip(gap_idx + 2 + half_width, 0, n)      # exclusive end
+    marks = np.zeros(n + 1, dtype=np.int64)
+    np.add.at(marks, lo, 1)
+    np.add.at(marks, hi, -1)
+    mask[:] = np.cumsum(marks[:n]) > 0
+    return mask
+
+
+def speed_features(angles: np.ndarray, fs: float, smooth_frames: int = 5,
+                   ts: np.ndarray | None = None,
+                   max_gap_frames: float = 2.0) -> np.ndarray:
     """(N,12) unwrapped-smoothed angular speed magnitude in deg/s.
 
-    unwrap_nan -> moving_average_nan(smooth_frames) -> |np.gradient| * fs,
+    unwrap_nan -> moving_average_nan(smooth_frames) -> |np.gradient|,
     converted to degrees. NaN propagates from ``np.gradient`` to the
     immediate neighbours of a NaN gap.
+
+    Speed is only trustworthy on **uniformly spaced** input: the moving
+    average assumes one sample per ``1 / fs`` and, without ``ts``, so does
+    the gradient (``np.gradient * fs``). A dropped-frame gap of ``dt`` on a
+    native-rate stream would otherwise inflate the speed at the gap edge
+    by ``dt * fs`` (the angle traversed during the gap is attributed to a
+    single frame step and then smeared over the smoothing window).
+
+    When ``ts`` (N,) is given the gradient uses the actual timestamps
+    (``np.gradient(smooth, ts)``, so residual jitter is handled), and every
+    frame within ``smooth_frames // 2 + 1`` frames of a timestamp gap larger
+    than ``max_gap_frames / fs`` (or a non-positive / non-finite step) is set
+    to NaN, so neither the gradient nor the moving-average smear of the gap
+    can reach the output. Downstream consumers (``speed_envelope``, the
+    ``pose_event_coincidence`` detectors) already treat NaN as
+    "no measurement".
     """
     a = np.asarray(angles, dtype=np.float64)
     if a.shape[0] < 2:
         return np.full(a.shape, np.nan, dtype=np.float64)
+    smooth_frames = int(smooth_frames)
     smooth = moving_average_nan(unwrap_nan(a), smooth_frames)
-    vel = np.gradient(smooth, axis=0) * float(fs)
+    if ts is None:
+        vel = np.gradient(smooth, axis=0) * float(fs)
+    else:
+        gap, ts_safe = _timestamp_gaps(ts, a.shape[0], fs, max_gap_frames)
+        vel = np.gradient(smooth, ts_safe, axis=0)
+        mask = _gap_mask(gap, a.shape[0], max(smooth_frames, 1) // 2 + 1)
+        vel[mask] = np.nan
     return np.abs(vel) * _RAD2DEG
 
 
@@ -294,14 +360,18 @@ def noise_floor(angles: np.ndarray, window: int = 3) -> np.ndarray:
 
 
 def speed_envelope(angles: np.ndarray, fs: float, smooth_frames: int = 5,
-                   weights: np.ndarray | None = None) -> np.ndarray:
+                   weights: np.ndarray | None = None,
+                   ts: np.ndarray | None = None,
+                   max_gap_frames: float = 2.0) -> np.ndarray:
     """(N,) weighted NaN-aware mean of ``speed_features`` (deg/s).
 
     Weights default to ``feature_weights()``; per frame the weights of the
     finite features are renormalised. NaN where fewer than 3 features are
-    finite.
+    finite. ``ts`` / ``max_gap_frames`` are forwarded to ``speed_features``
+    (frames adjacent to timestamp gaps become NaN — see there).
     """
-    speed = speed_features(angles, fs, smooth_frames=smooth_frames)
+    speed = speed_features(angles, fs, smooth_frames=smooth_frames,
+                           ts=ts, max_gap_frames=max_gap_frames)
     w = feature_weights() if weights is None else np.asarray(weights, dtype=np.float64)
     if w.shape != (speed.shape[1],):
         raise ValueError(f'weights must be ({speed.shape[1]},); got {w.shape}')
@@ -329,7 +399,8 @@ def estimate_fs(ts: np.ndarray, fs_hint: float = 30.0) -> float:
 
 
 def pose33_to_angle_stream(pose33: np.ndarray, ts: np.ndarray,
-                           fs_hint: float = 30.0) -> dict:
+                           fs_hint: float = 30.0,
+                           max_gap_frames: float = 2.0) -> dict:
     """Convenience bundle for one participant's pose stream.
 
     Returns ``{'angles': (N,12) float32 unwrapped radians, 'valid': (N,) bool,
@@ -341,6 +412,12 @@ def pose33_to_angle_stream(pose33: np.ndarray, ts: np.ndarray,
     but bleed up to ``smooth_frames // 2`` frames into its edges (the
     NaN-ignoring moving average smooths across short dropouts on purpose);
     consumers that need strict masking should apply ``valid`` themselves.
+
+    ``ts`` is also passed to ``speed_features`` so the derivative is taken
+    against the real timestamps: speed is only trustworthy on uniformly
+    spaced input, and frames adjacent to a timestamp gap larger than
+    ``max_gap_frames / fs`` (dropped frames, recorder stalls) are NaN in
+    ``speed`` and ``envelope`` rather than carrying a spurious peak.
     """
     fs = estimate_fs(ts, fs_hint)
     raw, valid = angle_features(pose33)
@@ -348,8 +425,10 @@ def pose33_to_angle_stream(pose33: np.ndarray, ts: np.ndarray,
     return {
         'angles': unwrapped.astype(np.float32),
         'valid': valid,
-        'speed': speed_features(unwrapped, fs).astype(np.float32),
-        'envelope': speed_envelope(unwrapped, fs).astype(np.float32),
+        'speed': speed_features(unwrapped, fs, ts=ts,
+                                max_gap_frames=max_gap_frames).astype(np.float32),
+        'envelope': speed_envelope(unwrapped, fs, ts=ts,
+                                   max_gap_frames=max_gap_frames).astype(np.float32),
         'noise_floor': noise_floor(unwrapped).astype(np.float32),
         'fs': fs,
     }

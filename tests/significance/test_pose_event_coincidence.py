@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 
 from cadence.significance.face_event_coincidence import peaks_to_grid
+from cadence.significance.pose_angles import pose33_to_angle_stream
 from cadence.significance.pose_event_coincidence import (
     EVENT_KINDS, compute_pose_event_coincidence, detect_landings,
     detect_movement_peaks, events_from_pose_npz,
@@ -164,6 +165,54 @@ def test_detect_movement_peaks_mirrors_face_detector():
     assert np.all(np.isfinite(amp))
     assert np.all(amp >= np.nanquantile(env, 0.70))
     assert np.all(np.diff(np.sort(idx)) >= int(round(1.0 * fs)))
+
+
+def make_oscillating_stream(fs: float = FS, duration_s: float = 100.0,
+                            f_hz: float = 0.125, amp_rad: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
+    """(pose33, ts): forearms swing sinusoidally about the elbows, no jitter.
+
+    Speed envelope ~ |cos(2 pi f t)|: movement peaks at t = k / (2 f),
+    landings (speed minima) half-way between them.
+    """
+    n = int(round(duration_s * fs))
+    t = np.arange(n) / fs
+    theta = amp_rad * np.sin(2 * np.pi * f_hz * t)
+    pose = np.repeat(_base_skeleton()[None], n, axis=0)
+    seg = 0.35
+    for elbow, wrist, sgn in ((13, 15, 1.0), (14, 16, -1.0)):
+        pose[:, wrist, 0] = pose[:, elbow, 0] + seg * np.sin(sgn * theta)
+        pose[:, wrist, 1] = pose[:, elbow, 1] + seg * np.cos(sgn * theta)
+    return pose, t
+
+
+def test_dropped_frame_gap_creates_no_events_and_preserves_the_rest():
+    """Regression: a 0.4 s dropped-frame gap must not fire a spurious event.
+
+    The gap [50.6, 51.0) sits between a landing (50.0 s) and a movement peak
+    (52.0 s); both detectors must return the same event times as the
+    ungapped stream (within one frame) and nothing within 0.5 s of the gap
+    edges.
+    """
+    pose, ts = make_oscillating_stream()
+    gap_lo, gap_hi = 50.6, 51.0
+    keep = ~((ts >= gap_lo) & (ts < gap_hi))
+    assert (~keep).sum() == 12
+    env_u = pose33_to_angle_stream(pose, ts)['envelope'].astype(np.float64)
+    env_g = pose33_to_angle_stream(pose[keep], ts[keep])['envelope'].astype(np.float64)
+    ts_g = ts[keep]
+    tol = 1.0 / FS + 1e-6
+    for detect in (detect_landings, detect_movement_peaks):
+        idx_u, _ = detect(env_u, FS)
+        idx_g, _ = detect(env_g, FS)
+        t_u, t_g = np.sort(ts[idx_u]), np.sort(ts_g[idx_g])
+        assert t_u.size >= 20
+        near_gap = (t_g > gap_lo - 0.5) & (t_g < gap_hi + 0.5)
+        assert not near_gap.any(), t_g[near_gap]
+        t_u = t_u[~((t_u > gap_lo - 0.5) & (t_u < gap_hi + 0.5))]
+        assert t_u.size == t_g.size
+        assert np.all(np.abs(t_u - t_g) <= tol)
+        # the events flanking the gap survive
+        assert np.any(np.abs(t_g - 50.0) <= tol) or np.any(np.abs(t_g - 52.0) <= tol)
 
 
 # ── End-to-end channel ──────────────────────────────────────────────

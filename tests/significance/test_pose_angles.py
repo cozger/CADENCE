@@ -294,6 +294,49 @@ def test_speed_envelope_weighting_and_nan_rule():
         speed_envelope(x, fs, weights=np.ones(5))
 
 
+def test_speed_features_dropped_frame_gap_is_masked_not_inflated():
+    """Regression: a dropped-frame gap must not create a spurious speed peak.
+
+    Constant 17 deg/s forearm rotation at 30 Hz with frames in [50.0, 50.4) s
+    deleted. Without timestamps the angle traversed during the gap lands on
+    a single frame step and is smeared over the smoothing window (~3x the
+    true speed at the gap edge); with ``ts`` the gap-adjacent frames are NaN
+    and every finite sample equals the ungapped value.
+    """
+    fs, omega = 30.0, 17.0
+    t = np.arange(int(70 * fs)) / fs
+    frames = np.stack([make_skeleton(theta_elbow_l=np.deg2rad(omega) * ti) for ti in t])
+    keep = ~((t >= 50.0) & (t < 50.4))
+    assert (~keep).sum() == 12
+
+    env_u = pose33_to_angle_stream(frames, t)['envelope']
+    env_g = pose33_to_angle_stream(frames[keep], t[keep])['envelope']
+    ref = env_u[keep]
+    fin = np.isfinite(env_g)
+    assert fin.sum() >= env_g.size - 10 and (~fin).any()
+    assert np.all(np.abs(env_g[fin] - ref[fin]) <= 0.05 * ref[fin])
+    assert np.nanmax(env_g) <= 1.5 * np.nanmax(env_u)
+
+    # speed_features(ts=...) is NaN on both sides of the gap boundary only
+    ts_g = t[keep]
+    gap_i = int(np.flatnonzero(np.diff(ts_g) > 2.0 / fs)[0])      # last frame before the gap
+    ang_g = unwrap_nan(angle_features(frames[keep])[0])
+    sp = speed_features(ang_g, fs, ts=ts_g)
+    k = 5 // 2 + 1
+    assert np.isnan(sp[gap_i - k:gap_i + 2 + k]).all()
+    assert np.isfinite(sp[:gap_i - k]).all() and np.isfinite(sp[gap_i + 2 + k:]).all()
+    assert np.isnan(env_g[gap_i - k:gap_i + 2 + k]).all()
+    # the legacy uniform-spacing path shows the artefact the fix removes
+    sp_legacy = speed_features(ang_g, fs)
+    assert np.nanmax(sp_legacy[gap_i - k:gap_i + 2 + k, IDX['l_forearm']]) > 1.5 * omega
+    # uniform timestamps: ts path reproduces the fs path
+    ang_u = unwrap_nan(angle_features(frames)[0])
+    np.testing.assert_allclose(speed_features(ang_u, fs, ts=t), speed_features(ang_u, fs),
+                               rtol=1e-9, atol=1e-9)
+    with pytest.raises(ValueError):
+        speed_features(ang_g, fs, ts=t)      # length mismatch
+
+
 # ── pose33_to_angle_stream ──────────────────────────────────────────
 
 def test_estimate_fs():

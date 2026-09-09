@@ -10,6 +10,8 @@
 
 **MVP Pipeline** (current grant baseline — 2026-05-02): 6-channel observation set + 2-channel covariates, hierarchical rSLDS over 19 canonical sessions. **Production fit: K=3 hierarchical** at `results/mvp/hierarchical_evtcoinc_smooth/` — separates **NULL** (quiescence), **SHARED** (behavioral coupling: bl_evt=+1.04, frontal theta concordance, peaks during conversation 50-64%), and **COUP** (neural alpha coupling: conc_α=+0.34, peaks during eyes-closed/meditation 46-58%). Sensitivities: K=2 (`hierarchical_evtcoinc_smooth_k2/`, BIC −131k vs K=3) collapses behavioral and neural mechanisms into a single binary state but is BIC-preferred; `hierarchical_evtcoinc_smooth_unstdcov/` is the K=3 fit before the covariate-standardization fix (covariates were inert, BIC=838,646 vs canonical 832,482). **Production BL channel: `bl_event_coincidence`** — surrogate-z dyadic coincidence of facial-activity peaks (per-participant peaks of `au_activity` envelope above session p70, ±500ms tolerance, 200 circular shifts), then σ=15s Gaussian smoothing + per-session standardize (without standardization the smoothed std collapses to 0.15-0.45 and the rSLDS cannot allocate a state to it). Replaces obsolete `bl_expr` (Morlet wavelet coherence, fired on z-score noise during quiet periods) and `bl_activity_conc` (`(z_P1+z_P2)/2`, was shared activity LEVEL not coupling — confounded by who's talking). **MVP transition covariates** (`coupling_flexibility`, `lambda2`) are also per-session standardized in `_run_mvp_scaffold.py` because V11 stores them on raw scale (std≈0.07) — this is a V11-side bug that the MVP scaffold builder works around; un-fixing this reverts the MVP fit to the inert-covariate behavior shown in the `_unstdcov` sensitivity. Implementation: `cadence/significance/face_event_coincidence.py`. Per-condition validation on y_06: conv_1=+0.34, conv_2=+0.36, meditation=−0.16/−0.17, baselines≈0 — clean discrimination between interactive coupling and quiescent periods.
 
+**Pose channel — Phase 1 candidates (2026-09-09, code-complete; data validation pending):** four alternatives to the Phase 0 DDTW-on-PCA pose channel, all emitting the same `{sid}__z` / `{sid}__stride_ts` 2 Hz surrogate-z contract as `pose_ddtw_per_session.npz`: `angles` and `angle_speed` (DDTW on 12 torso-frame segment angles / angular speeds from `cadence/significance/pose_angles.py`, each column in measured noise-SD units, plus warping-path lag/asymmetry — `pose_ddtw.py` `feature_mode`; `feature_mode='pca'` is byte-identical to Phase 0), and `evt_landing` / `evt_peak` (`cadence/significance/pose_event_coincidence.py`: speed-envelope minima = both bodies coming to rest, or movement onsets, through the same circular-shift coincidence z + σ=15s smoothing as `bl_event_coincidence`). `cadence/significance/block_bootstrap.py` provides block-bootstrap CIs / paired tests / ranking for per-session summaries. `scripts/_validate_pose_channels.py` runs every mode through the Phase 0 gates (Tests 1–4) and writes `results/mvp/phase1_pose/phase1_report.md`; `_run_mvp_scaffold.py --pose-channel` gains `angles | angle_speed | evt_landing | evt_peak`. **The production pose channel is unchanged until `phase1_report.md` exists** — `--pose-channel auto` keeps reading `phase0_report.md` (or defaults to `pose_baseline`), and the K=3 fit above is untouched. Design spec: `docs/superpowers/specs/2026-09-09-pose-coupling-phase1-design.md`; plan: `docs/superpowers/plans/2026-09-09-pose-coupling-phase1.md`. Lag sign everywhere: positive = P2 later than P1.
+
 **V11 Pipeline** (scaffold — feeds MVP): Burst coincidence + transfer entropy scaffold. 26D observation + 7D transition covariates. TE concordance (2ch obs: bidirectional flow), burst coincidence (3ch obs), and TE asymmetry (2ch cov: directionality as transition modulator). MVP slices conc_θ/α, pose, resp, ecg_hf, plus the two transition covariates from V11 scaffold output at `results/v11/`. **Note:** dyn_theta/alpha/beta collapsed to `dyn_mean` (r=0.99 collinearity, all are EWMAD of concordance at the same slow timescale). 28D→26D. Full design rationale, BIC decomposition, capacity grid search, and per-session findings: `docs/v11_pipeline_report.md` and `docs/v11_identifiability_diagnostics.md`.
 
 **V12 Pipeline** (planned — pending stereo gaze hardware): Gaze coupling from stereo-calibrated gaze rays. 29-31D observation + 9D covariates. Extends V11 with gaze concordance (obs: mutual attention intensity), gaze asymmetry (cov: who attends), gaze approach rate (cov: convergence predicting state transitions). First modality where raw measurement IS the coupling — no surrogates needed. Design doc: `docs/v12_gaze_design.md`.
@@ -36,6 +38,7 @@ python scripts/_run_mvp_hier_multi_init.py                          # Multi-init
 python scripts/_run_mvp_ppc.py                                      # Posterior predictive check
 python scripts/_run_mvp_diagnostics_queue.py                        # Diagnostic queue runner
 python scripts/_make_mvp_figures.py                                 # Production figures
+python scripts/_validate_pose_channels.py --all                     # Phase 1 pose candidates -> phase1_report.md
 
 # V11 scaffold (feeds MVP)
 python scripts/_run_scaffold_v11.py                                 # Single session (y_06), 26D scaffold
@@ -66,7 +69,10 @@ CADENCE/
                    # burst_coincidence.py, directed_burst_coupling.py (V11 burst layers),
                    # bl_wavelet.py, lz_complexity.py, spectral_graph.py (V11 obs/cov),
                    # face_event_coincidence.py (MVP BL channel),
-                   # pose_ddtw.py (MVP pose channel),
+                   # pose_ddtw.py (MVP pose channel; Phase 1 feature modes),
+                   # pose_angles.py, pose_event_coincidence.py,
+                   # block_bootstrap.py (Phase 1 pose candidates — see
+                   # docs/superpowers/specs/2026-09-09-pose-coupling-phase1-design.md),
                    # bl_coupling.py + distributional_stats.py (run_session_v6 utility deps),
                    # smap.py
     synchrony/     # Per-cohort synchrony repertoire pipeline (Stages 0-9)
@@ -79,6 +85,7 @@ CADENCE/
     matlab/<sid>_p{1,2}_clean.mat   # MATLAB-cleaned EEG with .mat.json sidecars
   scripts/
     _run_mvp_*.py, _plot_mvp_*.py, _make_mvp_figures.py    # MVP entry points
+    _validate_pose_ddtw.py, _validate_pose_channels.py     # Pose channel gates (Phase 0 / Phase 1)
     _run_scaffold_v11.py, _run_v11_hierarchical.py         # V11 entry points
     _run_synchrony_*.py                                    # Synchrony pipeline
     run_session_v6.py, _run_scaffold_v82.py,               # Legacy filenames retained

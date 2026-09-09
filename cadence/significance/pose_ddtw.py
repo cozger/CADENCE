@@ -323,9 +323,28 @@ def _center_window(w: np.ndarray) -> np.ndarray:
 
 # ── Angle feature modes (Phase 1) ───────────────────────────────────
 
-def _fill_nan_linear(x: np.ndarray) -> np.ndarray:
-    """Column-wise linear interpolation across interior NaN gaps; leading /
-    trailing NaN (and all-NaN columns) -> 0. Returns float64 (N, D)."""
+def _fill_nan_linear(x: np.ndarray, edge: str = 'zero') -> np.ndarray:
+    """Column-wise linear interpolation across interior NaN gaps. Returns
+    float64 (N, D).
+
+    ``edge`` selects the fill for leading / trailing NaN runs (samples before
+    the first or after the last finite value of a column):
+
+    - ``'zero'``: -> 0. Correct for signals that genuinely rest at zero
+      (angular speed).
+    - ``'hold'``: keep ``np.interp``'s natural clamp, i.e. the column stays
+      constant at its first / last finite value. Required for torso-frame
+      angles, most of which rest near +-pi (limbs anti-parallel to the torso
+      axis): a zero fill there is a multi-radian step at the first / last
+      appearance of a landmark, which per-window centering cannot remove and
+      which the surrogate z then reports as spurious anti-coupling. A
+      constant edge run vanishes under per-window centering, so windows with
+      no data for that feature contribute nothing to the DTW cost.
+
+    All-NaN columns -> 0 in both modes (also a constant).
+    """
+    if edge not in ('zero', 'hold'):
+        raise ValueError(f"_fill_nan_linear: edge must be 'zero' or 'hold'; got {edge!r}")
     x = np.asarray(x, dtype=np.float64)
     out = x.copy()
     n = x.shape[0]
@@ -341,8 +360,9 @@ def _fill_nan_linear(x: np.ndarray) -> np.ndarray:
             continue
         fin = idx[m]
         out[:, j] = np.interp(idx, fin, x[m, j])
-        out[:fin[0], j] = 0.0
-        out[fin[-1] + 1:, j] = 0.0
+        if edge == 'zero':
+            out[:fin[0], j] = 0.0
+            out[fin[-1] + 1:, j] = 0.0
     return out
 
 
@@ -375,9 +395,13 @@ def build_angle_features(pose33_uniform: np.ndarray, ts_uniform: np.ndarray,
 
     ``mode='angles'``: torso-frame segment angles (``pose_angles``), unwrapped
     radians. NaN features are filled by linear interpolation across interior
-    gaps (leading / trailing NaN -> 0) so every window is DTW-able; the
-    per-window validity gate in ``sliding_ddtw_real`` is what rejects
-    windows with too many invalid frames. When ``noise_normalize`` each
+    gaps so every window is DTW-able; leading / trailing NaN runs are
+    edge-held at the column's first / last finite value (torso-frame angles
+    rest near +-pi, so a zero fill would be a multi-radian step at the first
+    / last appearance of a landmark; a held constant vanishes under
+    per-window centering instead). The per-window validity gate in
+    ``sliding_ddtw_real`` is what rejects windows with too many invalid
+    frames. When ``noise_normalize`` each
     column is divided by its measured noise floor (``pose_angles.noise_floor``:
     robust SD of the residual vs a 3-frame moving average, computed on the
     unfilled unwrapped angles) so DTW cost is in noise-SD units instead of
@@ -385,9 +409,11 @@ def build_angle_features(pose33_uniform: np.ndarray, ts_uniform: np.ndarray,
     either way.
 
     ``mode='angle_speed'``: ``pose_angles.speed_features`` (deg/s, 5-frame
-    smoothing at the grid rate estimated from ``ts_uniform``), NaN-filled the
-    same way and divided by its own noise floor (robust SD of the speed
-    residual vs a 3-frame moving average, deg/s — no unwrap).
+    smoothing at the grid rate estimated from ``ts_uniform``), interior gaps
+    interpolated the same way but leading / trailing NaN -> 0 (speed
+    genuinely rests at zero, and ``speed_features`` already NaNs the gap
+    neighbours), then divided by its own noise floor (robust SD of the
+    speed residual vs a 3-frame moving average, deg/s — no unwrap).
 
     ``valid`` is the angle-frame validity from ``angle_features`` (torso
     frame defined and >= 6 of 12 features finite); callers AND it with the
@@ -413,7 +439,7 @@ def build_angle_features(pose33_uniform: np.ndarray, ts_uniform: np.ndarray,
         floor = _residual_noise_floor(feats, window=NOISE_FLOOR_WINDOW)
         units = 'deg/s'
 
-    X = _fill_nan_linear(feats)
+    X = _fill_nan_linear(feats, edge='hold' if mode == 'angles' else 'zero')
     if noise_normalize:
         X = X / floor[None, :]
     X = np.ascontiguousarray(X, dtype=np.float64)

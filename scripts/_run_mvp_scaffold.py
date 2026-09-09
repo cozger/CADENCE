@@ -12,9 +12,12 @@ Per session:
         conc_theta, conc_alpha, bl_expr, bl_activity_conc, pose, resp, ecg_hf
      and 2 covariates: coupling_flexibility, lambda_2.
   3. Pose channel sourcing:
-        * --pose-channel auto (default): read results/mvp/phase0/phase0_report.md
-          and use whichever channel Phase 0 selected.
-        * --pose-channel ddtw: force DDTW (read pose_ddtw_per_session.npz).
+        * --pose-channel auto (default): read results/mvp/phase1_pose/phase1_report.md
+          (Phase 1 pose candidates, docs/superpowers/plans/2026-09-09-pose-coupling-phase1.md),
+          else results/mvp/phase0/phase0_report.md, else the V11 multi-lag baseline.
+        * --pose-channel ddtw: force DDTW (phase0/pose_ddtw_per_session.npz).
+        * --pose-channel angles | angle_speed | evt_landing | evt_peak: force a
+          Phase 1 candidate (phase1_pose/pose_<mode>_per_session.npz, key {sid}__z).
         * --pose-channel baseline: force V11 multi-lag baseline (read z_pose).
   4. Write results/mvp/<sid>/mvp_scaffold.{npz,json}.
 
@@ -52,7 +55,15 @@ PREPROC_ROOTS = {m: REPO_ROOT / 'data' / 'preproc' / m / 'v1'
                  for m in ('eeg', 'face', 'ecg', 'pose')}
 V11_SCAFFOLD_ROOT = REPO_ROOT / 'results' / 'v11'
 PHASE0_DIR = REPO_ROOT / 'results' / 'mvp' / 'phase0'
+PHASE1_DIR = REPO_ROOT / 'results' / 'mvp' / 'phase1_pose'
 OUT_ROOT = REPO_ROOT / 'results' / 'mvp'
+
+# Pose channel sourcing: CLI choice -> decision name (as written in the
+# phase reports and recorded as `pose_source` in the scaffold sidecar).
+POSE_CHANNEL_CHOICES = ('auto', 'baseline', 'ddtw', 'angles', 'angle_speed',
+                        'evt_landing', 'evt_peak')
+POSE_DECISION_BY_CHOICE = {c: f'pose_{c}' for c in POSE_CHANNEL_CHOICES if c != 'auto'}
+POSE_DECISIONS = tuple(POSE_DECISION_BY_CHOICE.values())
 
 # 6-channel MVP observation set
 # - 5 channels (conc_theta/alpha, pose, resp, ecg_hf) are sliced from V11
@@ -70,22 +81,46 @@ MEDITATION_PHASES = ('meditate_B', 'meditate_K')
 PE_PHASES = ('PE_1', 'PE_2', 'PE')
 
 
-# ── Phase 0 decision parsing ────────────────────────────────────────
+# ── Phase decision parsing ──────────────────────────────────────────
 
-def read_phase0_decision() -> str | None:
-    """Read phase0_report.md and return 'pose_ddtw' or 'pose_baseline' or None."""
-    report = PHASE0_DIR / 'phase0_report.md'
-    if not report.exists():
-        return None
-    text = report.read_text()
-    # Look for the decision line: "**Pose channel for MVP scaffold: `pose_ddtw`**"
+def _parse_decision_line(text: str) -> str | None:
+    """Value between backticks on the '**Pose channel for MVP scaffold: `x`**' line."""
     for line in text.splitlines():
         if 'Pose channel for MVP scaffold' in line and '`' in line:
-            # Extract value between backticks
             parts = line.split('`')
             if len(parts) >= 2:
                 return parts[1].strip()
     return None
+
+
+def _read_report_decision(report: Path) -> str | None:
+    if not report.exists():
+        return None
+    return _parse_decision_line(report.read_text(encoding='utf-8'))
+
+
+def read_phase0_decision() -> str | None:
+    """Read phase0_report.md and return 'pose_ddtw' or 'pose_baseline' or None."""
+    return _read_report_decision(PHASE0_DIR / 'phase0_report.md')
+
+
+def read_phase1_decision() -> str | None:
+    """Read phase1_report.md and return its `pose_<mode>` decision or None."""
+    return _read_report_decision(PHASE1_DIR / 'phase1_report.md')
+
+
+def read_phase_decision() -> str:
+    """Pose decision for --pose-channel auto.
+
+    phase1_report.md first, then phase0_report.md, then 'pose_baseline'. A
+    report whose decision is not one of POSE_DECISIONS is skipped, so a
+    malformed Phase 1 report cannot mask a valid Phase 0 one.
+    """
+    for reader in (read_phase1_decision, read_phase0_decision):
+        decision = reader()
+        if decision in POSE_DECISIONS:
+            return decision
+    return 'pose_baseline'
 
 
 # ── Freshness check ─────────────────────────────────────────────────
@@ -140,37 +175,62 @@ def check_freshness(sid: str) -> dict:
     return {**out, 'fresh': True, 'reason': 'preproc-artifact fallback all match'}
 
 
-# ── DDTW pose loader ────────────────────────────────────────────────
+# ── Pose channel loader (Phase 0 DDTW + Phase 1 candidates) ─────────
 
-def load_phase0_ddtw_for_session(sid: str, t_common: np.ndarray
-                                   ) -> tuple[np.ndarray | None, str]:
-    """Load DDTW pose-coupling z for a session, interp onto V11 t_common.
+def pose_channel_npz_candidates(mode: str) -> list[Path]:
+    """NPZ files holding per-session z for a pose decision, in priority order.
 
-    DDTW timecourses are stored in stream-relative seconds; V11 t_common is
-    absolute LSL. We need digest's t_start_lsl to convert. Returns (z_on_v11_grid,
-    note); z_on_v11_grid is None if DDTW not available for this session.
+    'pose_ddtw' -> phase0/pose_ddtw_per_session.npz (Phase 0), falling back to
+    the Phase 1 harness re-run of the same channel (pose_pca_per_session.npz);
+    any other Phase 1 decision -> phase1_pose/pose_<mode>_per_session.npz.
     """
-    npz_path = PHASE0_DIR / 'pose_ddtw_per_session.npz'
-    if not npz_path.exists():
-        return None, 'no pose_ddtw_per_session.npz'
-    npz = np.load(npz_path)
-    z_key = f'{sid}__ddtw_z'
-    ts_key = f'{sid}__stride_ts'
-    if z_key not in npz.files or ts_key not in npz.files:
-        return None, f'session {sid} missing from phase0 NPZ'
-    z = npz[z_key]
-    ts_rel = npz[ts_key]
+    if mode == 'pose_ddtw':
+        return [PHASE0_DIR / 'pose_ddtw_per_session.npz',
+                PHASE1_DIR / 'pose_pca_per_session.npz']
+    if mode in POSE_DECISIONS and mode != 'pose_baseline':
+        return [PHASE1_DIR / f'pose_{mode[len("pose_"):]}_per_session.npz']
+    return []
+
+
+def load_pose_channel_for_session(sid: str, t_common: np.ndarray, mode: str
+                                  ) -> tuple[np.ndarray | None, str]:
+    """Load a pose-coupling z for a session and interp it onto V11 t_common.
+
+    Every candidate NPZ stores z at 2 Hz on stream-relative seconds under
+    `{sid}__z` (Phase 1) or `{sid}__ddtw_z` (Phase 0) with `{sid}__stride_ts`;
+    V11 t_common is absolute LSL, so the digest's t_start_lsl converts.
+    Returns (z_on_v11_grid, note); z is None when the channel is unavailable.
+    """
+    candidates = pose_channel_npz_candidates(mode)
+    if not candidates:
+        return None, f'no NPZ source for pose channel {mode!r}'
+    npz_path = next((p for p in candidates if p.exists()), None)
+    if npz_path is None:
+        return None, f'no {candidates[0].name}'
+    with np.load(npz_path) as npz:
+        z_key = next((k for k in (f'{sid}__z', f'{sid}__ddtw_z') if k in npz.files), None)
+        ts_key = f'{sid}__stride_ts'
+        if z_key is None or ts_key not in npz.files:
+            return None, f'session {sid} missing from {npz_path.name}'
+        z = np.asarray(npz[z_key], dtype=np.float64)
+        ts_rel = np.asarray(npz[ts_key], dtype=np.float64)
     # Convert V11 t_common (absolute LSL) to stream-relative
     digest = json.loads((DIGEST_ROOT / f'{sid}.json').read_text())
     t_start_lsl = float(digest.get('t_start_lsl', 0.0))
-    t_common_rel = t_common - t_start_lsl
-    # Mask NaNs in DDTW for safe interp
+    t_common_rel = np.asarray(t_common, dtype=np.float64) - t_start_lsl
+    # Mask NaNs for safe interp
     finite = np.isfinite(z)
     if finite.sum() < 5:
-        return None, f'too few finite DDTW samples ({finite.sum()})'
+        return None, f'too few finite samples ({int(finite.sum())}) in {npz_path.name}'
     z_on_grid = np.interp(t_common_rel, ts_rel[finite], z[finite],
                            left=0.0, right=0.0).astype(np.float32)
     return z_on_grid, 'OK'
+
+
+def load_phase0_ddtw_for_session(sid: str, t_common: np.ndarray
+                                   ) -> tuple[np.ndarray | None, str]:
+    """Thin wrapper: Phase 0 DDTW channel via `load_pose_channel_for_session`."""
+    return load_pose_channel_for_session(sid, t_common, 'pose_ddtw')
 
 
 # ── Per-session slice ───────────────────────────────────────────────
@@ -267,11 +327,11 @@ def slice_session(sid: str, pose_channel: str, freshness: dict) -> dict:
             obs[:, i] = bl_evt_z
             obs_valid[:, i] = bl_evt_valid
             continue
-        if ch == 'pose' and pose_channel == 'pose_ddtw':
-            z, note = load_phase0_ddtw_for_session(sid, t_common)
+        if ch == 'pose' and pose_channel != 'pose_baseline':
+            z, note = load_pose_channel_for_session(sid, t_common, pose_channel)
             if z is None:
                 info['status'] = 'fallback'
-                info['note'] = (f'pose_ddtw requested but unavailable ({note}); '
+                info['note'] = (f'{pose_channel} requested but unavailable ({note}); '
                                 f'falling back to multi-lag baseline')
                 info['pose_source'] = 'pose_baseline_fallback'
                 obs[:, i] = v11[f'z_{ch}']
@@ -387,10 +447,12 @@ def main():
                     help='Run on all canonical sessions')
     ap.add_argument('--session', type=str, default=None,
                     help='Run on a single session')
-    ap.add_argument('--pose-channel', choices=['auto', 'ddtw', 'baseline'],
+    ap.add_argument('--pose-channel', choices=list(POSE_CHANNEL_CHOICES),
                     default='auto',
-                    help='Pose channel source: auto (read phase0_report.md), '
-                    'ddtw (force DDTW), baseline (force V11 multi-lag)')
+                    help='Pose channel source: auto (phase1_report.md, then '
+                    'phase0_report.md, then baseline), baseline (force V11 '
+                    'multi-lag), ddtw (force Phase 0 DDTW), or a Phase 1 '
+                    'candidate: angles | angle_speed | evt_landing | evt_peak')
     ap.add_argument('--n-jobs', type=int, default=-1)
     args = ap.parse_args()
 
@@ -404,14 +466,12 @@ def main():
 
     # Resolve pose channel decision
     if args.pose_channel == 'auto':
-        decision = read_phase0_decision()
-        if decision is None:
-            print('No phase0_report.md found — defaulting to multi-lag baseline.')
-            decision = 'pose_baseline'
-    elif args.pose_channel == 'ddtw':
-        decision = 'pose_ddtw'
+        decision = read_phase_decision()
+        if read_phase1_decision() is None and read_phase0_decision() is None:
+            print('No phase1_report.md / phase0_report.md found — defaulting to '
+                  'multi-lag baseline.')
     else:
-        decision = 'pose_baseline'
+        decision = POSE_DECISION_BY_CHOICE[args.pose_channel]
     print(f'Pose channel decision: {decision}')
 
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
